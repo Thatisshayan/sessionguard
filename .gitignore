@@ -1,0 +1,21 @@
+# .gitignore for SessionGuard
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+node_modules/
+frontend/dist/
+desktop_shell/src-tauri/target/
+storage/uploads/*
+storage/exports/*
+storage/recordings/*
+storage/logs/*
+config/sessionguard.db
+config/sessionguard.db-wal
+config/sessionguard.db-shm
+*.db
+*.db-wal
+*.db-shm
+.ver.tmp
+*.tmp

@@ -1,0 +1,68 @@
+{
+  "app_name": "SessionGuard",
+  "version": "1.2.0",
+  "environment": "local",
+  "backend": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "reload": true
+  },
+  "frontend": {
+    "host": "localhost",
+    "port": 5173,
+    "api_base_url": "http://127.0.0.1:8000"
+  },
+  "database": {
+    "engine": "sqlite",
+    "path": "config/sessionguard.db",
+    "future_postgres_url": "postgresql://user:pass@localhost/sessionguard"
+  },
+  "auth": {
+    "secret_key": "",
+    "access_token_expire_minutes": 60,
+    "refresh_token_expire_days": 30
+  },
+  "storage": {
+    "uploads_dir": "storage/uploads",
+    "exports_dir": "storage/exports",
+    "recordings_dir": "storage/recordings"
+  },
+  "thresholds": {
+    "rtp_warning": 96.0,
+    "rtp_critical": 85.0,
+    "max_loss": 200.0,
+    "streak_warning": 8,
+    "streak_critical": 15
+  },
+  "ocr": {
+    "enabled": true,
+    "backend": "tesseract",
+    "confidence_threshold": 0.75,
+    "scale": 2.0
+  },
+  "ffmpeg": {
+    "frame_extraction_fps": 1.0
+  },
+  "workers": {
+    "max_threads": 4,
+    "max_retries": 2
+  },
+  "ai": {
+    "anthropic_api_key": "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",
+    "model": "claude-sonnet-4-20250514",
+    "note": "Get your key at https://console.anthropic.com \u2014 or set ANTHROPIC_API_KEY env var",
+    "max_tokens": 1024,
+    "cost_per_million_input": 3.0,
+    "cost_per_million_output": 15.0
+  },
+  "github": {
+    "owner": "Thatisshayan",
+    "repo": "sessionguard",
+    "releases_url": "https://api.github.com/repos/Thatisshayan/sessionguard/releases/latest"
+  },
+  "updater": {
+    "check_on_startup": true,
+    "check_interval_hours": 4,
+    "pubkey": ""
+  }
+}

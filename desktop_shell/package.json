@@ -1,0 +1,17 @@
+{
+  "name": "sessionguard-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SessionGuard native desktop application",
+  "scripts": {
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:info": "tauri info"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.6.3"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^1.6.0"
+  }
+}

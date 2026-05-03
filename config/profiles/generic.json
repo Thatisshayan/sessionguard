@@ -1,0 +1,28 @@
+{
+  "name": "Generic Slot",
+  "version": "1.0",
+  "game_name": "Generic",
+  "platform": "Generic",
+  "description": "Default profile for unknown slot games. Use as a fallback.",
+
+  "roi_config": {
+    "balance_region": [10, 10, 200, 50],
+    "bet_region":     [10, 60, 150, 30],
+    "win_region":     [10, 100, 200, 50],
+    "note": "Pixel coordinates [x, y, width, height] — calibrate per game/platform"
+  },
+
+  "alert_rules": {
+    "rtp_warning":     96.0,
+    "rtp_critical":    85.0,
+    "max_loss":        200.0,
+    "streak_warning":  8,
+    "streak_critical": 15
+  },
+
+  "ocr_preprocessing": {
+    "grayscale":  true,
+    "threshold":  128,
+    "scale":      2.0
+  }
+}

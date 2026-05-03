@@ -1,0 +1,58 @@
+{
+  "build": {
+    "beforeDevCommand":   "",
+    "beforeBuildCommand": "",
+    "devPath":            "http://localhost:5173",
+    "distDir":            "../../frontend/dist"
+  },
+  "package": {
+    "productName": "SessionGuard",
+    "version":     "1.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": { "open": true },
+      "window": { "all": true },
+      "dialog": { "all": true },
+      "notification": { "all": true },
+      "http": { "all": true, "scope": ["http://127.0.0.1:8000/**"] }
+    },
+    "bundle": {
+      "active":     true,
+      "targets":    ["msi", "nsis"],
+      "identifier": "com.sessionguard.app",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "copyright":        "2025 SessionGuard",
+      "category":         "Business",
+      "shortDescription": "Session intelligence platform"
+    },
+    "security": {
+      "csp": null
+    },
+    "updater": { "active": false },
+    "systemTray": {
+      "iconPath":        "icons/32x32.png",
+      "menuOnLeftClick": false
+    },
+    "windows": [
+      {
+        "title":      "SessionGuard",
+        "label":      "main",
+        "width":      1440,
+        "height":     900,
+        "minWidth":   900,
+        "minHeight":  600,
+        "resizable":  true,
+        "center":     true,
+        "url":        "../../frontend/dist/index.html"
+      }
+    ]
+  }
+}
