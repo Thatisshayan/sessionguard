@@ -394,4 +394,27 @@ SessionGuard v1.2.0 is a **remarkably complete prototype** for a solo/team proje
 
 ---
 
+## 10. Historical Context — Other Folders in Repo Root
+
+During the audit, I examined all folders in the repository root. **Critical finding**: The `_repo_clone` folder IS the GitHub repository (synced with `origin/main`). The other folders are **historical snapshots** from April–May 2026, NOT current code:
+
+| Folder | Date Range | Description | Relevance to Current Audit |
+|--------|------------|-------------|----------------------------|
+| `_repo_clone` | **Jun 28, 2026** | **GitHub repo (HEAD = `a662ac0`)** | **Primary audit target** — 10 engines, 30+ routes, 14 pages, 15 tables |
+| `CURRENT STAGE 02.05.2026/sessionguard` | Apr–May 2026 | Older snapshot | Missing: `ai_insights_engine`, `cluster_engine`, `live_coach_engine`, admin/jobs/parser_benchmark routes, 5+ frontend pages |
+| `SessionGuard/` | May 23, 2026 | **Old audit reports + tiny backend** | Contains May 2026 audits of a MUCH SIMPLER v1.2.0 (2 tables, CSV import only, no video/OCR/AI). Scores 8.5/10 but for a different codebase. |
+| `UP AND RUNNING/` | May 2026 | Install script + master doc | No code |
+| `Casino Heist/` / `DEVELOPER PACKAGE/` | Apr 2026 | Old builds, patches, archives | Not source |
+| `PROTOTYPE/` / `PRESENTATION/` / `ROAD MAP/` / `TASK SYSTEM/` | Apr 2026 | Planning docs, old packages | Not source |
+
+**Key discrepancies between old audits and reality**:
+- Old audit (May 23): Claims "Production Ready (8.5/10)" for 2-table CSV-import-only app
+- My audit (Jul 10): "Working Prototype" for 15-table, 10-engine, 30-route platform with video/AI/desktop
+- The old audit's "Phase 4" (OCR UI, Coach) is **already implemented** in `_repo_clone` (`ocr_calibrate.py`, `coach.py`, `live_coach_engine.py`)
+- The auto-updater report says "not integrated" — but `updater.py` route exists in `_repo_clone`
+
+**Conclusion**: My audit of `_repo_clone` is the authoritative current-state assessment. The other folders provide useful historical context but do not change any findings.
+
+---
+
 *End of Audit Report*
