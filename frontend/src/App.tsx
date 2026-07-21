@@ -108,9 +108,9 @@ const NAV_MAIN = [
   { to: '/sessions', label: 'Sessions',     icon: 'â‰¡', shortcut: 'S', end: false },
   { to: '/compare',  label: 'Compare Lab',  icon: 'â‡Œ', shortcut: 'C', end: false },
   { to: '/live',     label: 'Live Monitor', icon: 'â±', shortcut: 'L', end: false },
-  { to: ‘/upload’,   label: ‘Upload’,       icon: ‘â†’’, shortcut: ‘U’, end: false },
-  { to: ‘/import’,   label: ‘Import CSV’,   icon: ‘ðŸ"„’, shortcut: ‘I’, end: false },
-  { to: ‘/review’,   label: ‘Review Queue’, icon: ‘â—ˆ’, shortcut: ‘R’, end: false },
+  { to: '/upload',   label: 'Upload',       icon: 'â†’', shortcut: 'U', end: false },
+  { to: '/import',   label: 'Import CSV',   icon: 'ðŸ"„', shortcut: 'I', end: false },
+  { to: '/review',   label: 'Review Queue', icon: 'â—ˆ', shortcut: 'R', end: false },
   { to: '/reports',  label: 'Reports',      icon: 'âŠ¡', shortcut: 'E', end: false },
   { to: '/projects', label: 'Projects',     icon: 'ðŸ“', shortcut: '',  end: false },
 ]

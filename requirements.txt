@@ -38,6 +38,9 @@ openpyxl==3.1.2
 anthropic==0.39.0           # Claude API client
 # pgvector==0.2.4          # Embeddings + similarity (PostgreSQL + pgvector)
 
+# ── HTTP client (used by backend/routes/updater.py) ───────────────────────────
+requests==2.34.2
+
 # ── Future / SaaS (uncomment when needed) ────────────────────────────────────
 # redis==5.0.4            # Job queue broker
 # celery==5.4.0           # Distributed workers
