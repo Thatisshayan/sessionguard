@@ -9,7 +9,7 @@
 
 ---
 
-## Phase 0 — Immediate Hardening (mostly done, 2026-07-21)
+## Phase 0 — Immediate Hardening (complete, 2026-07-21)
 
 **Goal**: Stop actively bleeding — fix what's broken *today* before adding anything new. Cheap, fast, high-leverage; discovered by auditing rather than by design.
 
@@ -18,11 +18,11 @@
 | P0.1 | Revoke/scrub the Anthropic API key committed to `config/app_config.json` in git history | ✅ Done — blanked in working tree + config now points to `ANTHROPIC_API_KEY` env var. Still recommend rotating the key at console.anthropic.com since it was pushed to git. |
 | P0.2 | Fix `scripts/run_backend.bat` — was missing `..` in its `ROOT` path, so `scripts\run_all.bat` failed out of the box | ✅ Done, both repos |
 | P0.3 | Resolve canonical-vs-clone divergence (`C:\Projects\SessionGuard\sessionguard` vs `_repo_clone`) — 2 months of uncommitted WIP (Tauri rework, Import Wizard feature) was sitting only in canonical's working tree, never committed | ✅ Done — committed, both repos merged to a shared tip |
-| P0.4 | Remove junk directories (`NVIDIA Corporation/`, unexpanded brace-glob folders) from canonical repo root | ⏳ Pending — confirmed empty/untracked, waiting on explicit go-ahead to delete |
-| P0.5 | Minimal smoke test: does the app actually boot end-to-end on a clean checkout? | ⏳ Not yet verified — `opencv-python`/`pytesseract`/`PySide6` are hard import-time deps for the whole backend; Tesseract binary isn't installed on this machine |
+| P0.4 | Remove junk directories (`NVIDIA Corporation/`, unexpanded brace-glob folders) from canonical repo root | ✅ Done — verified 2026-07-21, canonical root (`C:\Projects\SessionGuard\sessionguard`) no longer contains these; already clean |
+| P0.5 | Minimal smoke test: does the app actually boot end-to-end on a clean checkout? | ✅ Done (2026-07-21) — fresh `.venv`, `pip install -r requirements.txt`, `npm install`, backend boots on :8000 (`/health/detailed` green: DB/FFmpeg/engines/WS ok, Tesseract binary absent but degrades gracefully), frontend boots on :5173, `/sessions` returns seeded data. Found 2 bugs in the process: (1) `backend/routes/updater.py` imports `requests` which was missing from `requirements.txt` — added; (2) `frontend/src/App.tsx` nav config had smart/curly quotes (`‘…’`) instead of straight quotes, a hard esbuild parse failure — fixed. Desktop shells (PySide6, Tauri) not smoke-tested yet. |
 | P0.6 | Decide: is auth enforcement in scope now? | **No, deferred** — confirmed single-user-local-only for now. Revisit only when/if a second user or network exposure enters the picture. |
 
-**Definition of Done**: one canonical repo, no secrets in git, launch scripts work from a clean clone, no stale junk in the tree.
+**Definition of Done**: one canonical repo, no secrets in git, launch scripts work from a clean clone, no stale junk in the tree. **✅ Met as of 2026-07-21 — Phase 0 closed. Next up: Phase 1 (A3–A6 backend hardening, then B1–B3 frontend).**
 
 ---
 
