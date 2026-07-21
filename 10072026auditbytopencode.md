@@ -1,5 +1,7 @@
 # SessionGuard v1.2.0 — Deep Codebase Audit Report
 
+> **⚠️ Point-in-time snapshot, dated 2026-07-10 (commit `fd797d7`).** Since this audit, Phase 0 hardening has been completed (2026-07-21): the committed API key was scrubbed, `run_backend.bat` was fixed, canonical/clone divergence was resolved, and an end-to-end boot smoke test passed (2 additional bugs found and fixed: missing `requests` dependency, `App.tsx` smart-quote syntax error). **For current status, see [`SessionGuardRevival.md`](SessionGuardRevival.md).** The architectural findings and Sprint recommendations below are still generally valid, but treat any "as of" claims about repo state, commit hash, or outstanding P0 items as superseded.
+
 **Repository**: https://github.com/Thatisshayan/sessionguard  
 **Audited**: `_repo_clone` (commit `fd797d7` — SessionGuard v1.2.0)  
 **Date**: 2026-07-10  
@@ -414,6 +416,8 @@ During the audit, I examined all folders in the repository root. **Critical find
 - The auto-updater report says "not integrated" — but `updater.py` route exists in `_repo_clone`
 
 **Conclusion**: My audit of `_repo_clone` is the authoritative current-state assessment. The other folders provide useful historical context but do not change any findings.
+
+**Update (2026-07-21)**: the historical folders listed above (`CURRENT STAGE 02.05.2026/`, `SessionGuard/`, `UP AND RUNNING/`, `Casino Heist/`, `DEVELOPER PACKAGE/`, `PROTOTYPE/`, `PRESENTATION/`, `ROAD MAP/`, `TASK SYSTEM/`) no longer exist in the repo root — they've since been archived into the `.zip`/`.pdf` files now sitting at root (`SessionGuard-Code-Export.zip`, `SessionGuardPro_Developer_Pack.zip`, etc.) or removed. Current root-level companions to `_repo_clone/` are just those archives, reference PDFs, `Claude/` and `New folder/` (unrelated slot-strategy reference material), and this repo's own docs. None of that affects the audit's conclusions — `_repo_clone` (mirrored in canonical at `C:\Projects\SessionGuard\sessionguard`) remains the single source of truth.
 
 ---
 

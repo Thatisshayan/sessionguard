@@ -2,6 +2,8 @@
 
 Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (Claude), multi-format exports. Desktop + Web.
 
+> **Current project status**: see [`SessionGuardRevival.md`](SessionGuardRevival.md) — Phase 0 (immediate hardening) is complete as of 2026-07-21; Phase 1 (backend/frontend foundations) is next. For a point-in-time code audit, see [`10072026auditbytopencode.md`](10072026auditbytopencode.md) (dated 2026-07-10 — check the revival doc for anything more recent).
+
 ---
 
 ## Quick Start
