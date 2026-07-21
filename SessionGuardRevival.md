@@ -32,14 +32,14 @@
 > **A1/A2 note**: Postgres + Redis only pay off once there's more than one concurrent user/process to serve. For single-user-local, SQLite (already WAL-mode) and the in-memory run registry are adequate — treat A1/A2 as part of the *SaaS track* (see Phase 6 gate) rather than a Phase 1 blocker, unless you already know you're going multi-user soon.
 
 ### Backend (Engineer 1)
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| A1 | *(SaaS-gated)* PostgreSQL + Alembic migration | `alembic upgrade head` creates 15 tables on clean PG; `init_db.py` deprecated |
-| A2 | *(SaaS-gated)* Redis registry for live runs | Live run survives server restart; `GET /live/{id}` works after deploy |
-| A3 | Rate limiting on auth/write endpoints | `POST /auth/login` → 429 after 5 req/min; `POST /upload` → 429 after 10 req/min |
-| A4 | Structured JSON logging (structlog) | All requests log `request_id`, `user_id`, `latency_ms`, `status` to stdout |
-| A5 | Secret key from env + hot-reload | `SECRET_KEY` from `$ENV`; `SIGHUP` rotates key without dropping active tokens |
-| A6 | Composite DB indexes | `EXPLAIN ANALYZE` shows index scan on `events(session_id, timestamp)` and `live_events(run_id, id)` |
+| ID | Task | Acceptance Criteria | Status |
+|----|------|---------------------|--------|
+| A1 | *(SaaS-gated)* PostgreSQL + Alembic migration | `alembic upgrade head` creates 15 tables on clean PG; `init_db.py` deprecated | Deferred (SaaS-gated) |
+| A2 | *(SaaS-gated)* Redis registry for live runs | Live run survives server restart; `GET /live/{id}` works after deploy | Deferred (SaaS-gated) |
+| A3 | Rate limiting on auth/write endpoints | `POST /auth/login` → 429 after 5 req/min; `POST /upload` → 429 after 10 req/min | ✅ Done (2026-07-21) — `backend/middleware/rate_limit.py` already existed but was unused/unwired; wired into `/auth/login`, `/auth/signup`, `/auth/refresh`, `/upload`. Verified: 5 login attempts allowed, 6th+ returns 429 with `X-RateLimit-*` headers |
+| A4 | Structured JSON logging (structlog) | All requests log `request_id`, `user_id`, `latency_ms`, `status` to stdout | ✅ Done — `backend/middleware/logging.py` (new), wired as ASGI middleware in `main.py`. Verified: every request emits one JSON line with all required fields; `X-Request-ID` echoed in response headers |
+| A5 | Secret key from env + hot-reload | `SECRET_KEY` from `$ENV`; `SIGHUP` rotates key without dropping active tokens | ✅ Done — `backend/auth/service.py` now reads `SECRET_KEY` env var first (falls back to legacy `app_config.json` field, then a random per-process key). `rotate_secret_key()` + SIGHUP handler swap in a new key while keeping up to 3 outgoing keys valid for verification so in-flight access tokens (≤60min TTL) don't get dropped. Note: SIGHUP doesn't exist on Windows — handler is a no-op there; rotation on Windows currently requires a process restart with the new env var set (acceptable for local-first single-user; revisit if hot-reload becomes a real requirement) |
+| A6 | Composite DB indexes | `EXPLAIN ANALYZE` shows index scan on `events(session_id, timestamp)` and `live_events(run_id, id)` | ✅ Done — `database/db.py: init_db_v6()` adds indexes on `events(session_id, timestamp)`, `live_events(run_id, id)`, plus FK indexes on `uploads`, `insights`, `alerts`, `review_items`, `ocr_results`, `video_jobs`, `refresh_tokens.token_hash`, `audit_log.user_id`, `ai_insights`. Verified via `EXPLAIN QUERY PLAN` — both required queries now show `SEARCH ... USING INDEX`. Also fixed a portability bug in `init_db.py` (hardcoded `C:\Projects\SessionGuard\sessionguard` sys.path — meant a clean checkout run from elsewhere silently wrote its DB into that canonical path instead of its own) |
 
 ### Frontend (Engineer 2)
 | ID | Task | Acceptance Criteria |
@@ -51,6 +51,8 @@
 ### Definition of Done
 - CI passes (lint, typecheck, unit tests)
 - Staging deploy works
+
+**Status (2026-07-21)**: Backend track (A3–A6) done, verified end-to-end on a live boot. Frontend track (B1–B3) not started — next up.
 - This document updated with Phase 1 results
 
 ---

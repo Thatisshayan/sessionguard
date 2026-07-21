@@ -15,7 +15,9 @@ import hashlib
 import hmac
 import json
 import os
+import platform
 import secrets
+import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -26,7 +28,9 @@ from database.db import get_connection
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "app_config.json"
 
-def _load_secret() -> str:
+def _load_secret_from_config() -> str:
+    """Legacy fallback only — prefer SECRET_KEY env var. Never write real
+    secrets to app_config.json going forward (see P0.1 incident)."""
     try:
         with open(_CONFIG_PATH) as f:
             cfg = json.load(f)
@@ -34,11 +38,49 @@ def _load_secret() -> str:
     except Exception:
         return ""
 
-# Secret key — loaded from config or generated fresh per process (rotate in production)
+def _load_secret() -> str:
+    return os.getenv("SECRET_KEY", "").strip() or _load_secret_from_config()
+
+# Secret key — env var first, then legacy config, then a fresh per-process
+# key (rotate via SIGHUP once SECRET_KEY is set in the environment; see
+# rotate_secret_key() below). _PREV_SECRET_KEYS holds recently-rotated-out
+# keys so tokens signed just before a rotation still verify until they expire.
+_KEY_LOCK: threading.Lock = threading.Lock()
 _SECRET_KEY: str = _load_secret() or secrets.token_hex(32)
+_PREV_SECRET_KEYS: list[str] = []
 _ALGORITHM        = "HS256"
 ACCESS_EXPIRE_MIN  = 60          # 1 hour
 REFRESH_EXPIRE_DAYS = 30
+
+
+def rotate_secret_key() -> None:
+    """
+    Re-read SECRET_KEY from the environment and swap it in.
+    The outgoing key is kept in _PREV_SECRET_KEYS (capped) so access tokens
+    issued under it keep validating until they naturally expire
+    (<= ACCESS_EXPIRE_MIN minutes) instead of being dropped mid-session.
+    No-op if SECRET_KEY isn't set or hasn't changed.
+    """
+    global _SECRET_KEY
+    new_key = os.getenv("SECRET_KEY", "").strip()
+    if not new_key:
+        return
+    with _KEY_LOCK:
+        if new_key == _SECRET_KEY:
+            return
+        _PREV_SECRET_KEYS.append(_SECRET_KEY)
+        del _PREV_SECRET_KEYS[:-3]  # keep at most 3 outgoing keys
+        _SECRET_KEY = new_key
+
+
+def _install_sighup_handler() -> None:
+    if platform.system() == "Windows":
+        return  # SIGHUP doesn't exist on Windows; rotation must be triggered by process restart
+    import signal
+    signal.signal(signal.SIGHUP, lambda signum, frame: rotate_secret_key())
+
+
+_install_sighup_handler()
 
 
 # ── Password hashing ──────────────────────────────────────────────────────────
@@ -94,16 +136,23 @@ def create_refresh_token(user_id: int) -> tuple[str, str]:
 
 
 def decode_access_token(token: str) -> dict | None:
-    """Decode and validate access token. Returns payload or None."""
-    try:
-        payload = jwt.decode(token, _SECRET_KEY, algorithms=[_ALGORITHM])
-        if payload.get("type") != "access":
+    """
+    Decode and validate access token. Returns payload or None.
+    Tries the current secret key, then recently-rotated-out keys, so a key
+    rotation (rotate_secret_key()) doesn't invalidate tokens issued moments
+    before it — they still expire normally at ACCESS_EXPIRE_MIN.
+    """
+    for key in [_SECRET_KEY, *_PREV_SECRET_KEYS]:
+        try:
+            payload = jwt.decode(token, key, algorithms=[_ALGORITHM])
+            if payload.get("type") != "access":
+                return None
+            return payload
+        except jwt.ExpiredSignatureError:
             return None
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.InvalidTokenError:
-        return None
+        except jwt.InvalidTokenError:
+            continue
+    return None
 
 
 # ── User operations ───────────────────────────────────────────────────────────

@@ -10,10 +10,12 @@ POST /auth/logout   — revoke refresh token
 GET  /auth/me       — current user profile
 
 Maturity: Working Prototype — all endpoints functional.
-Future:   OAuth2 providers (V7), rate limiting (V6), email verification (V7).
+Rate limiting: login/signup/refresh are IP-limited (see LIMITS in
+backend/middleware/rate_limit.py) — exceeding returns 429.
+Future:   OAuth2 providers (V7), email verification (V7).
 """
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from backend.auth.service import (
@@ -21,8 +23,19 @@ from backend.auth.service import (
     create_refresh_token, store_refresh_token, validate_refresh_token,
     revoke_refresh_token, get_current_user_from_token, write_audit,
 )
+from backend.middleware.rate_limit import check_rate_limit, rate_limit_headers, get_client_ip
 
 router = APIRouter(tags=["auth"])
+
+
+def _enforce_rate_limit(request: Request, category: str):
+    result = check_rate_limit(get_client_ip(request), category)
+    if not result["allowed"]:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many {category} attempts. Try again in {result['reset_in']}s.",
+            headers=rate_limit_headers(result),
+        )
 
 
 class SignupRequest(BaseModel):
@@ -42,7 +55,8 @@ class RefreshRequest(BaseModel):
 
 # ── Signup ────────────────────────────────────────────────────────────────────
 @router.post("/signup", status_code=201)
-def signup(body: SignupRequest):
+def signup(body: SignupRequest, request: Request):
+    _enforce_rate_limit(request, "signup")
     if len(body.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
     result = create_user(
@@ -60,7 +74,8 @@ def signup(body: SignupRequest):
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 @router.post("/login")
-def login(body: LoginRequest):
+def login(body: LoginRequest, request: Request):
+    _enforce_rate_limit(request, "login")
     user = authenticate_user(body.email, body.password)
     if not user:
         raise HTTPException(
@@ -91,7 +106,8 @@ def login(body: LoginRequest):
 
 # ── Refresh ───────────────────────────────────────────────────────────────────
 @router.post("/refresh")
-def refresh(body: RefreshRequest):
+def refresh(body: RefreshRequest, request: Request):
+    _enforce_rate_limit(request, "refresh")
     user = validate_refresh_token(body.refresh_token)
     if not user:
         raise HTTPException(status_code=401, detail="Refresh token invalid or expired.")

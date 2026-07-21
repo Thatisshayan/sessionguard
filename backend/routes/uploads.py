@@ -10,12 +10,13 @@ Maturity: Working Prototype
 
 import shutil
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from typing import Optional
 from database.db import get_connection
 from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
+from backend.middleware.rate_limit import check_rate_limit, rate_limit_headers, get_client_ip
 
 router = APIRouter(tags=["upload"])
 
@@ -99,6 +100,7 @@ def _bg_extract_frames(video_path: str, upload_id: int):
 
 @router.post("")
 async def upload_file(
+    request: Request,
     background_tasks: BackgroundTasks,
     file:       UploadFile = File(...),
     session_id: Optional[int] = Form(None),
@@ -109,6 +111,14 @@ async def upload_file(
     Video files → frame extraction triggered (background task).
     Returns immediately with upload_id and status=processing.
     """
+    limit_result = check_rate_limit(get_client_ip(request), "upload", max_calls=10, window_seconds=60)
+    if not limit_result["allowed"]:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many uploads. Try again in {limit_result['reset_in']}s.",
+            headers=rate_limit_headers(limit_result),
+        )
+
     # Detect file type
     content_type = (file.content_type or "").split(";")[0].strip()
     file_type = ALLOWED_TYPES.get(content_type)

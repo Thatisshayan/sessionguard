@@ -628,3 +628,28 @@ def init_db_v5():
     conn.commit()
     conn.close()
     print("[DB] V11/V12/V13 schema applied.")
+
+
+# ── Phase 1 (A6): composite indexes on hot query paths ─────────────────────────
+SCHEMA_V6_SQL = """
+CREATE INDEX IF NOT EXISTS idx_events_session_timestamp    ON events(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_live_events_run_id           ON live_events(run_id, id);
+CREATE INDEX IF NOT EXISTS idx_uploads_session_id           ON uploads(session_id);
+CREATE INDEX IF NOT EXISTS idx_insights_session_id          ON insights(session_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_session_id            ON alerts(session_id);
+CREATE INDEX IF NOT EXISTS idx_review_items_session_id      ON review_items(session_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_results_session_id       ON ocr_results(session_id);
+CREATE INDEX IF NOT EXISTS idx_video_jobs_session_id        ON video_jobs(session_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash          ON refresh_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_id            ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_insights_session_id       ON ai_insights(session_id);
+"""
+
+
+def init_db_v6():
+    """Apply Phase 1 (A6) composite/FK indexes — idempotent, safe to re-run."""
+    conn = get_connection()
+    conn.executescript(SCHEMA_V6_SQL)
+    conn.commit()
+    conn.close()
+    print("[DB] V6 indexes applied.")
