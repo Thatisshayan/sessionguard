@@ -1,29 +1,22 @@
 @echo off
-title SessionGuard v1.2.0
-cd /d C:\Projects\SessionGuard\sessionguard
+REM SessionGuard Startup Script v1.2.0
+REM IMPORTANT: Set ANTHROPIC_API_KEY environment variable before running
+REM   setx ANTHROPIC_API_KEY "your_api_key_here"
+REM   Then restart this terminal
 
-echo [1/3] Stopping old processes...
+echo Killing old processes...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-NetTCPConnection -LocalPort 8000,5173 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 taskkill /F /IM node.exe /T >nul 2>&1
-timeout /t 2 /nobreak >nul
+ping -n 3 127.0.0.1 >nul
 
-echo [2/3] Starting backend...
+echo Starting backend...
 set PYTHONPATH=C:\Projects\SessionGuard\sessionguard
-start "SG Backend" /MIN C:\Users\Shaya\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe backend.main:app --host 127.0.0.1 --port 8000 --no-access-log
-timeout /t 4 /nobreak >nul
+start "SG-Backend" /MIN cmd /k "set PYTHONPATH=C:\Projects\SessionGuard\sessionguard && cd /d C:\Projects\SessionGuard\sessionguard && C:\Users\Shaya\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe backend.main:app --host 127.0.0.1 --port 8000 --no-access-log"
+ping -n 6 127.0.0.1 >nul
 
-echo [3/3] Starting frontend...
-start "SG Frontend" /MIN cmd /c "cd /d C:\Projects\SessionGuard\sessionguard\frontend && C:\Program Files\nodejs\npm.cmd run dev"
-timeout /t 3 /nobreak >nul
+echo Starting frontend...
+start "SG-Frontend" /MIN cmd /k "cd /d C:\Projects\SessionGuard\sessionguard\frontend && C:\Program Files\nodejs\npm.cmd run dev"
+ping -n 5 127.0.0.1 >nul
 
-echo.
-echo ==========================================
-echo  SessionGuard v1.2.0 is running
-echo  Dashboard : http://localhost:5173
-echo  API Docs  : http://127.0.0.1:8000/docs
-echo  Login     : demo@sessionguard.local
-echo  Password  : demo123
-echo ==========================================
-echo.
-start "" http://localhost:5173
-pause
+echo Done. Opening browser...
+start "" "http://localhost:5173"

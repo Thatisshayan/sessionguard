@@ -48,9 +48,9 @@
     "max_retries": 2
   },
   "ai": {
-    "anthropic_api_key": "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",
+    "anthropic_api_key": "",
     "model": "claude-sonnet-4-20250514",
-    "note": "Get your key at https://console.anthropic.com \u2014 or set ANTHROPIC_API_KEY env var",
+    "note": "SECURITY: Use ANTHROPIC_API_KEY environment variable instead. Never commit real keys to config files.",
     "max_tokens": 1024,
     "cost_per_million_input": 3.0,
     "cost_per_million_output": 15.0

@@ -32,7 +32,7 @@ export default function ReviewQueue() {
       <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Review Queue</h1>
       {summary && (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 'var(--space-8)' }}>
-          {summary.pending} pending · {summary.accepted} accepted · {summary.rejected} rejected · {summary.corrected} corrected
+          {summary.pending} pending · {summary.accepted} accepted · {summary.rejected} rejected{(summary.corrected ?? 0) > 0 ? ` · ${summary.corrected} corrected` : ''}
         </div>
       )}
       {loading ? <p style={{ color: 'var(--text-muted)' }}>Loading…</p> : (

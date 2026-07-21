@@ -33,18 +33,49 @@ export interface GlobalMetrics {
   total_sessions: number; total_net: number; avg_rtp: number
   avg_net: number; total_wagered: number; flagged_sessions: number; total_spins: number
 }
-export interface Insight { id: number; session_id: number; text: string; severity: string; created_at: string }
-export interface Alert { id: number; session_id: number; severity: string; message: string; acknowledged: number; created_at: string }
+// Insight — game_name and session_id are returned by the API
+export interface Insight {
+  id: number; session_id: number; text: string; severity: string
+  created_at: string; game_name?: string
+}
+// Alert — session_name is returned by the API alongside the alert
+export interface Alert {
+  id: number; session_id: number; severity: string; message: string
+  acknowledged: number; created_at: string; session_name?: string
+}
 export interface AlertSummary { total: number; critical: number; warning: number; info: number; unacknowledged: number }
-export interface ReviewItem { id: number; session_id: number; event_id: number; confidence: number; reason: string; status: string; correction: string | null }
-export interface QueueSummary { pending: number; accepted: number; rejected: number; total: number }
+// ReviewItem — confidence_score and game_name come from joined API response
+export interface ReviewItem {
+  id: number; session_id: number; event_id: number
+  confidence: number; confidence_score?: number
+  reason: string; status: string; correction: string | null
+  game_name?: string
+}
+// QueueSummary — corrected is an optional field some backend versions include
+export interface QueueSummary { pending: number; accepted: number; rejected: number; total: number; corrected?: number }
 export interface SessionEvent { id: number; session_id: number; timestamp: string; event_type: string; bet_amount: number; win_amount: number; balance_after: number; confidence_score: number }
 export interface EventSummary { total: number; winning: number; avg_bet: number; biggest_win: number; net_over_time: Array<{ spin: number; cumulative: number; balance: number }> }
 export interface BehaviorResult { session_id: number; status: string; risk_level: string; risk_score: number; findings: string[]; patterns: Record<string, any> }
-export interface LiveRun { id: number; session_id: number; status: string; mode: string; event_count: number }
+// LiveRun — extended with fields used by LiveMonitor
+export interface LiveRun {
+  id: number; session_id: number; status: string; mode: string
+  event_count: number; event_index: number
+  tick_interval: number; started_at?: string; stopped_at?: string
+}
 export interface LiveEvent { id: number; run_id: number; event_type: string; payload: Record<string, any>; created_at: string }
 export interface AiAnalysis { session_id: number; source: string; ai_available: boolean; headline: string; risk_level: string; discipline_score: number; one_line_verdict: string; insights: any[]; behaviour_summary: string }
 export interface AiStatus { available: boolean; has_library: boolean; has_api_key: boolean; model: string; message: string; install_cmd: string | null; key_env_var: string; console_url: string }
+// CompareResult — returned by /compare endpoint
+export interface CompareResult {
+  session_ids: number[]
+  sessions: Session[]
+  metric_rows: Array<{ metric: string; values: number[]; winner_idx: number }>
+  narrative?: string
+  saved_id?: number
+}
+// NetOverTime / RtpBucket — used by Dashboard charts
+export interface NetOverTime { date: string; cumulative_net: number }
+export interface RtpBucket   { bucket: string; count: number }
 
 // ── Health ────────────────────────────────────────────────────────────────────
 export const getHealth         = () => client.get('/health').then(r => r.data)

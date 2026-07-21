@@ -309,7 +309,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63044e1ae8e69f3b5a92c736ca6269b8d12fa7efe39bf34ddb06d102cf0e2cab"
 dependencies = [
  "memchr",
- "regex-automata",
  "serde",
 ]
 
@@ -2336,16 +2335,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opener"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "293c15678e37254c15bd2f092314abb4e51d7fdde05c2021279c12631b54f005"
-dependencies = [
- "bstr",
- "winapi",
-]
-
-[[package]]
 name = "openssl"
 version = "0.10.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2596,7 +2585,7 @@ version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
 dependencies = [
- "siphasher 1.0.2",
+ "siphasher 1.0.3",
 ]
 
 [[package]]
@@ -3323,7 +3312,6 @@ dependencies = [
 name = "sessionguard"
 version = "1.0.0"
 dependencies = [
- "opener",
  "reqwest",
  "serde",
  "serde_json",
@@ -3381,9 +3369,9 @@ checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
 
 [[package]]
 name = "siphasher"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
+checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
 
 [[package]]
 name = "slab"
@@ -5469,9 +5457,9 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
 name = "zvariant"
-version = "5.10.1"
+version = "5.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4db0ecb8987cf5e92653c57c098f7f0e39a03112edb796f4fe089fb7eaa14ff"
+checksum = "1c1567a6ec68df868cbbfde844cfc6d81649fe5109a62b116b19fabd53e618ee"
 dependencies = [
  "endi",
  "enumflags2",
@@ -5483,9 +5471,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "5.10.1"
+version = "5.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b949b639ab1b4bed763aa7481ba0e368af68d8b55532f8ed4bec86a59f2ca98"
+checksum = "c7d5b780599bbde114e39d9a0799577fad1ced5105d38515745f7b3099d8ceda"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",

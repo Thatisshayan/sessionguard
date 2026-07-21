@@ -1,9 +1,22 @@
-"""backend/main.py -- SessionGuard v1.2.0"""
-import os, sys
+﻿"""backend/main.py -- SessionGuard v1.2.0"""
+import os, sys, platform
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
+
+# ── Windows: pin Tesseract paths before any engine imports pytesseract ────────
+if platform.system() == "Windows":
+    _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
+    _tess_exe  = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if Path(_tess_data).exists():
+        os.environ["TESSDATA_PREFIX"] = _tess_data
+    try:
+        import pytesseract
+        if Path(_tess_exe).exists():
+            pytesseract.pytesseract.tesseract_cmd = _tess_exe
+    except ImportError:
+        pass
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +29,7 @@ from backend.routes import (
     auth, projects, jobs, admin, parser_benchmark,
     ws, notes, evidence, recorder, openapi_export,
     system_config, data_export, trends, search,
-    tags, intelligence, coach, ocr_calibrate, updater,
+    tags, intelligence, coach, ocr_calibrate, updater, import_wizard,
 )
 
 app = FastAPI(title="SessionGuard API", version="1.2.0", docs_url="/docs")
@@ -33,6 +46,12 @@ app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True
 def on_startup():
     init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5()
     seed_demo_data(); seed_demo_user(); seed_presets()
+
+    # Load API key from environment (secure method)
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if api_key:
+        os.environ["ANTHROPIC_API_KEY"] = api_key
+
     print("[API] SessionGuard v1.2.0 ready -> http://127.0.0.1:8000")
     print("[API] Login -> demo@sessionguard.local / demo123")
     print("[API] Coach -> /coach-status | Updater -> /updater/check")
@@ -71,3 +90,5 @@ app.include_router(intelligence.router)
 app.include_router(coach.router)
 app.include_router(ocr_calibrate.router)
 app.include_router(updater.router)
+app.include_router(import_wizard.router)
+

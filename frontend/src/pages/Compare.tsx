@@ -8,7 +8,17 @@ import {
   ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { compareSessions, getSessions } from '../services/api'
-import type { Session, CompareResult } from '../services/api'
+import type { Session } from '../services/api'
+
+// Local shape — backend /compare returns varying structures across versions
+// Using a loose type here so the page never crashes on unexpected fields
+interface CompareResult {
+  sessions?: Session[]
+  metric_rows?: Array<{ metric: string; values: number[]; winner_idx: number }>
+  narrative?: string
+  diff?: Record<string, any>
+  [key: string]: any
+}
 
 const METRICS: { key: keyof Session; label: string; format: (v: any) => string; good: 'high' | 'low' }[] = [
   { key: 'rtp',           label: 'RTP %',         format: v => `${v}%`,   good: 'high' },
@@ -177,64 +187,91 @@ export default function Compare() {
           {result && (
             <>
               {/* Narrative */}
-              <div className="card" style={{ marginBottom: 'var(--space-6)', borderColor: 'var(--accent-blue)' }}>
-                <div style={{ fontSize: 11, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Analysis Narrative</div>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>{result.narrative}</p>
-              </div>
-
-              {/* Radar chart */}
-              <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
-                  Performance Radar (normalised 0–100)
+              {result.narrative && (
+                <div className="card" style={{ marginBottom: 'var(--space-6)', borderColor: 'var(--accent-blue)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--accent-blue)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Analysis Narrative</div>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>{result.narrative}</p>
                 </div>
-                <ResponsiveContainer width="100%" height={260}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="var(--bg-border)" />
-                    <PolarAngleAxis dataKey="metric" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-                    <PolarRadiusAxis tick={{ fill: 'var(--text-muted)', fontSize: 9 }} domain={[0, 100]} />
-                    {result.sessions.map((s, i) => (
-                      <Radar key={s.id} name={s.name} dataKey={s.name}
-                        stroke={COLORS[i % COLORS.length]}
-                        fill={COLORS[i % COLORS.length]}
-                        fillOpacity={0.1} strokeWidth={2} />
-                    ))}
-                    <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', borderRadius: 8, fontSize: 12 }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
+              )}
 
-              {/* Metric-by-metric breakdown */}
-              <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-6)' }}>
-                  Metric Breakdown
-                </div>
-                {METRICS.map(m => (
-                  <MetricWinner key={String(m.key)} sessions={result.sessions as Session[]} metric={m} />
-                ))}
-              </div>
-
-              {/* Diff summary */}
-              <div className="card">
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
-                  Diff Summary
-                </div>
-                {[
-                  ['RTP Range',    `${result.diff.rtp_range?.min}% – ${result.diff.rtp_range?.max}%`,   `Δ ${result.diff.rtp_range?.delta}%`],
-                  ['Net Range',    `$${result.diff.net_range?.min?.toFixed(2)} – $${result.diff.net_range?.max?.toFixed(2)}`, `Δ $${result.diff.net_range?.delta?.toFixed(2)}`],
-                  ['Streak Range', `${result.diff.streak_range?.min} – ${result.diff.streak_range?.max} spins`, `Δ ${result.diff.streak_range?.delta}`],
-                  ['Best RTP',     result.diff.best_rtp_session,  '▲'],
-                  ['Worst RTP',    result.diff.worst_rtp_session, '▼'],
-                  ['Best Net',     result.diff.best_net_session,  '▲'],
-                ].map(([label, val, aside]) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bg-border)', fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{val}</span>
-                      <span style={{ color: 'var(--accent-blue)', fontSize: 11, minWidth: 60, textAlign: 'right' }}>{aside}</span>
-                    </div>
+              {/* Radar chart — only if sessions array present */}
+              {result.sessions && result.sessions.length > 0 && (
+                <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
+                    Performance Radar (normalised 0–100)
                   </div>
-                ))}
-              </div>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid stroke="var(--bg-border)" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                      <PolarRadiusAxis tick={{ fill: 'var(--text-muted)', fontSize: 9 }} domain={[0, 100]} />
+                      {result.sessions.map((s, i) => (
+                        <Radar key={s.id} name={s.name} dataKey={s.name}
+                          stroke={COLORS[i % COLORS.length]}
+                          fill={COLORS[i % COLORS.length]}
+                          fillOpacity={0.1} strokeWidth={2} />
+                      ))}
+                      <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', borderRadius: 8, fontSize: 12 }} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Metric-by-metric breakdown — only if sessions present */}
+              {result.sessions && result.sessions.length > 0 && (
+                <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-6)' }}>
+                    Metric Breakdown
+                  </div>
+                  {METRICS.map(m => (
+                    <MetricWinner key={String(m.key)} sessions={result.sessions as Session[]} metric={m} />
+                  ))}
+                </div>
+              )}
+
+              {/* Raw metric rows fallback — shown if backend returns metric_rows but not sessions */}
+              {result.metric_rows && result.metric_rows.length > 0 && !result.sessions && (
+                <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>Metric Rows</div>
+                  {result.metric_rows.map((row, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--bg-border)', fontSize: 13 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{row.metric}</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                        {row.values?.map((v, vi) => (
+                          <span key={vi} style={{ marginLeft: 12, color: vi === row.winner_idx ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
+                            {typeof v === 'number' ? v.toFixed(2) : v}{vi === row.winner_idx ? ' ▲' : ''}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Diff summary — only if diff object present */}
+              {result.diff && (
+                <div className="card">
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 'var(--space-4)' }}>
+                    Diff Summary
+                  </div>
+                  {[
+                    ['RTP Range',    `${result.diff.rtp_range?.min ?? '—'}% – ${result.diff.rtp_range?.max ?? '—'}%`,   `Δ ${result.diff.rtp_range?.delta ?? '—'}%`],
+                    ['Net Range',    result.diff.net_range ? `$${result.diff.net_range.min?.toFixed(2)} – $${result.diff.net_range.max?.toFixed(2)}` : '—', result.diff.net_range ? `Δ $${result.diff.net_range.delta?.toFixed(2)}` : ''],
+                    ['Streak Range', result.diff.streak_range ? `${result.diff.streak_range.min} – ${result.diff.streak_range.max} spins` : '—', result.diff.streak_range ? `Δ ${result.diff.streak_range.delta}` : ''],
+                    ['Best RTP',     result.diff.best_rtp_session ?? '—', '▲'],
+                    ['Worst RTP',    result.diff.worst_rtp_session ?? '—', '▼'],
+                    ['Best Net',     result.diff.best_net_session ?? '—', '▲'],
+                  ].map(([label, val, aside]) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bg-border)', fontSize: 13 }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{val}</span>
+                        <span style={{ color: 'var(--accent-blue)', fontSize: 11, minWidth: 60, textAlign: 'right' }}>{aside}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
         </div>
