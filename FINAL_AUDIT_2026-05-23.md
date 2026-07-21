@@ -1,3 +1,5 @@
+> **⚠️ SUPERSEDED.** This audit covered a much earlier, simpler snapshot of the codebase (2-table, CSV-import-only). It has been superseded by [`10072026auditbytopencode.md`](10072026auditbytopencode.md) (2026-07-10), which itself is now a point-in-time snapshot — see [`SessionGuardRevival.md`](SessionGuardRevival.md) for current status. Kept for historical reference only; do not use this file's findings, score, or "critical blocker" list as current.
+
 # SessionGuard — Final Comprehensive Audit
 **Date:** May 23, 2026  
 **Status:** REAL WORKING CODEBASE v1.2.0 + Active Development  
