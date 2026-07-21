@@ -26,6 +26,16 @@ import pytesseract
 
 from database.db import get_connection
 
+# ── Windows: hard-set Tesseract path so pytesseract never guesses ─────────────
+import os, platform
+if platform.system() == "Windows":
+    _tess_exe = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
+    if os.path.exists(_tess_exe):
+        pytesseract.pytesseract.tesseract_cmd = _tess_exe
+    if os.path.exists(_tess_data):
+        os.environ["TESSDATA_PREFIX"] = _tess_data
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 CONFIDENCE_THRESHOLD = 0.75   # below this → flagged for review
 NUMERIC_PATTERN = re.compile(r"[-+]?\d{1,6}(?:[.,]\d{1,2})?")

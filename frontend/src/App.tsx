@@ -1,5 +1,5 @@
-/**
- * src/App.tsx — SessionGuard Phase 7 final.
+﻿/**
+ * src/App.tsx â€” SessionGuard Phase 7 final.
  * 18 pages + NotificationCenter in top bar + keyboard shortcut listener.
  * All routes wired. AuthProvider. WebSocket status dot.
  */
@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { useEffect, useRef, useState } from 'react'
 import { NotificationCenter } from './components/NotificationCenter'
 
-// ── Pages ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import Dashboard       from './pages/Dashboard'
 import Sessions        from './pages/Sessions'
 import SessionDetail   from './pages/SessionDetail'
@@ -27,8 +27,9 @@ import Admin           from './pages/Admin'
 import Login           from './pages/Login'
 import Settings        from './pages/Settings'
 import VideoLab        from './pages/VideoLab'
+import ImportWizard    from './pages/ImportWizard'
 
-// ── WebSocket status ──────────────────────────────────────────────────────────
+// â”€â”€ WebSocket status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useWsStatus() {
   const [ok, setOk] = useState(false)
   useEffect(() => {
@@ -45,7 +46,7 @@ function useWsStatus() {
   return ok
 }
 
-// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+// â”€â”€ Keyboard shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useKeyboardShortcuts() {
   const navigate = useNavigate()
   useEffect(() => {
@@ -58,6 +59,7 @@ function useKeyboardShortcuts() {
         'c': '/compare',
         'l': '/live',
         'u': '/upload',
+        'i': '/import',
         'r': '/review',
         'e': '/reports',
         'p': '/profiles',
@@ -72,26 +74,55 @@ function useKeyboardShortcuts() {
   }, [navigate])
 }
 
-// ── Nav config ────────────────────────────────────────────────────────────────
+// â"€â"€ Add Import CSV to keyboard shortcuts â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+function useKeyboardShortcutsWithImport() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (!e.altKey) return
+      const shortcuts: Record<string, string> = {
+        'd': '/',
+        's': '/sessions',
+        'c': '/compare',
+        'l': '/live',
+        'u': '/upload',
+        'i': '/import',
+        'r': '/review',
+        'e': '/reports',
+        'p': '/profiles',
+        'j': '/jobs',
+        'a': '/admin',
+      }
+      const target = shortcuts[e.key.toLowerCase()]
+      if (target) { e.preventDefault(); navigate(target) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [navigate])
+}
+
+// â”€â”€ Nav config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const NAV_MAIN = [
-  { to: '/',         label: 'Dashboard',    icon: '▣', shortcut: 'D', end: true  },
-  { to: '/sessions', label: 'Sessions',     icon: '≡', shortcut: 'S', end: false },
-  { to: '/compare',  label: 'Compare Lab',  icon: '⇌', shortcut: 'C', end: false },
-  { to: '/live',     label: 'Live Monitor', icon: '⏱', shortcut: 'L', end: false },
-  { to: '/upload',   label: 'Upload',       icon: '↑', shortcut: 'U', end: false },
-  { to: '/review',   label: 'Review Queue', icon: '◈', shortcut: 'R', end: false },
-  { to: '/reports',  label: 'Reports',      icon: '⊡', shortcut: 'E', end: false },
-  { to: '/projects', label: 'Projects',     icon: '📁', shortcut: '',  end: false },
+  { to: '/',         label: 'Dashboard',    icon: 'â–£', shortcut: 'D', end: true  },
+  { to: '/sessions', label: 'Sessions',     icon: 'â‰¡', shortcut: 'S', end: false },
+  { to: '/compare',  label: 'Compare Lab',  icon: 'â‡Œ', shortcut: 'C', end: false },
+  { to: '/live',     label: 'Live Monitor', icon: 'â±', shortcut: 'L', end: false },
+  { to: ‘/upload’,   label: ‘Upload’,       icon: ‘â†’’, shortcut: ‘U’, end: false },
+  { to: ‘/import’,   label: ‘Import CSV’,   icon: ‘ðŸ"„’, shortcut: ‘I’, end: false },
+  { to: ‘/review’,   label: ‘Review Queue’, icon: ‘â—ˆ’, shortcut: ‘R’, end: false },
+  { to: '/reports',  label: 'Reports',      icon: 'âŠ¡', shortcut: 'E', end: false },
+  { to: '/projects', label: 'Projects',     icon: 'ðŸ“', shortcut: '',  end: false },
 ]
 const NAV_TOOLS = [
-  { to: '/profiles',  label: 'Profiles',         icon: '◎', shortcut: 'P', end: false },
-  { to: '/benchmark', label: 'Parser Benchmark',  icon: '⊗', shortcut: '',  end: false },
-  { to: '/jobs',      label: 'Job Queue',         icon: '⚙', shortcut: 'J', end: false },
+  { to: '/profiles',  label: 'Profiles',         icon: 'â—Ž', shortcut: 'P', end: false },
+  { to: '/benchmark', label: 'Parser Benchmark',  icon: 'âŠ—', shortcut: '',  end: false },
+  { to: '/jobs',      label: 'Job Queue',         icon: 'âš™', shortcut: 'J', end: false },
 ]
-const NAV_ADMIN  = [{ to: '/admin',    label: 'Admin Panel',  icon: '🔐', shortcut: 'A', end: false }]
-const NAV_BOTTOM = [{ to: '/settings', label: 'Settings',     icon: '⚙', shortcut: '',  end: false }]
+const NAV_ADMIN  = [{ to: '/admin',    label: 'Admin Panel',  icon: 'ðŸ”', shortcut: 'A', end: false }]
+const NAV_BOTTOM = [{ to: '/settings', label: 'Settings',     icon: 'âš™', shortcut: '',  end: false }]
 
-// ── Sidebar ───────────────────────────────────────────────────────────────────
+// â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Sidebar({ wsOk }: { wsOk: boolean }) {
   const { user, logout, isAdmin } = useAuth()
   useKeyboardShortcuts()
@@ -138,7 +169,7 @@ function Sidebar({ wsOk }: { wsOk: boolean }) {
             style={{ width: 7, height: 7, borderRadius: '50%', background: wsOk ? 'var(--accent-green)' : 'var(--text-muted)' }} />
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          v0.8 · Phase 7
+          v0.8 Â· Phase 7
         </div>
       </div>
 
@@ -168,14 +199,14 @@ function Sidebar({ wsOk }: { wsOk: boolean }) {
           </NavLink>
         )}
         <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.8 }}>
-          {wsOk ? '● Live' : '○ Offline'} · Alt+key to navigate
+          {wsOk ? 'â— Live' : 'â—‹ Offline'} Â· Alt+key to navigate
         </div>
       </div>
     </aside>
   )
 }
 
-// ── Top bar with notification center ─────────────────────────────────────────
+// â”€â”€ Top bar with notification center â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function TopBar() {
   return (
     <div style={{
@@ -191,14 +222,14 @@ function TopBar() {
   )
 }
 
-// ── App shell ─────────────────────────────────────────────────────────────────
+// â”€â”€ App shell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function AppShell() {
   const { loading } = useAuth()
   const wsOk = useWsStatus()
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-base)', color: 'var(--text-muted)', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontSize: 32 }}>⏳</div>SessionGuard loading…
+      <div style={{ fontSize: 32 }}>â³</div>SessionGuard loadingâ€¦
     </div>
   )
 
@@ -216,7 +247,7 @@ function AppShell() {
             <Route path="/sessions/:id/video" element={<VideoLab />} />
             <Route path="/compare"           element={<Compare />} />
             <Route path="/live"              element={<LiveMonitor />} />
-            <Route path="/upload"            element={<Upload />} />
+            <Route path="/import" element={<ImportWizard />} /><Route path="/upload"            element={<Upload />} />
             <Route path="/review"            element={<ReviewQueue />} />
             <Route path="/reports"           element={<Reports />} />
             <Route path="/projects"          element={<Projects />} />
@@ -244,3 +275,4 @@ export default function App() {
     </BrowserRouter>
   )
 }
+

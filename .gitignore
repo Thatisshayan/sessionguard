@@ -4,6 +4,9 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+.env.local
+*.key
+*.pem
 node_modules/
 frontend/dist/
 desktop_shell/src-tauri/target/
@@ -19,3 +22,6 @@ config/sessionguard.db-shm
 *.db-shm
 .ver.tmp
 *.tmp
+
+# SECURITY: Never commit real API keys or secrets
+# Always use environment variables for sensitive data

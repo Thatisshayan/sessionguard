@@ -4,7 +4,7 @@
 :: Uses %~dp0 so this works regardless of where the folder lives or what spaces are in the path.
 
 setlocal
-set "ROOT=%~dp0"
+set "ROOT=%~dp0.."
 cd /d "%ROOT%"
 
 echo [SessionGuard] Starting backend...
