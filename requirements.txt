@@ -31,6 +31,9 @@ scikit-learn==1.5.0
 numpy==1.26.4
 scipy==1.13.1
 
+# ── Optional: HDBSCAN clustering (requires numpy/scipy) ──────────────────────
+# hdbscan>=0.8.38           # Optional HDBSCAN clustering (uncomment when needed)
+
 # ── Export (PDF + Excel) ──────────────────────────────────────────────────────
 reportlab==4.1.0
 openpyxl==3.1.2

@@ -22,10 +22,87 @@ from engines.session_fingerprint import (
     get_fingerprint, rebuild_all_fingerprints, cosine_similarity
 )
 
+try:
+    import hdbscan
+    HDBSCAN_AVAILABLE = True
+except ImportError:
+    HDBSCAN_AVAILABLE = False
+
 
 # ── Clustering ────────────────────────────────────────────────────────────────
 
-def build_clusters(similarity_threshold: float = 0.88) -> dict:
+def _build_session_vectors(session_ids: list[int] | None = None) -> list[dict]:
+    """Build session feature vectors for clustering."""
+    conn = get_connection()
+    if session_ids:
+        placeholders = ",".join("?" * len(session_ids))
+        rows = conn.execute(
+            f"SELECT id, name, game_name, rtp, net_result, spins, avg_bet, losing_streak, biggest_win FROM sessions WHERE id IN ({placeholders})",
+            session_ids
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, name, game_name, rtp, net_result, spins, avg_bet, losing_streak, biggest_win FROM sessions"
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def cluster_sessions_hdbscan(session_vectors: list[dict], min_cluster_size: int = 3) -> list[dict]:
+    """Cluster sessions using HDBSCAN (optional dependency)."""
+    if not HDBSCAN_AVAILABLE:
+        return []
+
+    import numpy as np
+
+    features = []
+    for sv in session_vectors:
+        feat = [
+            float(sv.get("rtp", 0)),
+            float(sv.get("net_result", 0)),
+            float(sv.get("spins", 0)),
+            float(sv.get("avg_bet", 0)),
+            float(sv.get("losing_streak", 0)),
+            float(sv.get("biggest_win", 0)),
+        ]
+        features.append(feat)
+
+    if len(features) < min_cluster_size:
+        return []
+
+    X = np.array(features)
+
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        metric='euclidean',
+        cluster_selection_method='eom',
+    )
+    labels = clusterer.fit_predict(X)
+
+    result = []
+    for i, (sv, label) in enumerate(zip(session_vectors, labels)):
+        result.append({
+            **sv,
+            "cluster_label": str(label) if label >= 0 else "noise",
+            "cluster_probability": float(clusterer.probabilities_[i]) if label >= 0 else 0.0,
+            "clustering_method": "hdbscan",
+        })
+    return result
+
+
+def cluster_sessions(session_ids: list[int] | None = None, use_hdbscan: bool = False) -> dict:
+    """
+    Cluster sessions. If use_hdbscan=True and HDBSCAN is installed, use it.
+    Otherwise use cosine-similarity clustering (existing behavior).
+    """
+    if use_hdbscan and HDBSCAN_AVAILABLE:
+        vectors = _build_session_vectors(session_ids)
+        return {"method": "hdbscan", "clusters": cluster_sessions_hdbscan(vectors)}
+
+    return _cosine_cluster_sessions(session_ids)
+
+
+def _cosine_cluster_sessions(session_ids: list[int] | None = None) -> dict:
     """
     Group all sessions into clusters based on fingerprint similarity.
     Uses greedy agglomerative approach — fast, no ML needed.
