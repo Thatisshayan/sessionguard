@@ -414,9 +414,18 @@ def _log_ai_cost(session_id: int, model: str, usage: dict):
         pass
 
 
+def _get_config_budget() -> str:
+    """Read AI budget from config file as fallback for env var."""
+    try:
+        cfg = json.loads(_CONFIG_PATH.read_text())
+        return str(cfg.get("ai", {}).get("budget_usd", 10.0))
+    except Exception:
+        return "10.0"
+
+
 def get_daily_cost() -> dict:
     """Return today's AI cost breakdown."""
-    budget = float(os.getenv("SG_AI_BUDGET_USD", "10.0"))
+    budget = float(os.getenv("SG_AI_BUDGET_USD", "") or _get_config_budget())
     try:
         conn = get_connection()
         row = conn.execute(

@@ -53,7 +53,10 @@
     "note": "SECURITY: Use ANTHROPIC_API_KEY environment variable instead. Never commit real keys to config files.",
     "max_tokens": 1024,
     "cost_per_million_input": 3.0,
-    "cost_per_million_output": 15.0
+    "cost_per_million_output": 15.0,
+    "budget_usd": 0.001,
+    "ollama_model": "llama3.2:latest",
+    "ollama_url": "http://localhost:11434"
   },
   "github": {
     "owner": "Thatisshayan",
