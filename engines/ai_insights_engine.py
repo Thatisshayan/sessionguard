@@ -1,21 +1,21 @@
 """
 engines/ai_insights_engine.py
 -------------------------------
-V13 AI Layer — Claude-powered session analysis.
+V14 AI Layer — NVIDIA NIM-powered session analysis.
 
-Replaces rule-based insight text with real Claude AI narrative.
-Uses the Anthropic Messages API directly via urllib (stdlib — no extra deps).
-Falls back to rule-based engine gracefully when no API key is set.
+Replaces rule-based insight text with real AI narrative.
+Uses the NVIDIA API (OpenAI-compatible) directly via urllib (stdlib — no extra deps).
+Falls back to Ollama (offline) then rule-based engine gracefully when no API key is set.
 
-Model: claude-sonnet-4-6  ($3/$15 per million tokens)
+Model: nvidia/llama-3.1-nemotron-70b-instruct  (pricing per NVIDIA NIM)
 Context sent: summarised session data only — never raw events (cost control).
 
 Setup:
-    Set ANTHROPIC_API_KEY in environment or config/app_config.json:
-    export ANTHROPIC_API_KEY=sk-ant-...
+    Set NVIDIA_API_KEY in environment or config/app_config.json:
+    export NVIDIA_API_KEY=nvapi-...
 
 Maturity: Working Prototype
-Future:   Streaming responses (V14), prompt caching for repeated sessions (V14).
+Future:   Streaming responses (V15), prompt caching for repeated sessions (V15).
 """
 
 from __future__ import annotations
@@ -27,23 +27,23 @@ from datetime import datetime
 from pathlib import Path
 
 from database.db import get_connection
-from engines.offline_ai import is_ollama_available, call_ollama_json
+from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
-API_URL      = "https://api.anthropic.com/v1/messages"
-MODEL        = "claude-sonnet-4-6"
+API_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
+MODEL        = "nvidia/llama-3.1-nemotron-70b-instruct"
 MAX_TOKENS   = 1024
 
 
 def _get_api_key() -> str | None:
     """Load API key from environment first, then config file."""
-    key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    key = os.getenv("NVIDIA_API_KEY", "").strip()
     if key:
         return key
     try:
         cfg = json.loads(_CONFIG_PATH.read_text())
-        return cfg.get("ai", {}).get("anthropic_api_key", "").strip() or None
+        return cfg.get("ai", {}).get("nvidia_api_key", "").strip() or None
     except Exception:
         return None
 
@@ -57,7 +57,7 @@ def is_available() -> bool:
 
 def _build_session_summary(session_id: int) -> dict | None:
     """
-    Build a compact summary of session data to send to Claude.
+    Build a compact summary of session data to send to the AI model.
     We send stats, not raw events — keeps token usage low.
     """
     conn    = get_connection()
@@ -100,7 +100,7 @@ def _build_session_summary(session_id: int) -> dict | None:
     else:
         sampled = [round(b, 2) for b in all_bals]
 
-    # Existing rule-based insights (give Claude the context)
+    # Existing rule-based insights (give AI the context)
     insights = [dict(r) for r in conn.execute(
         "SELECT severity, text FROM insights WHERE session_id=? ORDER BY severity LIMIT 5",
         (session_id,)
@@ -212,36 +212,39 @@ Produce the JSON analysis now."""
 # ── API call ──────────────────────────────────────────────────────────────────
 
 def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) -> tuple[str, dict]:
-    """Make raw API call using urllib. Returns (response_text, usage_dict)."""
+    """Make raw API call to NVIDIA NIM (OpenAI-compatible). Returns (response_text, usage_dict)."""
+    messages = []
+    if system_prompt or SYSTEM_PROMPT:
+        messages.append({"role": "system", "content": system_prompt or SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": prompt})
+
     payload = json.dumps({
-        "model":      MODEL,
-        "max_tokens": MAX_TOKENS,
-        "system":     system_prompt or SYSTEM_PROMPT,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
+        "model":       MODEL,
+        "max_tokens":  MAX_TOKENS,
+        "temperature": 0.7,
+        "messages":    messages,
     }).encode()
 
     req = urllib.request.Request(
         API_URL,
         data=payload,
         headers={
-            "Content-Type":   "application/json",
-            "x-api-key":      api_key,
-            "anthropic-version": "2023-06-01",
+            "Content-Type":    "application/json",
+            "Authorization":   f"Bearer {api_key}",
+            "Accept":          "application/json",
         },
         method="POST",
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=60) as response:
             body = json.loads(response.read())
-            text = body["content"][0]["text"]
+            text = body["choices"][0]["message"]["content"]
             usage = body.get("usage", {})
             return text, usage
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
-        raise RuntimeError(f"Anthropic API error {e.code}: {error_body}")
+        raise RuntimeError(f"NVIDIA API error {e.code}: {error_body}")
 
 
 # ── Fallback rule-based response ──────────────────────────────────────────────
@@ -261,7 +264,7 @@ def _fallback_analysis(session_id: int, summary: dict) -> dict:
     return {
         "source":       "rule_based",
         "ai_available": False,
-        "message":      "Add ANTHROPIC_API_KEY to enable Claude AI analysis.",
+        "message":      "Add NVIDIA_API_KEY to enable NVIDIA AI analysis.",
         "headline":     f"Session completed — RTP {rtp}%, net ${net:+.2f}",
         "risk_level":   risk,
         "discipline_score": max(0, min(100, int(rtp - 10))),
@@ -271,7 +274,7 @@ def _fallback_analysis(session_id: int, summary: dict) -> dict:
         ),
         "insights": [{"severity": "info", "category": "rtp",
                        "text": i} for i in summary.get("existing_insights", [])[:3]],
-        "behaviour_summary": "Rule-based analysis only. Set ANTHROPIC_API_KEY for AI-powered insights.",
+        "behaviour_summary": "Rule-based analysis only. Set NVIDIA_API_KEY for AI-powered insights.",
         "notable_moments": [],
     }
 
@@ -280,7 +283,7 @@ def _fallback_analysis(session_id: int, summary: dict) -> dict:
 
 def analyse_session_with_ai(session_id: int) -> dict:
     """
-    Run Claude AI analysis on a session.
+    Run NVIDIA AI analysis on a session.
     Falls back to rule-based if no API key configured.
     Persists result to insights table.
     """
@@ -339,7 +342,7 @@ def analyse_session_with_ai(session_id: int) -> dict:
         from backend.schemas.ai import parse_ai_response
         response = parse_ai_response(raw_text)
         analysis = response.model_dump()
-        analysis["source"]       = "claude_ai"
+        analysis["source"]       = "nvidia_ai"
         analysis["model"]        = MODEL
         analysis["ai_available"] = True
         analysis["session_id"]   = session_id
@@ -352,7 +355,7 @@ def analyse_session_with_ai(session_id: int) -> dict:
 
     except json.JSONDecodeError as e:
         return {
-            "source":    "claude_ai",
+            "source":    "nvidia_ai",
             "ai_available": True,
             "session_id": session_id,
             "error":     f"Could not parse AI response: {e}",
@@ -384,6 +387,8 @@ def _is_budget_exceeded_unsafe() -> bool:
 # ── Cost tracking ─────────────────────────────────────────────────────────────
 
 MODEL_PRICING = {
+    "nvidia/llama-3.1-nemotron-70b-instruct": {"input": 0.12, "output": 0.12},
+    "nvidia/llama-3.1-nemotron-70b-instruct": {"input": 0.12, "output": 0.12},
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
     "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
     "claude-haiku-3.5": {"input": 0.80, "output": 4.0},
@@ -481,56 +486,34 @@ def get_ai_status() -> dict:
     conn = get_connection()
     cached = conn.execute("SELECT COUNT(*), SUM(tokens_used) FROM ai_insights").fetchone()
     conn.close()
+    
+    api_key_present = bool(_get_api_key())
+    
     return {
-        "available":        _api_available(),
-        "has_library":      _HAS_ANTHROPIC,
-        "has_api_key":      bool(os.getenv("ANTHROPIC_API_KEY")),
-        "model":            MODEL,
+        "available": _api_available(),
+        "has_library": None,  # NVIDIA doesn't require wrapper library
+        "has_api_key": api_key_present,
+        "model": MODEL,
         "cached_responses": cached[0] or 0,
-        "total_tokens":     cached[1] or 0,
-        "install_cmd":      "pip install anthropic" if not _HAS_ANTHROPIC else None,
-        "key_env_var":      "ANTHROPIC_API_KEY",
-        "console_url":      "https://console.anthropic.com",
+        "total_tokens": cached[1] or 0,
+        "install_cmd": None,  # No NVIDIA wrapper library needed
+        "key_env_var": "NVIDIA_API_KEY",
+        "console_url": "https://build.nvidia.com",
+        "ollama_available": is_ollama_available(),
+        "ollama_models": list_available_models() if is_ollama_available() else None,
         "message": (
-            f"Claude AI active — model {MODEL}" if _api_available()
-            else "Fallback mode active — set ANTHROPIC_API_KEY to enable Claude AI."
+            f"NVIDIA NIM active — model {MODEL}"
+            if _api_available()
+            else ("AI fallback: Ollama" if is_ollama_available() 
+                 else "Fallback mode active — set NVIDIA_API_KEY or install Ollama to enable AI.")
         ),
-        "cost_today":       get_daily_cost(),
+        "cost_today": get_daily_cost(),
     }
 
 
 # ── Aliases for route compatibility ───────────────────────────────────────────
 
-
-def get_ai_status() -> dict:
-    """Return AI layer availability and cache stats."""
-    try:
-        import anthropic as _anth
-        has_lib = True
-    except ImportError:
-        has_lib = False
-    conn = get_connection()
-    cached = conn.execute("SELECT COUNT(*), SUM(tokens_used) FROM ai_insights").fetchone()
-    conn.close()
-    avail = is_available()
-    return {
-        "available":        avail,
-        "has_library":      has_lib,
-        "has_api_key":      bool(os.getenv("ANTHROPIC_API_KEY")),
-        "model":            MODEL,
-        "cached_responses": cached[0] or 0,
-        "total_tokens":     cached[1] or 0,
-        "install_cmd":      "pip install anthropic" if not has_lib else None,
-        "key_env_var":      "ANTHROPIC_API_KEY",
-        "console_url":      "https://console.anthropic.com",
-        "message": (
-            f"Claude AI active — model {MODEL}" if avail
-            else "Fallback mode — set ANTHROPIC_API_KEY to enable Claude AI."
-        ),
-        "cost_today":       get_daily_cost(),
-    }
-# ── Aliases for route compatibility ───────────────────────────────────────────
-_api_available            = is_available
+_api_available = is_available
 generate_session_narrative = analyse_session_with_ai
 
 

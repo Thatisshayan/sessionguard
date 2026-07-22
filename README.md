@@ -1,6 +1,6 @@
 # SessionGuard v1.5.0 — Local-First Session Intelligence Platform
 
-Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (Claude + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
+Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (NVIDIA NIM + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
 
 > **Current project status**: see [`SessionGuardRevival.md`](SessionGuardRevival.md) — **Phases 0–5 all complete** (2026-07-22). 72 tests passing, 0 TS errors. Phase 6 (SaaS) is business-gated/deferred. For a point-in-time code audit, see [`10072026auditbytopencode.md`](10072026auditbytopencode.md) (dated 2026-07-10 — check the revival doc for anything more recent).
 
@@ -55,7 +55,7 @@ bash scripts/run_all.sh
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `ANTHROPIC_API_KEY` | — | Claude AI API key (required for Claude, falls back to Ollama/rule-based if unset) |
+| `NVIDIA_API_KEY` | — | NVIDIA NIM API key (required for NVIDIA, falls back to Ollama/rule-based if unset) |
 | `SG_AI_BUDGET_USD` | `0.001` | Daily AI cost budget — auto-fallback to Ollama when exceeded |
 | `SG_DATA_DIR` | — | Portable mode data directory (set by `--portable` flag) |
 | `SG_DB_PASSWORD` | — | SQLCipher encryption password (if encryption enabled) |
@@ -91,7 +91,7 @@ sessionguard/
 │   ├── video_pipeline.py         # FFmpeg → cv2 frames → OCR → events → review queue (chunked, resumable)
 │   ├── live_engine.py            # Mock + screen mode with thread lifecycle
 │   ├── live_coach_engine.py      # Real-time behavioral intervention coaching
-│   ├── ai_insights_engine.py     # Claude Sonnet 4 narrative + risk scoring + cost tracking + Ollama fallback
+│   ├── ai_insights_engine.py     # NVIDIA NIM narrative + risk scoring + cost tracking + Ollama fallback
 │   ├── offline_ai.py             # Ollama local LLM integration (offline AI fallback)
 │   ├── prompt_manager.py         # Prompt versioning + A/B testing framework
 │   ├── cluster_engine.py         # Session similarity clustering (HDBSCAN optional, cosine fallback)
@@ -165,7 +165,7 @@ sessionguard/
 | Alerts + Acknowledgement | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Alert Explanations (LLM root cause) | ✅ | ❌ | — | ✅ | ✅ |
 | Insights (rule-based) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| AI Narrative (Claude + Ollama fallback) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AI Narrative (NVIDIA NIM + Ollama fallback) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | AI Cost Tracking + Budget | ✅ | ❌ | — | ✅ | ✅ |
 | Prompt Versioning + A/B | ✅ | ❌ | — | ✅ | ✅ |
 | Compare Sessions | ✅ | ✅ | ✅ | ✅ | ✅ |

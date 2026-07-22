@@ -1,6 +1,6 @@
 """
 engines/live_coach_engine.py - Professional Live Coach v2.0
-Fires every 3 spins. 8 pattern detectors. Claude AI + rule fallback.
+Fires every 3 spins. 8 pattern detectors. NVIDIA AI + Ollama fallback + rule fallback.
 """
 from __future__ import annotations
 import json, os, time
@@ -133,12 +133,12 @@ Use the actual numbers. Match the coaching style exactly."""
 
 
 def _api_key():
-    k=os.getenv('ANTHROPIC_API_KEY','')
+    k=os.getenv('NVIDIA_API_KEY','')
     if k: return k
     try:
         from pathlib import Path
         cfg=json.loads((Path(__file__).resolve().parent.parent/'config'/'app_config.json').read_text())
-        return cfg.get('ai',{}).get('anthropic_api_key','')
+        return cfg.get('ai',{}).get('nvidia_api_key','')
     except: return ''
 
 
@@ -146,23 +146,32 @@ def _claude_coach(stats, style):
     key=_api_key()
     if not key: return None
     try:
-        import anthropic
-        c=anthropic.Anthropic(api_key=key)
-        r=c.messages.create(model='claude-sonnet-4-20250514',max_tokens=80,
-            system=COACH_SYSTEM,
-            messages=[{'role':'user','content':
-                f"Session: {stats['event_count']} spins, net=${stats['cumulative_net']}, "
-                f"losing_run={stats['consecutive_neg']}, win_rate={stats['win_rate']}%, "
-                f"bet_ratio={round(stats['late_avg_bet']/max(stats['early_avg_bet'],0.01),1)}x, "
-                f"style={stats['session_style']}, coach_style={style}. "
-                f"One message. 1-2 sentences. Specific."}])
-        text=r.content[0].text.strip() if r.content else None
-        if not text: return None
-        t=('critical' if any(w in text.lower() for w in ['stop','danger','critical'])
-           else 'warning' if any(w in text.lower() for w in ['careful','tilt','escalat','watch','reduce'])
-           else 'positive' if any(w in text.lower() for w in ['good','great','nice','solid'])
-           else 'neutral')
-        return CoachMessage(t,text,'claude','claude')
+        import json
+        from urllib.request import Request, urlopen
+        api_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        model = "nvidia/llama-3.1-nemotron-70b-instruct"
+        messages = []
+        messages.append({"role": "system", "content": COACH_SYSTEM})
+        messages.append({"role": "user", "content": 
+                         f"Session: {stats['event_count']} spins, net=${stats['cumulative_net']}, "
+                         f"losing_run={stats['consecutive_neg']}, win_rate={stats['win_rate']}%, "
+                         f"bet_ratio={round(stats['late_avg_bet']/max(stats['early_avg_bet'],0.01),1)}x, "
+                         f"style={stats['session_style']}, coach_style={style}. "
+                         f"One message. 1-2 sentences. Specific."})
+        
+        payload = json.dumps({ "model": model, "max_tokens": 80, "temperature": 0.7,
+                               "messages": messages })
+        req = Request(api_url, payload.encode(), method="POST", 
+                      headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+        with urlopen(req) as response:
+            body = json.loads(response.read())
+            text = body["choices"][0]["message"]["content"].strip()
+            if not text: return None
+            t = ('critical' if any(w in text.lower() for w in ['stop','danger','critical']) 
+                 else 'warning' if any(w in text.lower() for w in ['careful','tilt','escalat','watch','reduce']) 
+                 else 'positive' if any(w in text.lower() for w in ['good','great','nice','solid']) 
+                 else 'neutral')
+            return CoachMessage(t, text, 'nvidia', 'nvidia')
     except Exception as e:
         print(f'[Coach] {e}'); return None
 

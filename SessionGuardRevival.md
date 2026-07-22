@@ -15,7 +15,7 @@
 
 | ID | Task | Status |
 |----|------|--------|
-| P0.1 | Revoke/scrub the Anthropic API key committed to `config/app_config.json` in git history | ✅ Done — blanked in working tree + config now points to `ANTHROPIC_API_KEY` env var. Still recommend rotating the key at console.anthropic.com since it was pushed to git. |
+| P0.1 | Revoke/scrub the API key committed to `config/app_config.json` in git history | ✅ Done — blanked in working tree + config now points to `NVIDIA_API_KEY` env var. Still recommend rotating the key at build.nvidia.com since it was pushed to git. |
 | P0.2 | Fix `scripts/run_backend.bat` — was missing `..` in its `ROOT` path, so `scripts\run_all.bat` failed out of the box | ✅ Done, both repos |
 | P0.3 | Resolve canonical-vs-clone divergence (`C:\Projects\SessionGuard\sessionguard` vs `_repo_clone`) — 2 months of uncommitted WIP (Tauri rework, Import Wizard feature) was sitting only in canonical's working tree, never committed | ✅ Done — committed, both repos merged to a shared tip |
 | P0.4 | Remove junk directories (`NVIDIA Corporation/`, unexpanded brace-glob folders) from canonical repo root | ✅ Done — verified 2026-07-21, canonical root (`C:\Projects\SessionGuard\sessionguard`) no longer contains these; already clean |
@@ -111,7 +111,7 @@
 | C5 | Event validation (balance continuity + bet/win reconciliation) | BE | Implausible deltas (> 3σ) flagged for review; auto-correct single-frame OCR glitches | ✅ Done (2026-07-22) — `engines/event_validator.py` with z-score detection, interpolation, auto-correction; `GET /api/v1/events/validate/{session_id}` endpoint; wired into video pipeline after event building; 8 tests passing |
 | C6 | Video job progress WebSocket | BE+FE | FE shows stage: `extracting → ocr → building → done`; cancel button works | ✅ Done (2026-07-22) — `useJobWebSocket` hook for real-time progress; `JobsMonitor.tsx` rewritten with live stage labels, progress bars, cancel for pending+running jobs; WebSocket connection status indicator |
 | C7 | Frame annotation export (debug mode) | BE | `GET /video-jobs/{id}/annotated-frames` → ZIP with ROI boxes + OCR text overlay | ✅ Done (2026-07-22) — `engines/frame_annotator.py` with OpenCV annotation + ZIP packaging; `GET /api/v1/video-jobs/{id}/annotated-frames` endpoint; 4 tests passing |
-| D1 | Structured AI outputs (Pydantic + function calling) | BE | `AIInsight` model: `headline`, `risk_level`, `discipline_score`, `behavior_tags[]`, `evidence[]` | ✅ Done (2026-07-22) — Pydantic models in `backend/schemas/ai.py`; `parse_ai_response()` replaces ad-hoc dict parsing; `AI_TOOL_SCHEMA` for Anthropic tool_use; 6 tests passing |
+| D1 | Structured AI outputs (Pydantic + function calling) | BE | `AIInsight` model: `headline`, `risk_level`, `discipline_score`, `behavior_tags[]`, `evidence[]` | ✅ Done (2026-07-22) — Pydantic models in `backend/schemas/ai.py`; `parse_ai_response()` replaces ad-hoc dict parsing; for NVIDIA NIM; 6 tests passing |
 | D2 | pgvector embeddings + similarity search | BE | `POST /intelligence/embed` stores vectors; `GET /intelligence/similar/{id}` returns top-5 in < 100ms | **Deferred** — requires PostgreSQL (SaaS-gated with A1/A2); revisit when multi-tenant track is committed |
 | D3 | Prompt versioning + A/B framework | BE | Prompts in DB with `version`, `model`, `params`; `/intelligence/ai/compare` runs A/B on demand | ✅ Done (2026-07-22) — `engines/prompt_manager.py` with CRUD + A/B recording; `prompt_versions` + `ab_results` tables (V8 schema); `GET/POST /api/v1/prompts` endpoints; `ai_insights_engine.py` loads active prompt from DB (falls back to hardcoded SYSTEM_PROMPT) |
 | E4 | Bundle deps (Tesseract, FFmpeg, Python) | DESKTOP | Installer includes all; no external deps; `sessionguard --version` works offline | ✅ Done (2026-07-22) — `tauri.conf.json` updated with `externalBin`, `resources`, expanded bundle targets; `main.rs` checks bundled paths first; `bundle/README.md` with setup instructions |
@@ -239,7 +239,7 @@ All 14 Phase 5 tasks implemented, tested (72 passing, 2 skipped), pushed to `mai
 | **Testing** | Zero tests | 80%+ coverage, E2E (Playwright), load tested |
 | **OCR** | Tesseract only, sequential, 90s/300 frames | Tesseract + EasyOCR GPU, parallel (8×), 15s/300 frames |
 | **Video Pipeline** | Basic, no resume, no progress | Chunked, resumable, annotated debug export |
-| **AI** | Free-text Claude prompts (structured outputs done) | Structured outputs, embeddings, clustering, coaching, cost control, offline fallback |
+| **AI** | Free-text prompts (structured outputs done) | Structured outputs (NVIDIA NIM), embeddings, clustering, coaching, cost control, offline fallback (Ollama) |
 | **Desktop** | PySide6 (150MB, manual deps) | Tauri v2 (15MB, bundled, signed, auto-update, tray, portable) |
 | **Distribution** | `.bat`/`.sh` scripts | MSI/DMG/AppImage/Flatpak via CI, code-signed |
 | **SaaS** | Single-user local | Multi-tenant, billing, admin, public API, data residency, SOC2-ready |
