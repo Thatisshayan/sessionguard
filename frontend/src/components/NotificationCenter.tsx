@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState, useRef } from 'react'
+import { sendNotification, isPermissionGranted, requestPermission } from '@tauri-apps/api/notification'
 
 interface Notification {
   id:        number
@@ -80,6 +81,42 @@ export function NotificationCenter() {
     connect()
     return () => wsRef.current?.close()
   }, [])
+
+  // ── Native notification permission + firing ─────────────────────────────
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        let granted = await isPermissionGranted()
+        if (!granted) {
+          const perm = await requestPermission()
+          granted = perm === 'granted'
+        }
+        if (!mounted || !granted) return
+      } catch { return }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  // Fire native notification for critical/warning alerts
+  useEffect(() => {
+    if (notifications.length === 0) return
+    const latest = notifications[0]
+    if (latest.read) return  // Only notify for new unread alerts
+
+    if (latest.type === 'alert' && (latest.severity === 'critical' || latest.severity === 'warning')) {
+      ;(async () => {
+        try {
+          const granted = await isPermissionGranted()
+          if (!granted) return
+          sendNotification({
+            title: latest.title,
+            body:   latest.message,
+          })
+        } catch { /* native notif failed — in-app still works */ }
+      })()
+    }
+  }, [notifications])
 
   // Close panel on outside click
   useEffect(() => {
