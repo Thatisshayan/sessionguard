@@ -39,7 +39,20 @@
       ],
       "copyright":        "2025 SessionGuard",
       "category":         "Business",
-      "shortDescription": "Session intelligence platform"
+      "shortDescription": "Session intelligence platform",
+      "signing": {
+        "windows": {
+          "identity": null,
+          "timestamp_url": "http://timestamp.digicert.com",
+          "digest_algorithm": "sha256"
+        },
+        "macOS": {
+          "identity": null,
+          "timestamp": "=timestamp",
+          "hardened_runtime": true,
+          "entitlements": null
+        }
+      }
     },
     "security": { "csp": null },
     "updater":   {
