@@ -9,6 +9,7 @@ use std::{
     thread,
     time::Duration,
 };
+use sentry::{init, types::Dsn, Level};
 use tauri::{
     AppHandle, CustomMenuItem, GlobalShortcutManager, Manager, SystemTray, SystemTrayEvent,
     SystemTrayMenu, SystemTrayMenuItem, WindowEvent,
@@ -18,6 +19,19 @@ use tauri::{
 use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn setup_sentry() {
+    let dsn_str = std::env::var("SENTRY_DSN").unwrap_or_default();
+    if dsn_str.is_empty() {
+        println!("[Sentry] No SENTRY_DSN — crash reporting disabled");
+        return;
+    }
+
+    let dsn: Dsn = dsn_str.parse().expect("Invalid Sentry DSN");
+    init(dsn);
+
+    println!("[Sentry] Crash reporting enabled — DSN: {}", dsn_str.split('@').last().unwrap_or("***"));
+}
 
 struct BackendProcess(Arc<Mutex<Option<Child>>>);
 
@@ -208,6 +222,16 @@ fn main() {
             }
         }
     }
+
+    // ── Sentry (after portable mode, before backend) ─────────────────────────
+    setup_sentry();
+
+    // Sentry panic hook
+    std::panic::set_hook(Box::new(|panic_info| {
+        let msg = panic_info.to_string();
+        println!("[PANIC] {}", msg);
+        sentry::capture_message(&msg, Level::Error);
+    }));
 
     tauri::Builder::default()
         .manage(BackendProcess(Arc::new(Mutex::new(None))))
