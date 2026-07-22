@@ -33,16 +33,16 @@ def make_test_frame(
         font_large = ImageFont.load_default()
         font_small = ImageFont.load_default()
 
-    # Balance — top left area
-    draw.text((50, 30), f"BALANCE: {balance}", fill=(255, 220, 50), font=font_large)
-    # Bet — middle left
-    draw.text((50, 200), f"BET: {bet}", fill=(200, 200, 200), font=font_large)
-    # Win — middle left lower
-    draw.text((50, 270), f"WIN: {win}", fill=(0, 255, 100), font=font_large)
-    # Bonus — bottom left
-    draw.text((50, 340), f"BONUS: {bonus}", fill=(255, 150, 0), font=font_large)
+    # Balance — top left (matches Generic Slot profile: balance_region [10,10,200,50])
+    draw.text((10, 10), f"BALANCE: {balance}", fill=(255, 220, 50), font=font_large)
+    # Bet — middle left (matches profile: bet_region [10,60,150,30])
+    draw.text((10, 60), f"BET: {bet}", fill=(200, 200, 200), font=font_large)
+    # Win — middle left lower (matches profile: win_region [10,100,200,50])
+    draw.text((10, 100), f"WIN: {win}", fill=(0, 255, 100), font=font_large)
+    # Bonus — bottom left area
+    draw.text((10, 140), f"BONUS: {bonus}", fill=(255, 150, 0), font=font_large)
     # Jackpot — top right
-    draw.text((900, 30), f"JACKPOT: {jackpot}", fill=(255, 215, 0), font=font_large)
+    draw.text((900, 10), f"JACKPOT: {jackpot}", fill=(255, 215, 0), font=font_large)
 
     img.save(OUT / filename)
     return str(OUT / filename)

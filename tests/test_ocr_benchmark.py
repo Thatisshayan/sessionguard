@@ -2,10 +2,25 @@
 import sys, os, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+# ROI config matching generate_fixtures.py text positions on 1280x720 images.
+# Format: [x, y, width, height] — matches the OCR engine's profile roi_config format.
+ROI_CONFIG = {
+    "balance_region": [0,   0, 300, 50],
+    "bet_region":     [0,  50, 300, 50],
+    "win_region":     [0,  90, 300, 50],
+    "bonus_region":   [0, 130, 300, 50],
+    "jackpot_region": [880, 0, 400, 50],
+}
+
+
+def _fields(result: dict, name: str):
+    """Extract a single field's dict from the OCR result."""
+    fields = result.get("fields", {})
+    return fields.get(name)
 
 
 class TestOcrAccuracy(unittest.TestCase):
@@ -13,16 +28,24 @@ class TestOcrAccuracy(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Generate test frames on the fly (handles fresh clone)
+        from engines.ocr_engine import check_ocr_status
+        status = check_ocr_status()
+        if not status.get("any_available"):
+            raise unittest.SkipTest(
+                f"No OCR backend: tesseract={status['backends']['tesseract']['available']}"
+            )
+
         from tests.fixtures.generate_fixtures import make_test_frame
         cls.frame_balanced = make_test_frame(filename="test_balanced.png")
-        cls.frame_losing   = make_test_frame(balance="$500.00", bet="$1.00", win="$0.00", filename="test_losing.png")
+        cls.frame_losing = make_test_frame(
+            balance="$500.00", bet="$1.00", win="$0.00", filename="test_losing.png"
+        )
 
     def _extract_fields(self, image_path: str) -> dict:
-        """Run OCR on a frame image and return extracted fields."""
+        """Run OCR on a frame image with explicit ROI config."""
         try:
             from engines.ocr_engine import extract_fields_from_image
-            return extract_fields_from_image(image_path)
+            return extract_fields_from_image(image_path, roi_config=ROI_CONFIG)
         except Exception as e:
             return {"error": str(e)}
 
@@ -33,8 +56,7 @@ class TestOcrAccuracy(unittest.TestCase):
         result = self._extract_fields(str(FIXTURES / "test_balanced.png"))
         if "error" in result:
             self.skipTest(f"OCR not available: {result['error']}")
-        # Should have a numeric value extracted (balance is non-zero)
-        balance = result.get("balance")
+        balance = _fields(result, "balance")
         self.assertIsNotNone(balance, "Balance field should be extracted")
         self.assertGreater(float(balance["value"]), 0, "Balance should be a positive number")
 
@@ -45,7 +67,7 @@ class TestOcrAccuracy(unittest.TestCase):
         result = self._extract_fields(str(FIXTURES / "test_balanced.png"))
         if "error" in result:
             self.skipTest(f"OCR not available: {result['error']}")
-        bet = result.get("bet")
+        bet = _fields(result, "bet")
         self.assertIsNotNone(bet, "Bet field should be extracted")
 
     def test_win_extraction(self):
@@ -55,7 +77,7 @@ class TestOcrAccuracy(unittest.TestCase):
         result = self._extract_fields(str(FIXTURES / "test_balanced.png"))
         if "error" in result:
             self.skipTest(f"OCR not available: {result['error']}")
-        win = result.get("win")
+        win = _fields(result, "win")
         self.assertIsNotNone(win, "Win field should be extracted")
 
     def test_zero_win_extraction(self):
@@ -65,7 +87,7 @@ class TestOcrAccuracy(unittest.TestCase):
         result = self._extract_fields(str(FIXTURES / "test_losing.png"))
         if "error" in result:
             self.skipTest(f"OCR not available: {result['error']}")
-        win = result.get("win")
+        win = _fields(result, "win")
         self.assertIsNotNone(win, "Win field should be extracted even when zero")
 
 

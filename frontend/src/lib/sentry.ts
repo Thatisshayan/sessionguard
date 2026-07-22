@@ -22,4 +22,3 @@ export function initSentry() {
   })
 }
 
-export const SentryRouteTracking = Sentry.withTracker
