@@ -5,10 +5,12 @@ File upload intake. Validates, stores, and registers uploads.
 Auto-triggers CSV parsing for .csv files.
 Auto-triggers frame extraction for video files.
 
-Maturity: Working Prototype
+Maturity: Working Prototype → Phase 2 (A8: upload validation with size limits, virus scanning)
 """
 
+import os
 import shutil
+import structlog
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
@@ -18,11 +20,17 @@ from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
 from backend.middleware.rate_limit import check_rate_limit, rate_limit_headers, get_client_ip
 
+logger = structlog.get_logger(__name__)
+
 router = APIRouter(tags=["upload"])
 
 BASE_DIR    = Path(__file__).resolve().parent.parent.parent
 UPLOADS_DIR = BASE_DIR / "storage" / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Configuration
+MAX_UPLOAD_SIZE_MB = int(os.getenv("UPLOAD_MAX_SIZE_MB", "2048"))  # Default 2GB
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
 ALLOWED_TYPES = {
     "text/csv":              "csv",
@@ -46,6 +54,35 @@ def _unique_path(dest: Path) -> Path:
         dest = dest.parent / f"{stem}_{counter}{suffix}"
         counter += 1
     return dest
+
+
+def _scan_file_with_clamav(file_path: Path) -> tuple[bool, str]:
+    """
+    Scan a file with ClamAV (optional - skip if unavailable).
+    Returns (is_clean, message).
+    """
+    try:
+        import pyclamd
+        cd = pyclamd.ClamdUnixSocket()
+        if not cd.ping():
+            logger.warning("ClamAV daemon not available - skipping virus scan")
+            return True, "ClamAV unavailable - scan skipped"
+        
+        scan_result = cd.scan_file(str(file_path))
+        if scan_result is None:
+            # No threats found
+            logger.info(f"ClamAV scan passed for {file_path.name}")
+            return True, "No threats detected"
+        else:
+            # Threat found
+            logger.warning(f"ClamAV detected threat in {file_path.name}: {scan_result}")
+            return False, f"Threat detected: {scan_result}"
+    except ImportError:
+        logger.warning("pyclamd not installed - skipping virus scan")
+        return True, "pyclamd not installed - scan skipped"
+    except Exception as e:
+        logger.error(f"ClamAV scan failed for {file_path.name}: {e}")
+        return True, f"Scan failed: {e} - proceeding with upload"
 
 
 # ── Background tasks ──────────────────────────────────────────────────────────
@@ -106,7 +143,8 @@ async def upload_file(
     session_id: Optional[int] = Form(None),
 ):
     """
-    Accept a file, validate type, save to storage, register in DB.
+    Accept a file, validate type, size, and scan for viruses.
+    Save to storage, register in DB.
     CSV files → auto-parsed into sessions + events (background task).
     Video files → frame extraction triggered (background task).
     Returns immediately with upload_id and status=processing.
@@ -140,8 +178,36 @@ async def upload_file(
     safe_name = _safe_filename(file.filename or "upload")
     dest_path = _unique_path(UPLOADS_DIR / safe_name)
 
+    # Read file content to check size and write to disk
+    file_size = 0
+    chunk_size = 8192  # 8KB chunks
     with dest_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+        while chunk := await file.file.read(chunk_size):
+            file_size += len(chunk)
+            if file_size > MAX_UPLOAD_SIZE_BYTES:
+                # Delete partial file
+                dest_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_MB}MB."
+                )
+            f.write(chunk)
+    
+    # Reset file pointer for potential re-use
+    await file.file.seek(0)
+
+    logger.info(f"File uploaded: {file.filename}, size: {file_size} bytes, type: {file_type}")
+
+    # Virus scan (optional - skip if unavailable)
+    is_clean, scan_message = _scan_file_with_clamav(dest_path)
+    if not is_clean:
+        # Delete infected file
+        dest_path.unlink(missing_ok=True)
+        logger.error(f"Virus scan failed for {file.filename}: {scan_message}")
+        raise HTTPException(
+            status_code=403,
+            detail=f"File rejected by virus scan: {scan_message}"
+        )
 
     conn = get_connection()
     cur  = conn.execute(
@@ -168,10 +234,12 @@ async def upload_file(
         "upload_id":        upload_id,
         "filename":         file.filename,
         "file_type":        file_type,
+        "file_size_bytes":  file_size,
         "stored_at":        str(dest_path),
         "session_id":       session_id,
         "status":           "processing" if file_type in ("csv", "video") else "complete",
         "processing_note":  processing_note,
+        "virus_scan":       scan_message,
     }
 
 

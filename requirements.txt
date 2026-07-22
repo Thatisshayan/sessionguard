@@ -41,6 +41,9 @@ anthropic==0.39.0           # Claude API client
 # ── HTTP client (used by backend/routes/updater.py) ───────────────────────────
 requests==2.34.2
 
+# ── Security (Phase 2: A8 upload validation) ───────────────────────────────────
+pyclamd==0.4.0              # ClamAV virus scanning (optional - skip if unavailable)
+
 # ── Observability (Phase 1: A4 structured logging) ────────────────────────────
 structlog==24.1.0
 
