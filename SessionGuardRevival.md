@@ -1,6 +1,6 @@
 # SessionGuard Revival — Phased Handoff Document
 
-**Generated**: 2026-07-10 · **Last revised**: 2026-07-21 (Phase 0) · **Phase 2 started**: 2026-07-21 (A7 complete)  
+**Generated**: 2026-07-10 · **Last revised**: 2026-07-22 (Phase 2, A8 complete) · **Phase 2 started**: 2026-07-21 (A7 complete)  
 **Target**: Production-hardened local desktop app first; SaaS is an optional, separately-gated track — not a default destination.
 
 **Team reality**: this is currently a solo effort (Shaya), optionally AI-agent-assisted for mechanical work (script fixes, audits, sync/cleanup, refactors). The "Engineer 1/2/3" labels on tasks below are role tags for sequencing, not headcount — read "Backend track" / "Frontend track" / "Desktop track," not "hire 3 people." Parallelize across tracks only if/when there's more than one person; otherwise work them in the listed order.
@@ -66,7 +66,7 @@
 | ID | Task | Acceptance Criteria | Status |
 |----|------|---------------------|--------|
 | A7 | Background job worker (enhance thread-pool + SQLite) | Video/OCR jobs enqueue via `POST /jobs`; worker pool picks up; retries ×3 with exponential backoff; progress via WebSocket; cancellation kills worker thread; worker health endpoint | ✅ Done — added retry logic with exponential backoff (2s base, 60s cap), WebSocket progress broadcasts via `push_job_progress`, cooperative cancellation with `threading.Event` flag, worker health endpoint at `/jobs/worker/health` |
-| A8 | Upload validation (file type/size, virus scan) | `POST /upload` rejects >2GB, non-video MIME; ClamAV scan on upload; returns job_id | ⏳ In progress |
+| A8 | Upload validation (file type/size, virus scan) | `POST /upload` rejects >2GB, non-video MIME; ClamAV scan on upload; returns job_id | ✅ Done (2026-07-22) — added configurable `UPLOAD_MAX_SIZE_MB` env var (default 2048MB), optional ClamAV virus scanning with pyclamd (gracefully degrades if unavailable), HTTP 413 for oversized files, HTTP 403 for infected files with immediate deletion, returns `file_size_bytes` and `virus_scan` status in response |
 | A9 | Test suite (pytest + coverage ≥80%) | `pytest --cov=backend --cov-fail-under=80` passes; tests for auth, jobs, upload, video pipeline | ⏳ Pending |
 | A10 | API versioning (`/api/v1` prefix) | All routes under `/api/v1`; `/health`, `/docs` unversioned; OpenAPI split by version | ⏳ Pending |
 
