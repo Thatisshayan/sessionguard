@@ -3,7 +3,7 @@
  * Real KPIs + live charts + behavior risk summary + insights + alerts + review queue.
  */
 
-import { useEffect, useState, useCallback } from 'react'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -15,10 +15,6 @@ import {
   getReviewQueue, getQueueSummary,
   acknowledgeAlert, resolveReviewItem,
   getGlobalBehavior,
-} from '../services/api'
-import type {
-  GlobalMetrics, Insight, Alert, AlertSummary,
-  NetOverTime, RtpBucket, ReviewItem, QueueSummary,
 } from '../services/api'
 
 const fmtC  = (n: number) => `${n >= 0 ? '+$' : '-$'}${Math.abs(n).toFixed(2)}`
@@ -48,55 +44,63 @@ function SevBadge({ sev }: { sev: string }) {
   return <span className={`badge badge-${sev}`}>{sev}</span>
 }
 
+const DASH_KEYS = {
+  metrics: ['dashboard', 'metrics'],
+  netOverTime: ['dashboard', 'net-over-time'],
+  rtpDist: ['dashboard', 'rtp-distribution'],
+  insights: ['dashboard', 'insights'],
+  alerts: ['dashboard', 'alerts'],
+  alertSummary: ['dashboard', 'alert-summary'],
+  reviewQueue: ['dashboard', 'review-queue'],
+  queueSummary: ['dashboard', 'queue-summary'],
+  behavior: ['dashboard', 'behavior'],
+} as const
+
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [metrics,       setMetrics]       = useState<GlobalMetrics | null>(null)
-  const [netOverTime,   setNetOverTime]   = useState<NetOverTime[]>([])
-  const [rtpDist,       setRtpDist]       = useState<RtpBucket[]>([])
-  const [insights,      setInsights]      = useState<Insight[]>([])
-  const [alerts_,       setAlerts]        = useState<Alert[]>([])
-  const [alertSummary,  setAlertSummary]  = useState<AlertSummary | null>(null)
-  const [reviewItems,   setReviewItems]   = useState<ReviewItem[]>([])
-  const [queueSummary,  setQueueSummary]  = useState<QueueSummary | null>(null)
-  const [behaviorData,  setBehaviorData]  = useState<any>(null)
-  const [loading,       setLoading]       = useState(true)
-  const [error,         setError]         = useState<string | null>(null)
-  const [lastUpdated,   setLastUpdated]   = useState('')
+  const qc = useQueryClient()
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true); setError(null)
-    try {
-      const [m, not, rtp, ins, al, as_, rq, qs, beh] = await Promise.all([
-        getGlobalMetrics(),
-        getNetOverTime(),
-        getRtpDistribution(),
-        getInsights(),
-        getAlerts({ unacknowledged_only: true }),
-        getAlertSummary(),
-        getReviewQueue({ status: 'pending' }),
-        getQueueSummary(),
-        getGlobalBehavior().catch(() => null),
-      ])
-      setMetrics(m); setNetOverTime(not); setRtpDist(rtp)
-      setInsights(ins); setAlerts(al); setAlertSummary(as_)
-      setReviewItems(rq); setQueueSummary(qs); setBehaviorData(beh)
-      setLastUpdated(new Date().toLocaleTimeString())
-    } catch (e: any) {
-      setError(e?.message ?? 'Backend unavailable — run scripts/run_backend')
-    } finally { setLoading(false) }
-  }, [])
+  const metricsQ      = useQuery({ queryKey: DASH_KEYS.metrics,      queryFn: getGlobalMetrics })
+  const netOverTimeQ  = useQuery({ queryKey: DASH_KEYS.netOverTime,  queryFn: getNetOverTime })
+  const rtpDistQ      = useQuery({ queryKey: DASH_KEYS.rtpDist,      queryFn: getRtpDistribution })
+  const insightsQ     = useQuery({ queryKey: DASH_KEYS.insights,     queryFn: () => getInsights() })
+  const alertsQ       = useQuery({ queryKey: DASH_KEYS.alerts,       queryFn: () => getAlerts({ unacknowledged_only: true }) })
+  const alertSummaryQ = useQuery({ queryKey: DASH_KEYS.alertSummary, queryFn: getAlertSummary })
+  const reviewQ       = useQuery({ queryKey: DASH_KEYS.reviewQueue,  queryFn: () => getReviewQueue({ status: 'pending' }) })
+  const queueSummaryQ = useQuery({ queryKey: DASH_KEYS.queueSummary, queryFn: getQueueSummary })
+  const behaviorQ     = useQuery({ queryKey: DASH_KEYS.behavior,     queryFn: getGlobalBehavior, retry: false })
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  const metrics      = metricsQ.data ?? null
+  const netOverTime   = netOverTimeQ.data ?? []
+  const rtpDist       = rtpDistQ.data ?? []
+  const insights      = insightsQ.data ?? []
+  const alerts_       = alertsQ.data ?? []
+  const alertSummary  = alertSummaryQ.data ?? null
+  const reviewItems   = reviewQ.data ?? []
+  const queueSummary  = queueSummaryQ.data ?? null
+  const behaviorData  = behaviorQ.data ?? null
 
-  const handleAcknowledge = async (id: number) => {
-    await acknowledgeAlert(id)
-    setAlerts(prev => prev.filter(a => a.id !== id))
-  }
+  const coreQueries = [metricsQ, netOverTimeQ, rtpDistQ, insightsQ, alertsQ, alertSummaryQ, reviewQ, queueSummaryQ]
+  const loading    = coreQueries.some(q => q.isPending)
+  const error      = (coreQueries.find(q => q.error)?.error as any)?.message ?? null
+  const lastUpdated = metricsQ.dataUpdatedAt ? new Date(metricsQ.dataUpdatedAt).toLocaleTimeString() : ''
 
-  const handleResolve = async (id: number, action: string) => {
-    await resolveReviewItem(id, action)
-    setReviewItems(prev => prev.filter(r => r.id !== id))
-  }
+  const fetchAll = () => qc.invalidateQueries({ queryKey: ['dashboard'] })
+
+  const ackMutation = useMutation({
+    mutationFn: (id: number) => acknowledgeAlert(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: DASH_KEYS.alerts }),
+  })
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: string }) => resolveReviewItem(id, action),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: DASH_KEYS.reviewQueue })
+      qc.invalidateQueries({ queryKey: DASH_KEYS.queueSummary })
+    },
+  })
+
+  const handleAcknowledge = (id: number) => ackMutation.mutate(id)
+  const handleResolve = (id: number, action: string) => resolveMutation.mutate({ id, action })
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', gap: 12, flexDirection: 'column' }}>

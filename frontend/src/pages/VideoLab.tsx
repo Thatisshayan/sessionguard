@@ -6,8 +6,9 @@
  * Maturity: Working Prototype
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -54,22 +55,26 @@ function ConfPill({ value, label }: { value: number; label: string }) {
 export default function VideoLab() {
   const { id }       = useParams<{ id: string }>()
   const sessionId    = Number(id)
-  const [jobs,       setJobs]       = useState<VideoJob[]>([])
-  const [ocrResults, setOcrResults] = useState<OcrResult[]>([])
   const [selected,   setSelected]   = useState<OcrResult | null>(null)
   const [filter,     setFilter]     = useState<'all' | 'flagged' | 'lowconf'>('all')
-  const [loading,    setLoading]    = useState(true)
 
-  useEffect(() => {
-    Promise.all([
-      axios.get(`${BASE}/video-status`),
-      axios.get(`${BASE}/jobs?session_id=${sessionId}&status=complete&limit=10`),
-      sessionId ? axios.get(`${BASE}/sessions/${sessionId}/ocr-results`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-    ]).then(([, j, ocr]) => {
-      setJobs(j.data.filter((x: any) => x.job_type === 'video_pipeline'))
-      setOcrResults(ocr.data || [])
-    }).finally(() => setLoading(false))
-  }, [sessionId])
+  const videoLabQ = useQuery({
+    queryKey: ['video-lab', sessionId],
+    queryFn: async () => {
+      const [, j, ocr] = await Promise.all([
+        axios.get(`${BASE}/video-status`),
+        axios.get(`${BASE}/jobs?session_id=${sessionId}&status=complete&limit=10`),
+        sessionId ? axios.get(`${BASE}/sessions/${sessionId}/ocr-results`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      ])
+      return {
+        jobs: (j.data as VideoJob[]).filter((x: any) => x.job_type === 'video_pipeline'),
+        ocrResults: (ocr.data ?? []) as OcrResult[],
+      }
+    },
+  })
+  const jobs = videoLabQ.data?.jobs ?? []
+  const ocrResults = videoLabQ.data?.ocrResults ?? []
+  const loading = videoLabQ.isPending
 
   const filtered = ocrResults.filter(r => {
     if (filter === 'flagged')  return r.flagged

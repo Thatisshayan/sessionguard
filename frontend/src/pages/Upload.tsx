@@ -2,7 +2,8 @@
  * src/pages/Upload.tsx
  * Maturity: Working Prototype — file upload, CSV template download, status polling.
  */
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { uploadFile, getUploads } from '../services/api'
 
 const FILE_TYPES = 'CSV, MP4, MKV, MOV, AVI, PNG, JPEG'
@@ -23,45 +24,37 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 export default function Upload() {
-  const [history,   setHistory]   = useState<any[]>([])
-  const [uploading, setUploading] = useState(false)
+  const qc = useQueryClient()
   const [dragging,  setDragging]  = useState(false)
-  const [result,    setResult]    = useState<any>(null)
   const [error,     setError]     = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fetchHistory = () => getUploads().then(setHistory).catch(() => {})
+  const historyQ = useQuery({
+    queryKey: ['uploads'],
+    queryFn: getUploads,
+    refetchInterval: (query) => {
+      const uploads = query.state.data ?? []
+      const processing = uploads.some((u: any) => u.status === 'processing' || u.status === 'pending')
+      return processing ? 3000 : false
+    },
+  })
+  const history = historyQ.data ?? []
+  const fetchHistory = () => historyQ.refetch()
 
-  useEffect(() => {
-    fetchHistory()
-    // Poll every 3s while processing items exist
-    pollRef.current = setInterval(() => {
-      getUploads().then(uploads => {
-        setHistory(uploads)
-        const processing = uploads.some((u: any) => u.status === 'processing' || u.status === 'pending')
-        if (!processing && pollRef.current) {
-          clearInterval(pollRef.current)
-          pollRef.current = null
-        }
-      })
-    }, 3000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [])
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadFile(file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['uploads'] }),
+  })
+  const uploading = uploadMutation.isPending
+  const result = uploadMutation.data ?? null
 
   const handleFile = async (file: File) => {
-    setUploading(true); setError(''); setResult(null)
+    setError('')
     try {
-      const r = await uploadFile(file)
-      setResult(r)
-      fetchHistory()
-      // Start polling if background processing started
-      if (r.status === 'processing' && !pollRef.current) {
-        pollRef.current = setInterval(fetchHistory, 3000)
-      }
+      await uploadMutation.mutateAsync(file)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? `Upload failed: ${e?.message ?? 'Unknown error'}`)
-    } finally { setUploading(false) }
+    }
   }
 
   const onDrop = useCallback((e: React.DragEvent) => {

@@ -6,7 +6,8 @@
  * Maturity: Working Prototype
  */
 
-import { useEffect, useState, useRef } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -28,30 +29,26 @@ function ProgressBar({ pct }: { pct: number }) {
 }
 
 export default function JobsMonitor() {
-  const [jobs,   setJobs]   = useState<any[]>([])
+  const qc = useQueryClient()
   const [filter, setFilter] = useState('all')
-  const [loading, setLoading] = useState(true)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fetchJobs = async () => {
-    try {
+  const jobsQ = useQuery({
+    queryKey: ['jobs', filter],
+    queryFn: async () => {
       const params = filter !== 'all' ? `?status=${filter}` : ''
       const res = await axios.get(`${BASE}/jobs${params}&limit=100`)
-      setJobs(res.data)
-    } catch { /* no-op */ }
-    finally { setLoading(false) }
-  }
+      return res.data
+    },
+    refetchInterval: 3000,
+  })
+  const jobs = jobsQ.data ?? []
+  const loading = jobsQ.isPending
 
-  useEffect(() => {
-    fetchJobs()
-    pollRef.current = setInterval(fetchJobs, 3000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [filter])
-
-  const cancelJob = async (id: number) => {
-    await axios.post(`${BASE}/jobs/${id}/cancel`)
-    await fetchJobs()
-  }
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => axios.post(`${BASE}/jobs/${id}/cancel`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+  const cancelJob = (id: number) => cancelMutation.mutate(id)
 
   const filteredJobs = jobs
 
@@ -69,7 +66,7 @@ export default function JobsMonitor() {
             Background jobs — CSV parsing, video pipeline, exports, regeneration
           </div>
         </div>
-        <button onClick={fetchJobs} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)', padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13 }}>
+        <button onClick={() => jobsQ.refetch()} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)', padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13 }}>
           ↻ Refresh
         </button>
       </div>

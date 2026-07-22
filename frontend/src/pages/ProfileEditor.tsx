@@ -8,8 +8,8 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import axios from 'axios'
-import { getProfiles } from '../services/api'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -57,20 +57,25 @@ export default function ProfileEditor() {
   const [alertRules, setAlertRules] = useState({
     rtp_warning: 96, rtp_critical: 85, max_loss: 200, streak_warning: 8, streak_critical: 15,
   })
-  const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState('')
   const [success,  setSuccess]  = useState('')
 
+  const profileQ = useQuery({
+    queryKey: ['profile', id],
+    queryFn: () => axios.get(`${BASE}/profiles/${id}`).then(res => res.data),
+    enabled: !isNew && !!id,
+    retry: false,
+  })
+
   useEffect(() => {
-    if (!isNew && id) {
-      axios.get(`${BASE}/profiles/${id}`).then(res => {
-        const p = res.data
-        setName(p.name); setGameName(p.game_name); setPlatform(p.platform)
-        if (p.roi_config?.balance_region) setRoi({ ...roi, ...p.roi_config })
-        if (p.alert_rules?.rtp_warning) setAlertRules({ ...alertRules, ...p.alert_rules })
-      }).catch(() => navigate('/profiles'))
+    if (profileQ.error) { navigate('/profiles'); return }
+    const p = profileQ.data
+    if (p) {
+      setName(p.name); setGameName(p.game_name); setPlatform(p.platform)
+      if (p.roi_config?.balance_region) setRoi(r => ({ ...r, ...p.roi_config }))
+      if (p.alert_rules?.rtp_warning) setAlertRules(r => ({ ...r, ...p.alert_rules }))
     }
-  }, [id])
+  }, [profileQ.data, profileQ.error])
 
   const updateRegion = (key: keyof typeof REGION_COLORS, field: 'x'|'y'|'w'|'h', val: number) => {
     const idx = { x:0, y:1, w:2, h:3 }[field]
@@ -79,15 +84,13 @@ export default function ProfileEditor() {
     setRoi(r => ({ ...r, [key]: arr }))
   }
 
-  const save = async () => {
-    if (!name || !gameName || !platform) { setError('Name, Game, and Platform are required.'); return }
-    setSaving(true); setError(''); setSuccess('')
-    const payload = {
-      name, game_name: gameName, platform,
-      roi_config:  roi,
-      alert_rules: alertRules,
-    }
-    try {
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        name, game_name: gameName, platform,
+        roi_config:  roi,
+        alert_rules: alertRules,
+      }
       if (isNew) {
         await axios.post(`${BASE}/profiles`, payload)
       } else {
@@ -95,11 +98,20 @@ export default function ProfileEditor() {
         await axios.delete(`${BASE}/profiles/${id}`)
         await axios.post(`${BASE}/profiles`, payload)
       }
+    },
+  })
+  const saving = saveMutation.isPending
+
+  const save = async () => {
+    if (!name || !gameName || !platform) { setError('Name, Game, and Platform are required.'); return }
+    setError(''); setSuccess('')
+    try {
+      await saveMutation.mutateAsync()
       setSuccess('Profile saved.')
       setTimeout(() => navigate('/profiles'), 1200)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Save failed.')
-    } finally { setSaving(false) }
+    }
   }
 
   const inp: React.CSSProperties = {

@@ -2,8 +2,9 @@
  * src/pages/Sessions.tsx
  * Maturity: Working Prototype — filters, sorting, click-through to detail.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { getSessions, deleteSession } from '../services/api'
 import type { Session } from '../services/api'
 
@@ -13,25 +14,31 @@ const STATUSES  = ['All', 'complete', 'flagged', 'in_progress']
 
 export default function Sessions() {
   const navigate = useNavigate()
-  const [sessions,  setSessions]  = useState<Session[]>([])
-  const [loading,   setLoading]   = useState(true)
+  const qc = useQueryClient()
   const [game,      setGame]      = useState('All')
   const [platform,  setPlatform]  = useState('All')
   const [status,    setStatus]    = useState('All')
   const [sortKey,   setSortKey]   = useState<keyof Session>('date')
   const [sortDesc,  setSortDesc]  = useState(true)
-  const [deleting,  setDeleting]  = useState<number | null>(null)
 
-  const fetch_ = async () => {
-    setLoading(true)
-    const params: any = {}
-    if (game !== 'All')     params.game_name = game
-    if (platform !== 'All') params.platform  = platform
-    if (status !== 'All')   params.status    = status
-    getSessions(params).then(setSessions).finally(() => setLoading(false))
-  }
+  const params: any = {}
+  if (game !== 'All')     params.game_name = game
+  if (platform !== 'All') params.platform  = platform
+  if (status !== 'All')   params.status    = status
 
-  useEffect(() => { fetch_() }, [game, platform, status])
+  const sessionsQ = useQuery({
+    queryKey: ['sessions', params],
+    queryFn: () => getSessions(params),
+    placeholderData: keepPreviousData,
+  })
+  const sessions = sessionsQ.data ?? []
+  const loading = sessionsQ.isPending
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteSession(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+  })
+  const deleting = deleteMutation.isPending ? (deleteMutation.variables ?? null) : null
 
   const sorted = [...sessions].sort((a, b) => {
     const av = a[sortKey] as any, bv = b[sortKey] as any
@@ -45,13 +52,10 @@ export default function Sessions() {
     else { setSortKey(key); setSortDesc(true) }
   }
 
-  const handleDelete = async (e: React.MouseEvent, id: number) => {
+  const handleDelete = (e: React.MouseEvent, id: number) => {
     e.stopPropagation()
     if (!confirm('Delete this session and all its data?')) return
-    setDeleting(id)
-    await deleteSession(id)
-    setSessions(prev => prev.filter(s => s.id !== id))
-    setDeleting(null)
+    deleteMutation.mutate(id)
   }
 
   const sel = { background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', fontSize: 12, cursor: 'pointer' }
@@ -71,7 +75,7 @@ export default function Sessions() {
           <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Sessions</h1>
           <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{sessions.length} sessions</div>
         </div>
-        <button onClick={fetch_}
+        <button onClick={() => sessionsQ.refetch()}
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)', padding: '8px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13 }}>
           ↻ Refresh
         </button>

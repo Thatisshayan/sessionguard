@@ -2,7 +2,8 @@
  * src/pages/Reports.tsx
  * Maturity: Working Prototype — all four formats implemented (PDF, Excel, JSON, CSV).
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createExport, getExports, getSessions } from '../services/api'
 import type { Session } from '../services/api'
 
@@ -14,28 +15,32 @@ const FORMATS = [
 ]
 
 export default function Reports() {
-  const [sessions,   setSessions]   = useState<Session[]>([])
-  const [exports_,   setExports]    = useState<any[]>([])
-  const [sessionId,  setSessionId]  = useState<string>('global')
-  const [generating, setGenerating] = useState('')
-  const [result,     setResult]     = useState<any>(null)
-  const [error,      setError]      = useState('')
+  const qc = useQueryClient()
+  const sessionsQ = useQuery({ queryKey: ['sessions', { limit: 100 }], queryFn: () => getSessions({ limit: 100 }) })
+  const exportsQ  = useQuery({ queryKey: ['exports', 'all'], queryFn: () => getExports() })
+  const sessions: Session[] = sessionsQ.data ?? []
+  const exports_ = exportsQ.data ?? []
 
-  useEffect(() => {
-    getSessions({ limit: 100 }).then(setSessions)
-    getExports().then(setExports)
-  }, [])
+  const [sessionId, setSessionId] = useState<string>('global')
+  const [error,      setError]    = useState('')
+
+  const generateMutation = useMutation({
+    mutationFn: (fmt: string) => {
+      const sid = sessionId === 'global' ? undefined : Number(sessionId)
+      return createExport(fmt, sid)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['exports', 'all'] }),
+  })
+  const generating = generateMutation.isPending ? (generateMutation.variables ?? '') : ''
+  const result = generateMutation.data ?? null
 
   const generate = async (fmt: string) => {
-    setGenerating(fmt); setResult(null); setError('')
+    setError('')
     try {
-      const sid = sessionId === 'global' ? undefined : Number(sessionId)
-      const r   = await createExport(fmt, sid)
-      setResult(r)
-      getExports().then(setExports)
+      await generateMutation.mutateAsync(fmt)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Export failed.')
-    } finally { setGenerating('') }
+    }
   }
 
   const extIcon: Record<string, string> = {

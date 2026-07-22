@@ -2,7 +2,8 @@
  * src/pages/Compare.tsx
  * Maturity: Working Prototype — real comparison with charts and narrative.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -63,32 +64,31 @@ function MetricWinner({ sessions, metric }: { sessions: Session[]; metric: typeo
 }
 
 export default function Compare() {
-  const [allSessions, setAllSessions] = useState<Session[]>([])
-  const [selected,    setSelected]    = useState<number[]>([])
-  const [result,      setResult]      = useState<CompareResult | null>(null)
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState('')
+  const [selected, setSelected] = useState<number[]>([])
+  const [error,    setError]    = useState('')
 
-  useEffect(() => {
-    getSessions({ limit: 100 }).then(setAllSessions)
-  }, [])
+  const sessionsQ = useQuery({ queryKey: ['sessions', { limit: 100 }], queryFn: () => getSessions({ limit: 100 }) })
+  const allSessions: Session[] = sessionsQ.data ?? []
+
+  const compareMutation = useMutation({ mutationFn: (ids: number[]) => compareSessions(ids) })
+  const result: CompareResult | null = compareMutation.data ?? null
+  const loading = compareMutation.isPending
 
   const toggleSession = (id: number) => {
     setSelected(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     )
-    setResult(null)
+    compareMutation.reset()
   }
 
   const run = async () => {
     if (selected.length < 2) { setError('Select at least 2 sessions.'); return }
-    setLoading(true); setError('')
+    setError('')
     try {
-      const r = await compareSessions(selected)
-      setResult(r)
+      await compareMutation.mutateAsync(selected)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Comparison failed.')
-    } finally { setLoading(false) }
+    }
   }
 
   // Radar chart data — normalise 0-100
@@ -165,7 +165,7 @@ export default function Compare() {
                 {loading ? 'Comparing…' : 'Run Comparison'}
               </button>
               {selected.length > 0 && (
-                <button onClick={() => { setSelected([]); setResult(null) }}
+                <button onClick={() => { setSelected([]); compareMutation.reset() }}
                   style={{ width: '100%', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, marginTop: 8, padding: 4 }}>
                   Clear selection
                 </button>

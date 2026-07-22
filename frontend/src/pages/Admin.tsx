@@ -6,8 +6,8 @@
  * Maturity: Working Prototype
  */
 
-import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
 
@@ -26,25 +26,14 @@ function StatCard({ label, value, accent }: { label: string; value: string | num
 
 export default function Admin() {
   const { accessToken, user, isAdmin } = useAuth()
-  const navigate = useNavigate()
-  const [tab,     setTab]     = useState<AdminTab>('health')
-  const [health,  setHealth]  = useState<any>(null)
-  const [stats,   setStats]   = useState<any>(null)
-  const [users,   setUsers]   = useState<any[]>([])
-  const [jobs,    setJobs]    = useState<any[]>([])
-  const [audit,   setAudit]   = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const qc = useQueryClient()
+  const [tab, setTab] = useState<AdminTab>('health')
 
   const hdrs = { headers: { Authorization: `Bearer ${accessToken}` } }
 
-  useEffect(() => {
-    if (!isAdmin) { navigate('/'); return }
-    fetchAll()
-  }, [isAdmin, accessToken])
-
-  const fetchAll = useCallback(async () => {
-    setLoading(true)
-    try {
+  const adminQ = useQuery({
+    queryKey: ['admin', 'all', accessToken],
+    queryFn: async () => {
       const [h, s, u, j, a] = await Promise.all([
         axios.get(`${BASE}/admin/health`,  hdrs).then(r => r.data),
         axios.get(`${BASE}/admin/stats`,   hdrs).then(r => r.data),
@@ -52,20 +41,25 @@ export default function Admin() {
         axios.get(`${BASE}/jobs?limit=50`, hdrs).then(r => r.data),
         axios.get(`${BASE}/admin/audit?limit=50`, hdrs).then(r => r.data),
       ])
-      setHealth(h); setStats(s); setUsers(u); setJobs(j); setAudit(a)
-    } catch { /* no-op */ }
-    finally { setLoading(false) }
-  }, [accessToken])
+      return { health: h, stats: s, users: u, jobs: j, audit: a }
+    },
+    enabled: isAdmin,
+  })
+  const health = adminQ.data?.health ?? null
+  const stats  = adminQ.data?.stats ?? null
+  const users  = adminQ.data?.users ?? []
+  const jobs   = adminQ.data?.jobs ?? []
+  const audit  = adminQ.data?.audit ?? []
+  const loading = adminQ.isPending
+  const fetchAll = () => adminQ.refetch()
 
-  const toggleUser = async (uid: number, isActive: boolean) => {
-    await axios.patch(`${BASE}/admin/users/${uid}`, { is_active: !isActive }, hdrs)
-    await fetchAll()
-  }
+  const patchUserMutation = useMutation({
+    mutationFn: ({ uid, patch }: { uid: number; patch: any }) => axios.patch(`${BASE}/admin/users/${uid}`, patch, hdrs),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'all'] }),
+  })
 
-  const changeRole = async (uid: number, role: string) => {
-    await axios.patch(`${BASE}/admin/users/${uid}`, { role }, hdrs)
-    await fetchAll()
-  }
+  const toggleUser = (uid: number, isActive: boolean) => patchUserMutation.mutate({ uid, patch: { is_active: !isActive } })
+  const changeRole = (uid: number, role: string) => patchUserMutation.mutate({ uid, patch: { role } })
 
   const TAB = (key: AdminTab, label: string) => (
     <button key={key} onClick={() => setTab(key)}
