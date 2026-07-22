@@ -16,6 +16,7 @@ Future:   Add cryptographic hash manifest for legal integrity (V9).
 
 from __future__ import annotations
 import csv
+import hashlib
 import json
 import shutil
 import zipfile
@@ -31,6 +32,65 @@ from engines.review_queue_engine import get_review_queue
 BASE_DIR    = Path(__file__).resolve().parent.parent.parent
 EXPORTS_DIR = BASE_DIR / "storage" / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _generate_manifest(zip_path: str) -> dict:
+    """
+    Generate a SHA-256 hash manifest for all files in the evidence ZIP.
+    Returns a dict {filename: sha256_hex}.
+    """
+    manifest = {}
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        for name in zf.namelist():
+            if name.endswith('/'):
+                continue
+            data = zf.read(name)
+            sha = hashlib.sha256(data).hexdigest()
+            manifest[name] = sha
+    return manifest
+
+
+def _get_ai_narrative(session_id: int) -> str | None:
+    """Get AI narrative for a session if available."""
+    try:
+        from engines.ai_insights_engine import analyse_session_with_ai
+        result = analyse_session_with_ai(session_id)
+        if result and result.get("source") in ("claude_ai", "ollama_ai"):
+            return json.dumps({
+                "headline": result.get("headline", ""),
+                "risk_level": result.get("risk_level", ""),
+                "behaviour_summary": result.get("behaviour_summary", ""),
+                "one_line_verdict": result.get("one_line_verdict", ""),
+                "discipline_score": result.get("discipline_score", ""),
+                "source": result.get("source", ""),
+                "model": result.get("model", ""),
+                "generated_at": result.get("generated_at", ""),
+            }, indent=2)
+    except Exception:
+        pass
+    return None
+
+
+def verify_evidence_manifest(zip_path: str) -> dict:
+    """
+    Verify each file in the ZIP against the embedded manifest.json.
+    Returns dict of {filename: "ok" | "tampered" | "missing"}.
+    """
+    status = {}
+    with zipfile.ZipFile(zip_path, 'r') as zf:
+        if "manifest.json" not in zf.namelist():
+            return {"error": "No manifest.json in archive"}
+        manifest = json.loads(zf.read("manifest.json"))
+        for filename, expected_hash in manifest.items():
+            if filename == "manifest.json":
+                continue
+            try:
+                data = zf.read(filename)
+                actual = hashlib.sha256(data).hexdigest()
+                status[filename] = "ok" if actual == expected_hash else "tampered"
+            except Exception:
+                status[filename] = "not_found"
+    return status
 
 
 def build_evidence_package(session_id: int) -> dict:
@@ -148,6 +208,19 @@ def build_evidence_package(session_id: int) -> dict:
         readme = _build_readme(metrics, contents, errors)
         zf.writestr("README.txt", readme)
         contents.insert(0, "README.txt")
+
+    # ── Append manifest and AI narrative ───────────────────────────────────────
+    manifest = _generate_manifest(str(filepath))
+    manifest_json = json.dumps(manifest, indent=2)
+    with zipfile.ZipFile(str(filepath), 'a') as zf:
+        zf.writestr("manifest.json", manifest_json)
+        contents.insert(0, "manifest.json")
+
+    ai_narrative = _get_ai_narrative(session_id)
+    if ai_narrative:
+        with zipfile.ZipFile(str(filepath), 'a') as zf:
+            zf.writestr("ai_narrative.json", ai_narrative)
+        contents.insert(0, "ai_narrative.json")
 
     # Register in exports table
     conn2 = get_connection()
