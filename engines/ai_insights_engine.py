@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 from database.db import get_connection
+from engines.offline_ai import is_ollama_available, call_ollama_json
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
@@ -288,6 +289,39 @@ def analyse_session_with_ai(session_id: int) -> dict:
     api_key = _get_api_key()
 
     if not api_key:
+        # Try Ollama before rule-based fallback
+        if is_ollama_available():
+            try:
+                from engines.prompt_manager import get_active_prompt
+                active = get_active_prompt("session_analysis")
+                system_prompt = active["system_prompt"] if active else None
+                prompt = _build_user_prompt(summary)
+
+                ollama_result = call_ollama_json(
+                    prompt,
+                    model="llama3.2:latest",
+                    system_prompt=system_prompt or SYSTEM_PROMPT,
+                )
+
+                if "error" not in ollama_result:
+                    from backend.schemas.ai import parse_ai_response
+                    try:
+                        import json as _json
+                        response = parse_ai_response(_json.dumps(ollama_result) if isinstance(ollama_result, dict) else ollama_result)
+                        analysis = response.model_dump()
+                    except Exception:
+                        analysis = ollama_result
+
+                    analysis["source"] = "ollama_ai"
+                    analysis["model"] = "llama3.2:latest"
+                    analysis["ai_available"] = True
+                    analysis["session_id"] = session_id
+                    analysis["generated_at"] = datetime.now().isoformat()
+                    _persist_ai_insights(session_id, analysis)
+                    return analysis
+            except Exception:
+                pass  # Fall through to rule-based
+
         result = _fallback_analysis(session_id, summary)
         result["session_id"] = session_id
         return result
