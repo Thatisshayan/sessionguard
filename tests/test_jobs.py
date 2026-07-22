@@ -11,7 +11,7 @@ class TestJobEndpoints:
     
     def test_create_job(self, client: TestClient, auth_headers: dict):
         """Test creating a new job."""
-        response = client.post("/jobs", json={
+        response = client.post("/api/v1/jobs", json={
             "job_type": "video_processing",
             "params": {
                 "video_path": "/path/to/video.mp4",
@@ -34,7 +34,7 @@ class TestJobEndpoints:
         }, headers=auth_headers)
         
         # List jobs
-        response = client.get("/jobs", headers=auth_headers)
+        response = client.get("/api/v1/jobs", headers=auth_headers)
         
         assert response.status_code == 200
         jobs = response.json()
@@ -51,7 +51,7 @@ class TestJobEndpoints:
         job_id = create_response.json()["job_id"]
         
         # Get job status
-        response = client.get(f"/jobs/{job_id}", headers=auth_headers)
+        response = client.get(f"/api/v1/jobs/{job_id}", headers=auth_headers)
         
         assert response.status_code == 200
         data = response.json()
@@ -61,7 +61,7 @@ class TestJobEndpoints:
     
     def test_get_nonexistent_job(self, client: TestClient, auth_headers: dict):
         """Test getting status of nonexistent job."""
-        response = client.get("/jobs/99999", headers=auth_headers)
+        response = client.get("/api/v1/jobs/99999", headers=auth_headers)
         
         assert response.status_code == 404
     
@@ -75,7 +75,7 @@ class TestJobEndpoints:
         job_id = create_response.json()["job_id"]
         
         # Cancel the job
-        response = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+        response = client.post(f"/api/v1/jobs/{job_id}/cancel", headers=auth_headers)
         
         assert response.status_code == 200
         data = response.json()
@@ -92,14 +92,14 @@ class TestJobEndpoints:
         job_id = create_response.json()["job_id"]
         
         # Try to cancel (may fail if job is already complete)
-        response = client.post(f"/jobs/{job_id}/cancel", headers=auth_headers)
+        response = client.post(f"/api/v1/jobs/{job_id}/cancel", headers=auth_headers)
         
         # Response should be 200 or 400 depending on job state
         assert response.status_code in [200, 400]
     
     def test_worker_health_endpoint(self, client: TestClient):
         """Test the worker health check endpoint."""
-        response = client.get("/jobs/worker/health")
+        response = client.get("/api/v1/jobs/worker/health")
         
         assert response.status_code == 200
         data = response.json()
@@ -110,7 +110,7 @@ class TestJobEndpoints:
     def test_job_unauthorized_access(self, client: TestClient):
         """Test that unauthorized users cannot access job endpoints."""
         # Try to create job without auth
-        response = client.post("/jobs", json={
+        response = client.post("/api/v1/jobs", json={
             "job_type": "video_processing",
             "params": {}
         })
@@ -118,7 +118,7 @@ class TestJobEndpoints:
         assert response.status_code == 401
         
         # Try to list jobs without auth
-        response = client.get("/jobs")
+        response = client.get("/api/v1/jobs")
         
         assert response.status_code == 401
     

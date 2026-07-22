@@ -72,14 +72,14 @@ def auth_headers(client: TestClient) -> dict:
     Create a test user and return authentication headers.
     """
     # Signup a test user
-    signup_response = client.post("/auth/signup", json={
+    signup_response = client.post("/api/v1/auth/signup", json={
         "email": "test@example.com",
         "username": "testuser",
         "password": "testpassword123"
     })
     
     # Login to get tokens
-    login_response = client.post("/auth/login", json={
+    login_response = client.post("/api/v1/auth/login", json={
         "email": "test@example.com",
         "password": "testpassword123"
     })
@@ -114,7 +114,7 @@ def admin_headers(client: TestClient) -> dict:
     conn.close()
     
     # Login as admin
-    login_response = client.post("/auth/login", json={
+    login_response = client.post("/api/v1/auth/login", json={
         "email": "admin@example.com",
         "password": "adminpassword123"
     })
@@ -144,7 +144,7 @@ def sample_session_data(client: TestClient, auth_headers: dict) -> dict:
         "total_won": 450.00
     }
     
-    response = client.post("/sessions", json=session_data, headers=auth_headers)
+    response = client.post("/api/v1/sessions", json=session_data, headers=auth_headers)
     assert response.status_code == 200
     
     return response.json()

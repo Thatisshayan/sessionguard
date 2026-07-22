@@ -5,6 +5,7 @@
 import axios from 'axios'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
+const API_VERSION = '/api/v1'
 
 const client = axios.create({ baseURL: BASE, timeout: 10_000 })
 
@@ -16,6 +17,12 @@ client.interceptors.request.use(cfg => {
   } else {
     cfg.headers['Content-Type'] = 'application/json'
   }
+  
+  // Add API version prefix to all requests except health endpoints
+  if (cfg.url && !cfg.url.startsWith('/health')) {
+    cfg.url = `${API_VERSION}${cfg.url}`
+  }
+  
   return cfg
 })
 
@@ -94,7 +101,7 @@ export const getSessionNotes   = (id: number) => client.get(`/sessions/${id}/not
 export const addSessionNote    = (id: number, note: string) => client.post(`/sessions/${id}/notes`, { note }).then(r => r.data)
 export const getSessionOcrResults = (id: number) => client.get(`/sessions/${id}/ocr-results`).then(r => r.data)
 export const createEvidence    = (id: number) => client.post(`/sessions/${id}/evidence`).then(r => r.data)
-export const getEvidenceDownload = (sid: number, eid: number) => `${BASE}/sessions/${sid}/evidence/${eid}/download`
+export const getEvidenceDownload = (sid: number, eid: number) => `${BASE}${API_VERSION}/sessions/${sid}/evidence/${eid}/download`
 export const getSessionTags    = (id: number) => client.get(`/sessions/${id}/tags`).then(r => r.data)
 export const addSessionTag     = (id: number, tag: string) => client.post(`/sessions/${id}/tags`, { tag }).then(r => r.data)
 export const removeSessionTag  = (id: number, tag: string) => client.delete(`/sessions/${id}/tags/${tag}`).then(r => r.data)
@@ -130,12 +137,12 @@ export const uploadFile = (file: File, session_id?: number) => {
   return client.post('/upload', fd).then(r => r.data)
 }
 export const getUploads          = () => client.get('/upload').then(r => r.data)
-export const getCsvTemplate      = (type = 'spin') => `${BASE}/upload/template/${type}`
+export const getCsvTemplate      = (type = 'spin') => `${BASE}${API_VERSION}/upload/template/${type}`
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 export const createExport        = (format: string, session_id?: number) => client.post('/exports', { format, session_id }).then(r => r.data)
 export const getExports          = (session_id?: number) => client.get('/exports', { params: { session_id } }).then(r => r.data)
-export const getExportDownloadUrl= (id: number) => `${BASE}/exports/${id}/download`
+export const getExportDownloadUrl= (id: number) => `${BASE}${API_VERSION}/exports/${id}/download`
 
 // ── Compare ───────────────────────────────────────────────────────────────────
 export const compareSessions     = (session_ids: number[]) => client.post('/compare', { session_ids }).then(r => r.data)
@@ -212,7 +219,7 @@ export const getAiReviewSuggestion = (id: number) => client.get(`/intelligence/a
 // ── System + Recorder ─────────────────────────────────────────────────────────
 export const getSystemConfig   = () => client.get('/system-config').then(r => r.data)
 export const updateSystemConfig= (key: string, value: any) => client.patch('/system-config', { key, value }).then(r => r.data)
-export const getDbBackupUrl    = () => `${BASE}/data-export/backup`
+export const getDbBackupUrl    = () => `${BASE}${API_VERSION}/data-export/backup`
 export const getRecorderStatus = () => client.get('/recorder/status').then(r => r.data)
 export const startRecording    = (session_id?: number, fps = 30) => client.post('/recorder/start', { session_id, fps }).then(r => r.data)
 export const stopRecording     = () => client.post('/recorder/stop').then(r => r.data)

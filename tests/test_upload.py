@@ -15,7 +15,7 @@ class TestUploadEndpoints:
         """Test successful CSV file upload."""
         with open(sample_csv_file, "rb") as f:
             response = client.post(
-                "/upload",
+                "/api/v1/upload",
                 files={"file": ("test_spins.csv", f, "text/csv")},
                 data={"session_id": "1"}
             )
@@ -32,7 +32,7 @@ class TestUploadEndpoints:
         # Create a simple image-like file
         image_content = b"fake image content for testing"
         response = client.post(
-            "/upload",
+            "/api/v1/upload",
             files={"file": ("test.png", io.BytesIO(image_content), "image/png")}
         )
         
@@ -44,7 +44,7 @@ class TestUploadEndpoints:
     def test_upload_invalid_type(self, client: TestClient):
         """Test upload of unsupported file type."""
         response = client.post(
-            "/upload",
+            "/api/v1/upload",
             files={"file": ("test.exe", io.BytesIO(b"executable content"), "application/x-msdownload")}
         )
         
@@ -62,7 +62,7 @@ class TestUploadEndpoints:
             # Create a 2MB file (exceeds 1MB limit)
             large_content = b"x" * (2 * 1024 * 1024)
             response = client.post(
-                "/upload",
+                "/api/v1/upload",
                 files={"file": ("large.txt", io.BytesIO(large_content), "text/plain")}
             )
             
@@ -77,7 +77,7 @@ class TestUploadEndpoints:
         """Test that upload response includes file size."""
         test_content = b"test file content"
         response = client.post(
-            "/upload",
+            "/api/v1/upload",
             files={"file": ("test.txt", io.BytesIO(test_content), "text/plain")}
         )
         
@@ -88,7 +88,7 @@ class TestUploadEndpoints:
     
     def test_upload_list(self, client: TestClient):
         """Test listing uploads."""
-        response = client.get("/upload")
+        response = client.get("/api/v1/upload")
         
         assert response.status_code == 200
         data = response.json()
@@ -99,14 +99,14 @@ class TestUploadEndpoints:
         # Upload a file first
         with open(sample_csv_file, "rb") as f:
             upload_response = client.post(
-                "/upload",
+                "/api/v1/upload",
                 files={"file": ("test_spins.csv", f, "text/csv")}
             )
         
         upload_id = upload_response.json()["upload_id"]
         
         # Get upload status
-        response = client.get(f"/upload/{upload_id}/status")
+        response = client.get(f"/api/v1/upload/{upload_id}/status")
         
         assert response.status_code == 200
         data = response.json()
@@ -115,13 +115,13 @@ class TestUploadEndpoints:
     
     def test_upload_status_not_found(self, client: TestClient):
         """Test getting status of nonexistent upload."""
-        response = client.get("/upload/99999/status")
+        response = client.get("/api/v1/upload/99999/status")
         
         assert response.status_code == 404
     
     def test_download_csv_template_spin(self, client: TestClient):
         """Test downloading spin CSV template."""
-        response = client.get("/upload/template/spin")
+        response = client.get("/api/v1/upload/template/spin")
         
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/csv"
@@ -130,7 +130,7 @@ class TestUploadEndpoints:
     
     def test_download_csv_template_session(self, client: TestClient):
         """Test downloading session CSV template."""
-        response = client.get("/upload/template/session")
+        response = client.get("/api/v1/upload/template/session")
         
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/csv"
@@ -139,7 +139,7 @@ class TestUploadEndpoints:
     
     def test_download_csv_template_invalid(self, client: TestClient):
         """Test downloading invalid template type."""
-        response = client.get("/upload/template/invalid_type")
+        response = client.get("/api/v1/upload/template/invalid_type")
         
         assert response.status_code == 400
     
@@ -148,7 +148,7 @@ class TestUploadEndpoints:
         # Attempt multiple uploads rapidly
         for i in range(11):  # Exceed the 10 req/min limit
             response = client.post(
-                "/upload",
+                "/api/v1/upload",
                 files={"file": (f"test{i}.txt", io.BytesIO(b"content"), "text/plain")}
             )
             
@@ -164,7 +164,7 @@ class TestUploadEndpoints:
         # This test assumes ClamAV is not running in test environment
         test_content = b"test file for virus scan"
         response = client.post(
-            "/upload",
+            "/api/v1/upload",
             files={"file": ("test.txt", io.BytesIO(test_content), "text/plain")}
         )
         
@@ -179,7 +179,7 @@ class TestUploadEndpoints:
         # Create a fake video file
         video_content = b"fake video content for testing"
         response = client.post(
-            "/upload",
+            "/api/v1/upload",
             files={"file": ("test.mp4", io.BytesIO(video_content), "video/mp4")}
         )
         
