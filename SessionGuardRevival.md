@@ -1,6 +1,6 @@
 # SessionGuard Revival — Phased Handoff Document
 
-**Generated**: 2026-07-10 · **Last revised**: 2026-07-21 (frontend B1–B3)  
+**Generated**: 2026-07-10 · **Last revised**: 2026-07-21 (Phase 0) · **Phase 2 started**: 2026-07-21 (A7 complete)  
 **Target**: Production-hardened local desktop app first; SaaS is an optional, separately-gated track — not a default destination.
 
 **Team reality**: this is currently a solo effort (Shaya), optionally AI-agent-assisted for mechanical work (script fixes, audits, sync/cleanup, refactors). The "Engineer 1/2/3" labels on tasks below are role tags for sequencing, not headcount — read "Backend track" / "Frontend track" / "Desktop track," not "hire 3 people." Parallelize across tracks only if/when there's more than one person; otherwise work them in the listed order.
@@ -240,7 +240,7 @@ If it's still just you: work top-to-bottom within a phase before moving to the n
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Video pipeline bugs block release | High | High | Fix in Phase 1 (A7–A8); integration test in Phase 3 |
+| Video pipeline bugs block release | High | High | Fix in Phase 2 (A7); integration test in Phase 3 |
 | Tesseract accuracy insufficient | Medium | High | EasyOCR fallback (C1); benchmark gate (C9) |
 | SQLite corruption at scale | Medium | Critical | PostgreSQL migration (A1) by Phase 2 |
 | Desktop app store rejection | Low | High | Code-sign (E9); notarization; sandbox; pre-submit checks |
