@@ -210,12 +210,12 @@ Produce the JSON analysis now."""
 
 # ── API call ──────────────────────────────────────────────────────────────────
 
-def _call_claude(prompt: str, api_key: str) -> str:
+def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) -> str:
     """Make raw API call using urllib. Returns response text."""
     payload = json.dumps({
         "model":      MODEL,
         "max_tokens": MAX_TOKENS,
-        "system":     SYSTEM_PROMPT,
+        "system":     system_prompt or SYSTEM_PROMPT,
         "messages": [
             {"role": "user", "content": prompt}
         ],
@@ -293,19 +293,15 @@ def analyse_session_with_ai(session_id: int) -> dict:
         return result
 
     try:
+        from engines.prompt_manager import get_active_prompt
+        active = get_active_prompt("session_analysis")
+        system_prompt = active["system_prompt"] if active else None
         prompt      = _build_user_prompt(summary)
-        raw_text    = _call_claude(prompt, api_key)
+        raw_text    = _call_claude(prompt, api_key, system_prompt=system_prompt)
 
-        # Parse JSON response
-        # Strip any accidental markdown fences
-        text = raw_text.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        text = text.strip().rstrip("```").strip()
-
-        analysis = json.loads(text)
+        from backend.schemas.ai import parse_ai_response
+        response = parse_ai_response(raw_text)
+        analysis = response.model_dump()
         analysis["source"]       = "claude_ai"
         analysis["model"]        = MODEL
         analysis["ai_available"] = True

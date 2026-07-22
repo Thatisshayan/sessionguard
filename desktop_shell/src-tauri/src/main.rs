@@ -22,6 +22,16 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 struct BackendProcess(Arc<Mutex<Option<Child>>>);
 
 fn find_python() -> String {
+    // Check bundled Python first (for distributed builds)
+    if let Some(exe) = std::env::current_exe().ok() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("bundled").join("python").join("python.exe");
+            if bundled.exists() {
+                return bundled.to_string_lossy().to_string();
+            }
+        }
+    }
+
     let candidates = vec![
         r"C:\Users\Shaya\AppData\Local\Programs\Python\Python312\python.exe".to_string(),
         r"C:\Users\Shaya\AppData\Local\Programs\Python\Python311\python.exe".to_string(),
@@ -40,6 +50,16 @@ fn find_python() -> String {
 }
 
 fn find_project_root() -> String {
+    // Check bundled location
+    if let Some(exe) = std::env::current_exe().ok() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("bundled").join("sessionguard");
+            if bundled.exists() {
+                return bundled.to_string_lossy().to_string();
+            }
+        }
+    }
+
     let known = r"C:\Projects\SessionGuard\sessionguard";
     if std::path::Path::new(known).exists() {
         return known.to_string();

@@ -1,23 +1,29 @@
 /**
  * src/pages/JobsMonitor.tsx
  * --------------------------
- * Background job queue monitor.
+ * Background job queue monitor — real-time via WebSocket.
  * Shows running, pending, complete, error jobs with live progress.
- * Maturity: Working Prototype
  */
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import { useJobWebSocket } from '../hooks/useJobWebSocket'
+import { getJobs, cancelJobApi, Job } from '../services/api'
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
+const STATUS_STYLE: Record<string, string> = {
+  complete: 'var(--accent-green)',
+  error: 'var(--severity-critical)',
+  running: 'var(--accent-blue)',
+  pending: 'var(--text-muted)',
+  cancelled: 'var(--text-muted)',
+}
 
-const STATUS_STYLE: Record<string, React.CSSProperties> = {
-  complete:  { color: 'var(--accent-green)' },
-  error:     { color: 'var(--severity-critical)' },
-  running:   { color: 'var(--accent-blue)' },
-  pending:   { color: 'var(--text-muted)' },
-  cancelled: { color: 'var(--text-muted)' },
+const STAGE_LABEL: Record<string, string> = {
+  extracting_frames: 'Extracting frames…',
+  ocr_pass: 'Running OCR…',
+  building_events: 'Building events…',
+  validation: 'Validating events…',
+  done: 'Complete',
 }
 
 function ProgressBar({ pct }: { pct: number }) {
@@ -31,26 +37,29 @@ function ProgressBar({ pct }: { pct: number }) {
 export default function JobsMonitor() {
   const qc = useQueryClient()
   const [filter, setFilter] = useState('all')
+  const [liveProgress, setLiveProgress] = useState<Record<number, { progress: number; stage: string }>>({})
 
   const jobsQ = useQuery({
     queryKey: ['jobs', filter],
-    queryFn: async () => {
-      const params = filter !== 'all' ? `?status=${filter}` : ''
-      const res = await axios.get(`${BASE}/jobs${params}&limit=100`)
-      return res.data
-    },
-    refetchInterval: 3000,
+    queryFn: () => getJobs({ status: filter !== 'all' ? filter : undefined, limit: 100 }),
+    refetchInterval: false,
   })
-  const jobs = jobsQ.data ?? []
-  const loading = jobsQ.isPending
+  const jobs: Job[] = jobsQ.data ?? []
 
-  const cancelMutation = useMutation({
-    mutationFn: (id: number) => axios.post(`${BASE}/jobs/${id}/cancel`),
+  const cancelM = useMutation({
+    mutationFn: (id: number) => cancelJobApi(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
-  const cancelJob = (id: number) => cancelMutation.mutate(id)
 
-  const filteredJobs = jobs
+  const handleProgress = useCallback((data: { job_id: number; progress: number; stage: string }) => {
+    setLiveProgress(prev => ({ ...prev, [data.job_id]: { progress: data.progress, stage: data.stage } }))
+  }, [])
+
+  const handleComplete = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['jobs'] })
+  }, [qc])
+
+  const { connected } = useJobWebSocket(handleProgress, handleComplete)
 
   const FILTERS = ['all', 'pending', 'running', 'complete', 'error', 'cancelled']
   const counts: Record<string, number> = {}
@@ -66,9 +75,18 @@ export default function JobsMonitor() {
             Background jobs — CSV parsing, video pipeline, exports, regeneration
           </div>
         </div>
-        <button onClick={() => jobsQ.refetch()} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)', padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13 }}>
-          ↻ Refresh
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{
+            fontSize: 11, padding: '3px 8px', borderRadius: 4,
+            background: connected ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+            color: connected ? 'var(--accent-green)' : 'var(--severity-critical)',
+          }}>
+            {connected ? '● Live' : '○ Disconnected'}
+          </span>
+          <button onClick={() => jobsQ.refetch()} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)', padding: '7px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13 }}>
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
       {/* Status filter tabs */}
@@ -86,9 +104,9 @@ export default function JobsMonitor() {
         ))}
       </div>
 
-      {loading ? (
+      {jobsQ.isPending ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
-      ) : filteredJobs.length === 0 ? (
+      ) : jobs.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>⚙</div>
           No {filter !== 'all' ? filter : ''} jobs found.
@@ -105,10 +123,13 @@ export default function JobsMonitor() {
               </tr>
             </thead>
             <tbody>
-              {filteredJobs.map(j => {
-                const startMs   = j.started_at   ? new Date(j.started_at).getTime()   : null
-                const endMs     = j.completed_at ? new Date(j.completed_at).getTime() : null
-                const duration  = startMs && endMs ? `${((endMs - startMs) / 1000).toFixed(1)}s` : startMs ? 'Running…' : '—'
+              {jobs.map(j => {
+                const live = liveProgress[j.id]
+                const progress = live?.progress ?? j.progress ?? 0
+                const stage = live?.stage ?? ''
+                const startMs = j.started_at ? new Date(j.started_at).getTime() : null
+                const endMs = j.completed_at ? new Date(j.completed_at).getTime() : null
+                const duration = startMs && endMs ? `${((endMs - startMs) / 1000).toFixed(1)}s` : startMs ? 'Running…' : '—'
                 const resultStr = typeof j.result === 'object' ? JSON.stringify(j.result) : j.result
 
                 return (
@@ -118,7 +139,7 @@ export default function JobsMonitor() {
                       <span className="badge badge-info" style={{ fontSize: 10 }}>{j.job_type}</span>
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <span style={{ ...(STATUS_STYLE[j.status] ?? {}), fontWeight: 600, fontSize: 12 }}>
+                      <span style={{ color: STATUS_STYLE[j.status] ?? 'var(--text-secondary)', fontWeight: 600, fontSize: 12 }}>
                         {j.status === 'running' ? '⚙ ' : j.status === 'complete' ? '✓ ' : j.status === 'error' ? '✗ ' : ''}
                         {j.status}
                       </span>
@@ -126,8 +147,20 @@ export default function JobsMonitor() {
                       {resultStr && j.status === 'complete' && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, fontFamily: 'var(--font-mono)' }}>{resultStr.slice(0,50)}</div>}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <ProgressBar pct={j.progress ?? 0} />
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{j.progress ?? 0}%</div>
+                      {j.status === 'running' && (
+                        <>
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>
+                            {STAGE_LABEL[stage] || stage} — {progress}%
+                          </div>
+                          <ProgressBar pct={progress} />
+                        </>
+                      )}
+                      {j.status !== 'running' && (
+                        <>
+                          <ProgressBar pct={progress} />
+                          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{progress}%</div>
+                        </>
+                      )}
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: 12 }}>
                       {j.session_id ? `#${j.session_id}` : '—'}
@@ -139,8 +172,8 @@ export default function JobsMonitor() {
                       {duration}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      {j.status === 'pending' && (
-                        <button onClick={() => cancelJob(j.id)}
+                      {(j.status === 'pending' || j.status === 'running') && (
+                        <button onClick={() => cancelM.mutate(j.id)}
                           style={{ background: 'none', border: '1px solid var(--bg-border)', color: 'var(--text-muted)', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>
                           Cancel
                         </button>

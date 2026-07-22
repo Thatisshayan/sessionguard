@@ -8,6 +8,7 @@ Maturity: Working Prototype
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from database.db import get_connection
+from engines.event_validator import validate_session_events
 
 router = APIRouter(tags=["events"])
 
@@ -68,3 +69,35 @@ def get_events_summary(session_id: int = Query(...)):
     d = dict(row)
     d["win_rate_pct"] = round((d["winning_spins"] or 0) / max(d["total_events"] or 1, 1) * 100, 1)
     return d
+
+
+@router.get("/validate/{session_id}")
+def validate_events(session_id: int):
+    """Validate all events for a session and return flagged issues."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT id, session_id, timestamp, event_type, bet_amount, win_amount, balance_after, confidence_score "
+        "FROM events WHERE session_id=? ORDER BY timestamp",
+        (session_id,),
+    ).fetchall()
+    conn.close()
+
+    events = [dict(r) for r in rows]
+    result = validate_session_events(events)
+    return {
+        "session_id": session_id,
+        "total_events": result.total_events,
+        "valid_events": result.valid_events,
+        "flagged_count": len(result.flagged),
+        "auto_corrected": result.auto_corrected,
+        "flagged": [
+            {
+                "event_id": f.event_id,
+                "reason": f.reason,
+                "severity": f.severity,
+                "original_values": f.original_values,
+                "suggested_values": f.suggested_values,
+            }
+            for f in result.flagged
+        ],
+    }

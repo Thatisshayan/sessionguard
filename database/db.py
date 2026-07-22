@@ -8,6 +8,7 @@ Maturity: Working Prototype
 Future:   Replace sqlite3 with asyncpg + Alembic for PostgreSQL/SaaS path.
 """
 
+import os
 import sqlite3
 import json
 import random
@@ -19,10 +20,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH  = BASE_DIR / "config" / "sessionguard.db"
 
 
-def get_connection() -> sqlite3.Connection:
-    """Return a SQLite connection with dict-like row access."""
+def get_connection():
+    """Get a database connection. Uses SQLCipher if encryption is configured."""
+    from database.encryption import get_encryption_config, create_encrypted_connection, SQLCIPHER_AVAILABLE
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    db_path_str = str(DB_PATH)
+    encryption = get_encryption_config()
+
+    if encryption and SQLCIPHER_AVAILABLE:
+        password = encryption.get("password") or os.getenv("SG_DB_PASSWORD", "")
+        if password:
+            return create_encrypted_connection(db_path_str, password)
+
+    # Fallback: plain SQLite
+    conn = sqlite3.connect(db_path_str, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -674,3 +686,39 @@ def init_db_v7():
             raise
     finally:
         conn.close()
+
+
+# ── Phase 4 (D3): prompt versioning + A/B ────────────────────────────────────
+SCHEMA_V8_SQL = """
+CREATE TABLE IF NOT EXISTS prompt_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    system_prompt TEXT NOT NULL,
+    model TEXT DEFAULT 'claude-sonnet-4-6',
+    temperature REAL DEFAULT 1.0,
+    max_tokens INTEGER DEFAULT 1024,
+    is_active INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(name, version)
+);
+
+CREATE TABLE IF NOT EXISTS ab_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    prompt_a_id INTEGER NOT NULL,
+    prompt_b_id INTEGER NOT NULL,
+    winner TEXT,
+    metrics TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+"""
+
+
+def init_db_v8():
+    """Apply Phase 4 (D3) prompt versioning tables — idempotent."""
+    conn = get_connection()
+    conn.executescript(SCHEMA_V8_SQL)
+    conn.commit()
+    conn.close()
+    print("[DB] V8 prompt versioning tables applied.")

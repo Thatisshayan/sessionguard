@@ -143,7 +143,7 @@ export function makeAuthClient(getToken: () => string | null) {
   const client = axios.create({ baseURL: BASE, timeout: 15_000 })
   client.interceptors.request.use(cfg => {
     const tok = getToken()
-    if (tok) cfg.headers = { ...cfg.headers, Authorization: `Bearer ${tok}` }
+    if (tok) cfg.headers.set('Authorization', `Bearer ${tok}`)
     return cfg
   })
   return client

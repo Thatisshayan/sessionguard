@@ -486,7 +486,22 @@ def run_video_pipeline(
         if progress_cb:
             progress_cb("building_events", events_n, events_n)
 
-        # ── Stage 4: Update session metrics from new events ───────────────────
+        # ── Stage 4: Validate events ──────────────────────────────────────────
+        from engines.event_validator import validate_session_events
+        post_conn = get_connection()
+        post_events = [
+            dict(r) for r in post_conn.execute(
+                "SELECT id, session_id, bet_amount, win_amount, balance_after, confidence_score "
+                "FROM events WHERE session_id=? ORDER BY timestamp",
+                (session_id,),
+            ).fetchall()
+        ]
+        post_conn.close()
+        validation = validate_session_events(post_events)
+        if progress_cb:
+            progress_cb("validation", len(post_events), len(post_events))
+
+        # ── Stage 5: Update session metrics from new events ───────────────────
         _recalc_session_from_events(session_id)
 
         # ── Finalise ──────────────────────────────────────────────────────────

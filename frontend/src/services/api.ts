@@ -70,8 +70,18 @@ export interface LiveRun {
   tick_interval: number; started_at?: string; stopped_at?: string
 }
 export interface LiveEvent { id: number; run_id: number; event_type: string; payload: Record<string, any>; created_at: string }
-export interface AiAnalysis { session_id: number; source: string; ai_available: boolean; headline: string; risk_level: string; discipline_score: number; one_line_verdict: string; insights: any[]; behaviour_summary: string }
-export interface AiStatus { available: boolean; has_library: boolean; has_api_key: boolean; model: string; message: string; install_cmd: string | null; key_env_var: string; console_url: string }
+export interface AiAnalysis {
+  session_id: number; source: string; ai_available: boolean
+  headline: string; risk_level: string; discipline_score: number
+  one_line_verdict: string; insights: any[]; behaviour_summary: string
+  model?: string; generated_at?: string; error?: string
+  notable_moments?: string[]
+}
+export interface AiStatus {
+  available: boolean; has_library: boolean; has_api_key: boolean
+  model: string; message: string; install_cmd: string | null
+  key_env_var: string; console_url: string; cost_per_session?: string
+}
 // CompareResult — returned by /compare endpoint
 export interface CompareResult {
   session_ids: number[]
@@ -189,10 +199,27 @@ export const createProject = (data: any) => client.post('/projects', data).then(
 export const deleteProject = (id: number) => client.delete(`/projects/${id}`).then(r => r.data)
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
-export const getJobs   = () => client.get('/jobs').then(r => r.data)
-export const getJob    = (id: number) => client.get(`/jobs/${id}`).then(r => r.data)
-export const enqueueJob= (data: any) => client.post('/jobs', data).then(r => r.data)
-export const cancelJob = (id: number) => client.post(`/jobs/${id}/cancel`).then(r => r.data)
+export interface Job {
+  id: number
+  job_type: string
+  status: 'pending' | 'running' | 'complete' | 'error' | 'cancelled'
+  session_id: number | null
+  progress: number | null
+  result: string | null
+  error_message: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export const getJobs = (params: { status?: string; session_id?: number; limit?: number } = {}) =>
+  client.get('/jobs', { params }).then(r => r.data)
+export const getJob = (id: number) =>
+  client.get(`/jobs/${id}`).then(r => r.data)
+export const enqueueJob = (data: any) =>
+  client.post('/jobs', data).then(r => r.data)
+export const cancelJobApi = (id: number) =>
+  client.post(`/jobs/${id}/cancel`).then(r => r.data)
 
 // ── Trends ────────────────────────────────────────────────────────────────────
 export const getRollingTrends  = (last_n = 10) => client.get('/trends/rolling', { params: { last_n } }).then(r => r.data)

@@ -27,7 +27,7 @@ if platform.system() == "Windows":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, seed_demo_data, seed_demo_user
+from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, seed_demo_data, seed_demo_user
 from engines.alert_presets import seed_presets
 from backend.middleware.logging import configure_logging, RequestLoggingMiddleware
 
@@ -40,7 +40,7 @@ from backend.routes import (
     ws, notes, evidence, recorder, openapi_export,
     system_config, data_export, trends, search,
     tags, intelligence, coach, ocr_calibrate, updater, import_wizard,
-    dashboard,
+    dashboard, video_jobs, prompts,
 )
 
 app = FastAPI(title="SessionGuard API", version="1.2.0", docs_url="/docs")
@@ -56,7 +56,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 @app.on_event("startup")
 def on_startup():
-    init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6(); init_db_v7()
+    init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6(); init_db_v7(); init_db_v8()
     seed_demo_data(); seed_demo_user(); seed_presets()
 
     # Load API key from environment (secure method)
@@ -104,4 +104,6 @@ app.include_router(ocr_calibrate.router,    prefix="/api/v1/ocr-calibrate")
 app.include_router(updater.router,          prefix="/api/v1/updater")
 app.include_router(import_wizard.router,     prefix="/api/v1/import-wizard")
 app.include_router(dashboard.router,        prefix="/api/v1/dashboard")
+app.include_router(video_jobs.router,       prefix="/api/v1/video-jobs")
+app.include_router(prompts.router,          prefix="/api/v1/prompts")
 
