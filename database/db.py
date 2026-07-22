@@ -722,3 +722,25 @@ def init_db_v8():
     conn.commit()
     conn.close()
     print("[DB] V8 prompt versioning tables applied.")
+
+# ── Phase 5 (D6): AI cost tracking ────────────────────────────────────────────
+SCHEMA_V9_SQL = """
+CREATE TABLE IF NOT EXISTS ai_cost_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER,
+    model TEXT NOT NULL,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+"""
+
+
+def init_db_v9():
+    """Apply Phase 5 (D6) AI cost tracking — idempotent."""
+    conn = get_connection()
+    conn.executescript(SCHEMA_V9_SQL)
+    conn.commit()
+    conn.close()
+    print("[DB] V9 AI cost tracking applied.")

@@ -486,6 +486,7 @@ def get_ai_status() -> dict:
             f"Claude AI active — model {MODEL}" if _api_available()
             else "Fallback mode active — set ANTHROPIC_API_KEY to enable Claude AI."
         ),
+        "cost_today":       get_daily_cost(),
     }
 
 
@@ -517,6 +518,7 @@ def get_ai_status() -> dict:
             f"Claude AI active — model {MODEL}" if avail
             else "Fallback mode — set ANTHROPIC_API_KEY to enable Claude AI."
         ),
+        "cost_today":       get_daily_cost(),
     }
 # ── Aliases for route compatibility ───────────────────────────────────────────
 _api_available            = is_available
@@ -538,8 +540,8 @@ def generate_comparison_narrative(session_ids: list) -> dict:
     import json as _json
     prompt = f"Compare these {len(sessions)} sessions in 3-4 sentences, focusing on behaviour patterns:\n{_json.dumps(data, indent=2)}"
     if api_key:
-        result = _call_claude(prompt, api_key)
-        if result: return {"content": result, "source": "claude", "model": MODEL}
+        text, _ = _call_claude(prompt, api_key)
+        if text: return {"content": text, "source": "claude", "model": MODEL}
     best = max(sessions, key=lambda x: float(x["rtp"] or 0))
     worst = min(sessions, key=lambda x: float(x["rtp"] or 0))
     fallback = (f"Compared {len(sessions)} sessions. Best RTP: {best['game_name']} at {best['rtp']}%. "
