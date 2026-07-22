@@ -181,20 +181,25 @@ async def upload_file(
     # Read file content to check size and write to disk
     file_size = 0
     chunk_size = 8192  # 8KB chunks
-    with dest_path.open("wb") as f:
-        while chunk := await file.file.read(chunk_size):
-            file_size += len(chunk)
-            if file_size > MAX_UPLOAD_SIZE_BYTES:
-                # Delete partial file
-                dest_path.unlink(missing_ok=True)
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_MB}MB."
-                )
-            f.write(chunk)
-    
+    try:
+        with dest_path.open("wb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                file_size += len(chunk)
+                if file_size > MAX_UPLOAD_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE_MB}MB."
+                    )
+                f.write(chunk)
+    except HTTPException:
+        dest_path.unlink(missing_ok=True)
+        raise
+
     # Reset file pointer for potential re-use
-    await file.file.seek(0)
+    await file.seek(0)
 
     logger.info(f"File uploaded: {file.filename}, size: {file_size} bytes, type: {file_type}")
 

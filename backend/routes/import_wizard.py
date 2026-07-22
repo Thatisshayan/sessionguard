@@ -2,7 +2,7 @@
 backend/routes/import_wizard.py - V14 Session Import Wizard
 Original: ChatGPT | Reviewed + integrated: Claude
 """
-import json, shutil, uuid
+import json, shutil, uuid, logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -10,6 +10,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from database.db import get_connection
 from engines.csv_import_engine import import_csv, preview_csv
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import", tags=["import-wizard"])
 
@@ -128,5 +130,6 @@ def confirm_import(payload: ConfirmImportRequest) -> Dict[str, Any]:
             conn.execute("UPDATE sessions SET event_count=? WHERE id=?", (imported, session_id))
             conn.commit()
         conn.close()
-    except: pass
+    except Exception as e:
+        log.warning("event_count_update_failed", session_id=session_id, error=str(e))
     return {"session_id": session_id, "event_count": imported, "skipped": int(result.get("skipped",0)), "warnings": result.get("warnings",[])}

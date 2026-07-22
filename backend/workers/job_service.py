@@ -13,9 +13,7 @@ Job types:
 
 Maturity: Enhanced Prototype — thread pool executor, retry with backoff,
           WebSocket progress, cooperative cancellation, worker health.
-Future:   Replace with Celery + Redis (V7), add distributed worker metrics (V8).
 """
-
 from __future__ import annotations
 import json
 import logging
@@ -29,6 +27,8 @@ from typing import Callable, Any
 
 import structlog
 from database.db import get_connection
+
+log = structlog.get_logger()
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 MAX_WORKERS = 4
@@ -88,9 +88,9 @@ def get_job(job_id: int | dict) -> dict | None:
         return None
     d = dict(row)
     try: d["payload"] = json.loads(d["payload"])
-    except: pass
+    except (json.JSONDecodeError, TypeError): log.warning("job_payload_not_json", job_id=d.get("id"))
     try: d["result"]  = json.loads(d["result"])
-    except: pass
+    except (json.JSONDecodeError, TypeError): pass  # result may legitimately be non-JSON
     return d
 
 
@@ -116,7 +116,7 @@ def list_jobs(
     for r in rows:
         d = dict(r)
         try: d["payload"] = json.loads(d["payload"])
-        except: pass
+        except (json.JSONDecodeError, TypeError): log.warning("job_payload_not_json", job_id=d.get("id"))
         result.append(d)
     return result
 
@@ -141,10 +141,12 @@ def _is_cancelled(job_id: int) -> bool:
 
 def _run_video_pipeline(job_id: int, job: dict):
     from engines.video_pipeline import run_video_pipeline
-    payload    = job.get("payload", {})
-    video_path = payload.get("video_path")
-    roi_config = payload.get("roi_config")
-    fps        = payload.get("fps", 1.0)
+    payload         = job.get("payload", {})
+    video_path      = payload.get("video_path")
+    roi_config      = payload.get("roi_config")
+    fps             = payload.get("fps", 1.0)
+    workers         = payload.get("workers", 1)
+    dedup_threshold = payload.get("dedup_threshold", 0)
 
     if not video_path:
         update_job(job_id, status="error", error_message="No video_path in payload.",
@@ -165,6 +167,8 @@ def _run_video_pipeline(job_id: int, job: dict):
         roi_config=roi_config,
         fps=fps,
         progress_cb=progress_cb,
+        workers=workers,
+        dedup_threshold=dedup_threshold,
     )
     status = "complete" if result.get("success") else "error"
     update_job(job_id,

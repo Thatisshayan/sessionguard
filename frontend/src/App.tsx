@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { NotificationCenter } from './components/NotificationCenter'
 import { RequireAdmin } from './components/RequireAdmin'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // ── Pages (lazy-loaded — each page is its own chunk, split from the main bundle) ──
 const Dashboard       = lazy(() => import('./pages/Dashboard'))
@@ -248,6 +249,7 @@ function AppShell() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
         <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)' }}>
+          <ErrorBoundary>
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/login"             element={<Login />} />
@@ -272,6 +274,7 @@ function AppShell() {
               <Route path="*"                  element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

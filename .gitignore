@@ -27,3 +27,8 @@ config/sessionguard.db-shm
 
 # SECURITY: Never commit real API keys or secrets
 # Always use environment variables for sensitive data
+.coverage
+
+# Test artifacts
+test-results/
+.codebase-memory/

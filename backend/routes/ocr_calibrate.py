@@ -3,8 +3,9 @@ backend/routes/ocr_calibrate.py
 ---------------------------------
 OCR calibration helper.
 Upload a screenshot → get detected regions highlighted → adjust ROI.
-POST /ocr-calibrate/scan   -- scan image, return all detected text with positions
-POST /ocr-calibrate/test   -- test specific ROI coordinates on an image
+POST /ocr-calibrate/scan       -- scan image, return all detected text with positions
+POST /ocr-calibrate/test-roi   -- test specific ROI coordinates on an image
+POST /ocr-calibrate/auto       -- auto-detect ROI regions from screenshot
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
@@ -132,6 +133,28 @@ async def test_roi(
         }
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+@router.post("/ocr-calibrate/auto")
+async def auto_calibrate(file: UploadFile = File(...)):
+    """
+    Auto-detect ROI regions from a game screenshot.
+    Uses contour detection + OCR label matching to find balance/bet/win fields.
+    Returns a ready-to-use roi_config dict.
+    """
+    suffix = Path(file.filename or 'img.png').suffix or '.png'
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        from engines.roi_calibrator import auto_calibrate_roi
+        result = auto_calibrate_roi(tmp_path)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
@@ -35,6 +36,48 @@ from engines.ocr_engine import (
 BASE_DIR    = Path(__file__).resolve().parent.parent
 STORAGE_DIR = BASE_DIR / "storage"
 FRAMES_DIR  = STORAGE_DIR / "recordings"
+
+
+# ── Perceptual hash for scene-change dedup ────────────────────────────────────
+
+def _phash(image_path: str, hash_size: int = 8) -> int:
+    """
+    Compute a perceptual hash (pHash) for an image using DCT.
+    Returns an integer hash; hamming distance between hashes indicates similarity.
+    """
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return 0
+    # Resize to hash_size*4 x hash_size*4 for DCT
+    resized = cv2.resize(img, (hash_size * 4, hash_size * 4), interpolation=cv2.INTER_AREA)
+    # Float and DCT
+    float_img = np.float32(resized)
+    dct = cv2.dct(float_img)
+    # Keep top-left hash_size x hash_size (low frequencies)
+    dct_low = dct[:hash_size, :hash_size]
+    # Median threshold
+    median = np.median(dct_low)
+    # Binary hash: 1 if above median, 0 otherwise
+    bits = (dct_low > median).flatten()
+    # Convert to integer
+    hash_val = 0
+    for bit in bits:
+        hash_val = (hash_val << 1) | int(bit)
+    return hash_val
+
+
+def _hamming_distance(h1: int, h2: int) -> int:
+    """Count differing bits between two hashes."""
+    return bin(h1 ^ h2).count('1')
+
+
+# ── Top-level worker for parallel OCR (must be picklable for ProcessPoolExecutor) ──
+
+def _ocr_worker(args: tuple) -> dict:
+    """Run OCR on a single frame. Designed for ProcessPoolExecutor."""
+    path, roi_config = args
+    from engines.ocr_engine import extract_fields_from_image
+    return extract_fields_from_image(path, roi_config=roi_config)
 
 
 # ── 1. Dependency check ───────────────────────────────────────────────────────
@@ -148,36 +191,142 @@ def ocr_frames(
     session_id: int | None  = None,
     upload_id: int | None   = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
+    workers: int = 1,
+    dedup_threshold: int = 0,
 ) -> list[dict]:
     """
     Run OCR on each extracted frame.
     Returns list of per-frame OCR results (fields + confidence + flagged).
     Persists results to ocr_results table.
+
+    workers: number of parallel OCR workers (default 1 = sequential).
+    dedup_threshold: hamming distance threshold for pHash dedup (0 = disabled).
+                     Frames with distance < threshold to the last processed frame
+                     are skipped (OCR result copied from last frame).
+                     Recommended: 5-10 for typical slot machine videos.
     """
-    results = []
-    total   = len(frames)
+    from engines.ocr_engine import persist_ocr_result
 
-    for i, frame_info in enumerate(frames):
-        path   = frame_info["stored_path"]
-        fields = extract_fields_from_image(path, roi_config=roi_config)
+    total = len(frames)
+    last_hash = None
+    last_ocr = None
 
-        # Attach frame metadata
-        fields["timestamp_seconds"] = frame_info["timestamp_seconds"]
-        fields["scene_changed"]     = frame_info["scene_changed"]
-        fields["diff_score"]        = frame_info["diff_score"]
+    if workers > 1:
+        # Parallel OCR with dedup: pre-compute hashes, filter, then dispatch
+        if dedup_threshold > 0:
+            frames_to_process = []
+            skip_indices = set()
+            last_h = None
+            for i, frame_info in enumerate(frames):
+                h = _phash(frame_info["stored_path"])
+                if last_h is not None and _hamming_distance(h, last_h) < dedup_threshold:
+                    skip_indices.add(i)
+                else:
+                    last_h = h
+                    frames_to_process.append((i, frame_info))
 
-        # Persist to DB
-        result_id = persist_ocr_result(
-            frame_path=path,
-            fields=fields,
-            session_id=session_id,
-            upload_id=upload_id,
-        )
-        fields["ocr_result_id"] = result_id
-        results.append(fields)
+            # Process only non-duplicate frames
+            tasks = [(fi["stored_path"], roi_config) for _, fi in frames_to_process]
+            ocr_map = {}
 
-        if progress_cb:
-            progress_cb(i + 1, total)
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                futures = {}
+                for i, (orig_idx, _) in enumerate(frames_to_process):
+                    f = pool.submit(_ocr_worker, tasks[i])
+                    futures[f] = orig_idx
+
+                for future in as_completed(futures):
+                    orig_idx = futures[future]
+                    try:
+                        ocr_map[orig_idx] = future.result()
+                    except Exception:
+                        ocr_map[orig_idx] = {"fields": {}, "flagged": True, "overall_confidence": 0.0}
+
+            # Build results: fill skipped frames with previous result
+            raw_results = [None] * total
+            last_result = None
+            for i in range(total):
+                if i in ocr_map:
+                    last_result = ocr_map[i]
+                    raw_results[i] = last_result
+                elif last_result is not None:
+                    raw_results[i] = {**last_result, "_deduped": True}
+                else:
+                    raw_results[i] = {"fields": {}, "flagged": True, "overall_confidence": 0.0}
+
+            if progress_cb:
+                progress_cb(total, total)
+        else:
+            # No dedup: dispatch all frames
+            tasks = [(f["stored_path"], roi_config) for f in frames]
+            raw_results = [None] * total
+
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                future_to_idx = {pool.submit(_ocr_worker, task): i for i, task in enumerate(tasks)}
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        raw_results[idx] = future.result()
+                    except Exception:
+                        raw_results[idx] = {"fields": {}, "flagged": True, "overall_confidence": 0.0}
+                    if progress_cb:
+                        progress_cb(sum(1 for r in raw_results if r is not None), total)
+
+        # Attach frame metadata + persist sequentially
+        results = []
+        for i, (frame_info, ocr) in enumerate(zip(frames, raw_results)):
+            if ocr is None:
+                ocr = {"fields": {}, "flagged": True, "overall_confidence": 0.0}
+            ocr["timestamp_seconds"] = frame_info["timestamp_seconds"]
+            ocr["scene_changed"]     = frame_info["scene_changed"]
+            ocr["diff_score"]        = frame_info["diff_score"]
+
+            result_id = persist_ocr_result(
+                frame_path=frame_info["stored_path"],
+                fields=ocr,
+                session_id=session_id,
+                upload_id=upload_id,
+            )
+            ocr["ocr_result_id"] = result_id
+            results.append(ocr)
+    else:
+        # Sequential OCR with optional dedup
+        results = []
+        for i, frame_info in enumerate(frames):
+            path = frame_info["stored_path"]
+
+            # Dedup check: skip OCR if frame is too similar to last
+            skip = False
+            if dedup_threshold > 0:
+                h = _phash(path)
+                if last_hash is not None and _hamming_distance(h, last_hash) < dedup_threshold:
+                    skip = True
+                else:
+                    last_hash = h
+
+            if skip and last_ocr is not None:
+                fields = {**last_ocr, "_deduped": True}
+            else:
+                fields = extract_fields_from_image(path, roi_config=roi_config)
+                last_ocr = fields
+                if dedup_threshold > 0 and last_hash is None:
+                    last_hash = _phash(path)
+
+            fields["timestamp_seconds"] = frame_info["timestamp_seconds"]
+            fields["scene_changed"]     = frame_info["scene_changed"]
+            fields["diff_score"]        = frame_info["diff_score"]
+
+            result_id = persist_ocr_result(
+                frame_path=path,
+                fields=fields,
+                session_id=session_id,
+                upload_id=upload_id,
+            )
+            fields["ocr_result_id"] = result_id
+            results.append(fields)
+
+            if progress_cb:
+                progress_cb(i + 1, total)
 
     return results
 
@@ -258,12 +407,16 @@ def run_video_pipeline(
     roi_config: dict | None = None,
     fps: float = 1.0,
     progress_cb: Optional[Callable[[str, int, int], None]] = None,
+    workers: int = 1,
+    dedup_threshold: int = 0,
 ) -> dict:
     """
     Run the full video → frames → OCR → events pipeline.
     Updates video_jobs table throughout for progress tracking.
 
     progress_cb(stage, current, total) called at each stage.
+    workers: number of parallel OCR workers (default 1 = sequential).
+    dedup_threshold: pHash hamming distance threshold for scene dedup (0 = disabled).
     """
     conn = get_connection()
     job_cur = conn.execute(
@@ -318,6 +471,8 @@ def run_video_pipeline(
             session_id=session_id,
             upload_id=upload_id,
             progress_cb=ocr_progress,
+            workers=workers,
+            dedup_threshold=dedup_threshold,
         )
         _update_job(frames_ocr_done=len(ocr_results))
 

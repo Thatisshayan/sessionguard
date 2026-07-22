@@ -23,7 +23,8 @@ PySide6==6.7.0
 opencv-python==4.9.0.80
 pytesseract==0.3.10
 Pillow==10.3.0
-# easyocr==1.7.1          # GPU-accelerated OCR backup (Phase 5+)
+# easyocr==1.7.1          # GPU-accelerated OCR fallback (optional — auto-used when Tesseract confidence < 0.75)
+# onnxruntime==1.18.0     # ONNX Runtime for EasyOCR GPU (optional — auto-used if installed)
 
 # ── Behavior Engine (sklearn patterns) ────────────────────────────────────────
 scikit-learn==1.5.0
@@ -46,6 +47,9 @@ pyclamd==0.4.0              # ClamAV virus scanning (optional - skip if unavaila
 
 # ── Observability (Phase 1: A4 structured logging) ────────────────────────────
 structlog==24.1.0
+
+# ── Environment (Phase 2: A3 .env support) ────────────────────────────────────
+python-dotenv==1.0.1
 
 # ── Future / SaaS (uncomment when needed) ────────────────────────────────────
 # redis==5.0.4            # Job queue broker

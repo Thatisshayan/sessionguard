@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    AppHandle, CustomMenuItem, Manager, SystemTray, SystemTrayEvent,
+    AppHandle, CustomMenuItem, GlobalShortcutManager, Manager, SystemTray, SystemTrayEvent,
     SystemTrayMenu, SystemTrayMenuItem, WindowEvent,
 };
 
@@ -187,6 +187,19 @@ fn main() {
 
             // Wait up to 12 seconds for backend
             wait_for_backend(12);
+
+            // Register global shortcuts
+            let handle = app.handle();
+            let mut gs = handle.global_shortcut_manager();
+            let _ = gs.register("Ctrl+Shift+S", move || {
+                if let Some(w) = handle.get_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                    // Emit screenshot event to frontend
+                    let _ = w.emit("global-screenshot", ());
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|event| {

@@ -113,6 +113,9 @@ export const getNetOverTime      = () => client.get('/metrics/net-over-time').th
 export const getPerformanceByGame= () => client.get('/metrics/by-game').then(r => r.data)
 export const getSessionMetrics   = (id: number) => client.get(`/metrics/session/${id}`).then(r => r.data)
 
+// ── Dashboard (aggregated) ────────────────────────────────────────────────────
+export const getDashboardSummary = () => client.get('/dashboard/summary').then(r => r.data)
+
 // ── Insights ──────────────────────────────────────────────────────────────────
 export const getInsights         = (params: any = {}) => client.get('/insights', { params }).then(r => r.data)
 export const regenerateInsights  = (id: number) => client.post(`/insights/${id}/regenerate`).then(r => r.data)

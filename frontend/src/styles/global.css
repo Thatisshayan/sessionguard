@@ -1,17 +1,19 @@
-/* styles/global.css
-   Design tokens for the SessionGuard dark command-center theme.
+/* styles/global.css — tokens.css
+   Design tokens for SessionGuard.
+   Dark is default; light available via data-theme="light" on <html>.
    All components pull from these variables — no hardcoded colours. */
 
 :root {
-  /* ── Colours ──────────────────────────────────────────────────────────────── */
-  --bg-base:        #0a0c10;   /* deepest background                            */
-  --bg-surface:     #111318;   /* cards, panels                                 */
-  --bg-elevated:    #1a1e26;   /* hover states, dropdowns                       */
-  --bg-border:      #242830;   /* subtle dividers                               */
+  /* ── Colours (dark — default) ─────────────────────────────────────────────── */
+  --bg-base:        #0a0c10;
+  --bg-surface:     #111318;
+  --bg-elevated:    #1a1e26;
+  --bg-border:      #242830;
 
   --text-primary:   #e8eaf0;
   --text-secondary: #8892a4;
   --text-muted:     #4a5265;
+  --text-on-accent: #fff;
 
   --accent-blue:    #3b82f6;
   --accent-green:   #22c55e;
@@ -19,7 +21,6 @@
   --accent-red:     #ef4444;
   --accent-purple:  #a855f7;
 
-  /* Severity colours */
   --severity-critical: #ef4444;
   --severity-warning:  #f59e0b;
   --severity-info:     #3b82f6;
@@ -52,6 +53,29 @@
   /* ── Transitions ──────────────────────────────────────────────────────────── */
   --transition-fast: 120ms ease;
   --transition-base: 200ms ease;
+}
+
+/* ── Light theme ─────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-base:        #f5f6f8;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #eef0f4;
+  --bg-border:      #d4d8e0;
+
+  --text-primary:   #1a1e26;
+  --text-secondary: #555e70;
+  --text-muted:     #8892a4;
+  --text-on-accent: #fff;
+
+  --accent-blue:    #2563eb;
+  --accent-green:   #16a34a;
+  --accent-amber:   #d97706;
+  --accent-red:     #dc2626;
+  --accent-purple:  #9333ea;
+
+  --severity-critical: #dc2626;
+  --severity-warning:  #d97706;
+  --severity-info:     #2563eb;
 }
 
 /* ── Reset ─────────────────────────────────────────────────────────────────── */

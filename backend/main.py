@@ -5,6 +5,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.insert(0, str(ROOT))
 
+# ── Load .env file if present (before any env var reads) ──────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env")
+except ImportError:
+    pass
+
 # ── Windows: pin Tesseract paths before any engine imports pytesseract ────────
 if platform.system() == "Windows":
     _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
@@ -33,6 +40,7 @@ from backend.routes import (
     ws, notes, evidence, recorder, openapi_export,
     system_config, data_export, trends, search,
     tags, intelligence, coach, ocr_calibrate, updater, import_wizard,
+    dashboard,
 )
 
 app = FastAPI(title="SessionGuard API", version="1.2.0", docs_url="/docs")
@@ -95,4 +103,5 @@ app.include_router(coach.router,            prefix="/api/v1/coach")
 app.include_router(ocr_calibrate.router,    prefix="/api/v1/ocr-calibrate")
 app.include_router(updater.router,          prefix="/api/v1/updater")
 app.include_router(import_wizard.router,     prefix="/api/v1/import-wizard")
+app.include_router(dashboard.router,        prefix="/api/v1/dashboard")
 

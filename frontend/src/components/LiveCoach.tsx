@@ -60,7 +60,7 @@ export default function LiveCoach({ runId, running, style = 'balanced' }: Props)
         <div style={{ flex:1 }}>
           <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)' }}>
             Live Coach
-            {aiActive && <span style={{ marginLeft:8, fontSize:9, fontWeight:600, background:'rgba(59,130,246,0.15)', color:'#3b82f6', padding:'2px 6px', borderRadius:4, textTransform:'uppercase' }}>Claude AI</span>}
+            {aiActive && <span style={{ marginLeft:8, fontSize:9, fontWeight:600, background:'rgba(59,130,246,0.15)', color:'var(--accent-blue)', padding:'2px 6px', borderRadius:4, textTransform:'uppercase' }}>Claude AI</span>}
           </div>
           <div style={{ fontSize:10, color:'var(--text-muted)', marginTop:2 }}>
             {running ? `${aiActive?'AI':'Rule-based'} coaching active — ${style}` : 'Start a session to activate coaching'}

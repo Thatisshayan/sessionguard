@@ -155,7 +155,7 @@ export default function ImportWizard() {
           ))}
         </div>
 
-        {error && <div style={{ ...card, borderColor:"rgba(239,68,68,0.5)", background:"rgba(127,29,29,0.2)", color:"#fca5a5", marginBottom:16 }}>{error}</div>}
+        {error && <div style={{ ...card, borderColor:"rgba(239,68,68,0.5)", background:"rgba(127,29,29,0.2)", color:"var(--accent-red)", marginBottom:16 }}>{error}</div>}
 
         <div style={card}>
           {/* STEP 1 */}
@@ -183,7 +183,7 @@ export default function ImportWizard() {
                         {(["date","bet","win","balance","spin_number"] as const).map(f => (
                           <td key={f} style={{ padding:4 }}><input value={row[f]} onChange={e => updateRow(i,f,e.target.value)} style={{...inp, padding:"8px 10px"}} placeholder={f==="date"?"2026-05-03":f==="balance"?"250.00":"1.00"} /></td>
                         ))}
-                        <td style={{ padding:4 }}><button type="button" onClick={() => removeRow(i)} style={{ ...btn, color:"#fca5a5", padding:"8px 12px" }}>✕</button></td>
+                        <td style={{ padding:4 }}><button type="button" onClick={() => removeRow(i)} style={{ ...btn, color:"var(--accent-red)", padding:"8px 12px" }}>✕</button></td>
                       </tr>
                     ))}</tbody>
                   </table>
@@ -228,8 +228,8 @@ export default function ImportWizard() {
             <div>
               <h2 style={{ marginTop:0 }}>3. Preview first 10 rows</h2>
               {previewIssues.length > 0
-                ? <div style={{ padding:12, marginBottom:16, borderRadius:"var(--radius-sm)", border:"1px solid rgba(239,68,68,0.4)", background:"rgba(127,29,29,0.15)", color:"#fca5a5" }}><strong>Issues:</strong><ul style={{ margin:"6px 0 0", paddingLeft:20 }}>{previewIssues.map(i=><li key={i}>{i}</li>)}</ul></div>
-                : <div style={{ padding:12, marginBottom:16, borderRadius:"var(--radius-sm)", border:"1px solid rgba(34,197,94,0.4)", background:"rgba(20,83,45,0.15)", color:"#86efac" }}>✅ No blocking issues in preview rows.</div>
+                ? <div style={{ padding:12, marginBottom:16, borderRadius:"var(--radius-sm)", border:"1px solid rgba(239,68,68,0.4)", background:"rgba(127,29,29,0.15)", color:"var(--accent-red)" }}><strong>Issues:</strong><ul style={{ margin:"6px 0 0", paddingLeft:20 }}>{previewIssues.map(i=><li key={i}>{i}</li>)}</ul></div>
+                : <div style={{ padding:12, marginBottom:16, borderRadius:"var(--radius-sm)", border:"1px solid rgba(34,197,94,0.4)", background:"rgba(20,83,45,0.15)", color:"var(--accent-green)" }}>✅ No blocking issues in preview rows.</div>
               }
               <div style={{ overflowX:"auto" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
@@ -248,7 +248,7 @@ export default function ImportWizard() {
           {step===4 && (
             <div>
               <h2 style={{ marginTop:0 }}>4. Import complete</h2>
-              <div style={{ padding:16, borderRadius:"var(--radius-sm)", border:"1px solid rgba(34,197,94,0.4)", background:"rgba(20,83,45,0.15)", color:"#86efac", marginBottom:16 }}>
+              <div style={{ padding:16, borderRadius:"var(--radius-sm)", border:"1px solid rgba(34,197,94,0.4)", background:"rgba(20,83,45,0.15)", color:"var(--accent-green)", marginBottom:16 }}>
                 ✅ {source==="video" ? "Video sent to upload pipeline." : `Imported ${result?.event_count ?? result?.imported ?? 0} events successfully.`}
               </div>
               {result?.warnings?.length ? <div style={{ padding:12, borderRadius:"var(--radius-sm)", border:"1px solid var(--bg-border)", color:"var(--text-secondary)", marginBottom:16 }}><strong>Warnings:</strong><ul style={{ margin:"6px 0 0", paddingLeft:20 }}>{result.warnings.map(w=><li key={w}>{w}</li>)}</ul></div> : null}

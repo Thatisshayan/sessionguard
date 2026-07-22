@@ -187,6 +187,77 @@ def scan_image(file_path: str) -> dict:
     }
 
 
+# ── EasyOCR fallback ─────────────────────────────────────────────────────────
+
+_easyocr_reader = None
+
+def _get_easyocr_reader():
+    """Lazy-load EasyOCR reader (GPU if available, else CPU)."""
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        import easyocr
+        _easyocr_reader = easyocr.Reader(
+            ["en"],
+            gpu=False,  # safe default; set True via env EASYOCR_GPU=1
+        )
+    return _easyocr_reader
+
+
+def scan_with_easyocr(file_path: str) -> dict:
+    """
+    OCR scan using EasyOCR (fallback for low-confidence Tesseract results).
+    Returns same format as scan_image for compatibility.
+    """
+    try:
+        reader = _get_easyocr_reader()
+    except ImportError:
+        return {"error": "EasyOCR not installed. pip install easyocr", "text": "",
+                "confidence_average": None, "words": []}
+    except Exception as e:
+        return {"error": f"EasyOCR init failed: {e}", "text": "",
+                "confidence_average": None, "words": []}
+
+    try:
+        results = reader.readtext(file_path)
+    except Exception as e:
+        return {"error": f"EasyOCR read failed: {e}", "text": "",
+                "confidence_average": None, "words": []}
+
+    words = []
+    confidences = []
+    for (bbox, text, conf) in results:
+        if not text.strip():
+            continue
+        # bbox is [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] — compute bounding rect
+        xs = [p[0] for p in bbox]
+        ys = [p[1] for p in bbox]
+        x1, y1 = int(min(xs)), int(min(ys))
+        w, h = int(max(xs) - x1), int(max(ys) - y1)
+
+        c = float(conf)
+        confidences.append(c)
+        words.append({
+            "text":       text.strip(),
+            "confidence": round(c, 3),
+            "left":       x1,
+            "top":        y1,
+            "width":      w,
+            "height":     h,
+        })
+
+    extracted_text = " ".join(w["text"] for w in words)
+    confidence_avg = round(sum(confidences) / len(confidences), 3) if confidences else None
+
+    return {
+        "source_path":        str(Path(file_path)),
+        "text":               extracted_text,
+        "confidence_average": confidence_avg,
+        "words":              words,
+        "word_count":         len(words),
+        "backend":            "easyocr",
+    }
+
+
 # ── Field extraction ──────────────────────────────────────────────────────────
 
 def _extract_numeric(words: list[dict], region_words: list[dict] | None = None) -> tuple[float | None, float]:
@@ -220,6 +291,7 @@ def extract_fields_from_image(
 ) -> dict:
     """
     Extract balance, bet, win fields from a game screenshot.
+    Automatically falls back to EasyOCR when Tesseract confidence < 0.75.
 
     roi_config format (from profile):
         {
@@ -248,15 +320,25 @@ def extract_fields_from_image(
         "win":     "win_region",
     }
 
+    # Check if EasyOCR is available for fallback
+    try:
+        import easyocr
+        easyocr_available = True
+    except ImportError:
+        easyocr_available = False
+
     for field_name, roi_key in field_defs.items():
         roi = (roi_config or {}).get(roi_key)
         if roi:
             cropped   = crop_roi(image, roi)
             processed = preprocess_image(cropped, scale=scale, threshold=threshold)
+            # Save cropped region for EasyOCR fallback
+            crop_path = file_path
         else:
-            # No ROI — scan full image
             processed = preprocess_image(image, scale=scale, threshold=threshold)
+            crop_path = file_path
 
+        # Tesseract pass
         data = pytesseract.image_to_data(
             processed,
             output_type=pytesseract.Output.DICT,
@@ -276,7 +358,35 @@ def extract_fields_from_image(
             words.append({"text": stripped, "confidence": conf})
 
         value, conf = _extract_numeric(words)
-        low_conf    = conf < CONFIDENCE_THRESHOLD and value is not None
+
+        # EasyOCR fallback: if Tesseract confidence is low, try EasyOCR
+        if conf < CONFIDENCE_THRESHOLD and easyocr_available:
+            try:
+                # Save preprocessed image for EasyOCR
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                    processed.save(tmp.name)
+                    tmp_path = tmp.name
+
+                easy_result = scan_with_easyocr(tmp_path)
+                easy_words = easy_result.get("words", [])
+
+                if easy_words:
+                    easy_value, easy_conf = _extract_numeric(easy_words)
+                    # Use EasyOCR result if it's better
+                    if easy_conf > conf:
+                        value = easy_value
+                        conf = easy_conf
+                        words = easy_words
+            except Exception:
+                pass  # fallback failed, keep Tesseract result
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+        low_conf = conf < CONFIDENCE_THRESHOLD and value is not None
 
         if low_conf:
             flag = True
