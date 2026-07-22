@@ -211,8 +211,8 @@ Produce the JSON analysis now."""
 
 # ── API call ──────────────────────────────────────────────────────────────────
 
-def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) -> str:
-    """Make raw API call using urllib. Returns response text."""
+def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) -> tuple[str, dict]:
+    """Make raw API call using urllib. Returns (response_text, usage_dict)."""
     payload = json.dumps({
         "model":      MODEL,
         "max_tokens": MAX_TOKENS,
@@ -236,7 +236,9 @@ def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) ->
     try:
         with urllib.request.urlopen(req, timeout=30) as response:
             body = json.loads(response.read())
-            return body["content"][0]["text"]
+            text = body["content"][0]["text"]
+            usage = body.get("usage", {})
+            return text, usage
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
         raise RuntimeError(f"Anthropic API error {e.code}: {error_body}")
@@ -290,7 +292,7 @@ def analyse_session_with_ai(session_id: int) -> dict:
 
     if not api_key:
         # Try Ollama before rule-based fallback
-        if is_ollama_available():
+        if is_ollama_available() and not _is_budget_exceeded_unsafe():
             try:
                 from engines.prompt_manager import get_active_prompt
                 active = get_active_prompt("session_analysis")
@@ -331,7 +333,8 @@ def analyse_session_with_ai(session_id: int) -> dict:
         active = get_active_prompt("session_analysis")
         system_prompt = active["system_prompt"] if active else None
         prompt      = _build_user_prompt(summary)
-        raw_text    = _call_claude(prompt, api_key, system_prompt=system_prompt)
+        raw_text, usage = _call_claude(prompt, api_key, system_prompt=system_prompt)
+        _log_ai_cost(session_id, MODEL, usage)
 
         from backend.schemas.ai import parse_ai_response
         response = parse_ai_response(raw_text)
@@ -361,6 +364,86 @@ def analyse_session_with_ai(session_id: int) -> dict:
         result["session_id"]  = session_id
         result["ai_error"]    = str(e)
         return result
+
+
+def _is_budget_exceeded_unsafe() -> bool:
+    """Check if daily AI budget is exceeded. Safe to call without import cycles."""
+    import os
+    budget = float(os.getenv("SG_AI_BUDGET_USD", "10.0"))
+    try:
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT COALESCE(SUM(cost_usd),0) FROM ai_cost_log WHERE date(created_at) = date('now')"
+        ).fetchone()
+        conn.close()
+        return (row[0] or 0) >= budget
+    except Exception:
+        return False
+
+
+# ── Cost tracking ─────────────────────────────────────────────────────────────
+
+MODEL_PRICING = {
+    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
+    "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
+    "claude-haiku-3.5": {"input": 0.80, "output": 4.0},
+}
+
+
+def _compute_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Compute cost in USD for a given model and token counts."""
+    pricing = MODEL_PRICING.get(model, {"input": 3.0, "output": 15.0})
+    return (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+
+
+def _log_ai_cost(session_id: int, model: str, usage: dict):
+    """Log AI API cost to the database."""
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    cost = _compute_cost(model, input_tokens, output_tokens)
+    try:
+        conn = get_connection()
+        conn.execute(
+            "INSERT INTO ai_cost_log (session_id, model, input_tokens, output_tokens, cost_usd) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, model, input_tokens, output_tokens, cost)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def get_daily_cost() -> dict:
+    """Return today's AI cost breakdown."""
+    budget = float(os.getenv("SG_AI_BUDGET_USD", "10.0"))
+    try:
+        conn = get_connection()
+        row = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), "
+            "COALESCE(SUM(cost_usd),0) FROM ai_cost_log WHERE date(created_at) = date('now')"
+        ).fetchone()
+        conn.close()
+        spent = row[3] if row else 0.0
+        return {
+            "calls_today": row[0] if row else 0,
+            "input_tokens": row[1] if row else 0,
+            "output_tokens": row[2] if row else 0,
+            "cost_usd": round(spent, 6),
+            "budget_usd": budget,
+            "remaining_usd": round(max(0, budget - spent), 6),
+            "budget_exceeded": spent >= budget,
+        }
+    except Exception:
+        return {"calls_today": 0, "input_tokens": 0, "output_tokens": 0,
+                "cost_usd": 0, "budget_usd": budget, "remaining_usd": budget,
+                "budget_exceeded": False}
+
+
+def is_budget_exceeded() -> bool:
+    """Check if daily budget is exceeded."""
+    usage = get_daily_cost()
+    return usage.get("budget_exceeded", False)
 
 
 def _persist_ai_insights(session_id: int, analysis: dict):
