@@ -40,7 +40,7 @@ from backend.routes import (
     ws, notes, evidence, recorder, openapi_export,
     system_config, data_export, trends, search,
     tags, intelligence, coach, ocr_calibrate, updater, import_wizard,
-    dashboard, video_jobs, prompts,
+    dashboard, video_jobs, prompts, dataset_quality,
 )
 
 app = FastAPI(title="SessionGuard API", version="1.2.0", docs_url="/docs")
@@ -106,4 +106,5 @@ app.include_router(import_wizard.router,     prefix="/api/v1/import-wizard")
 app.include_router(dashboard.router,        prefix="/api/v1/dashboard")
 app.include_router(video_jobs.router,       prefix="/api/v1/video-jobs")
 app.include_router(prompts.router,          prefix="/api/v1/prompts")
+app.include_router(dataset_quality.router, prefix="/api/v1/intelligence/dataset-quality")
 
