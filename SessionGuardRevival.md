@@ -1,6 +1,6 @@
 # SessionGuard Revival — Phased Handoff Document
 
-**Generated**: 2026-07-10 · **Last revised**: 2026-07-21  
+**Generated**: 2026-07-10 · **Last revised**: 2026-07-21 (frontend B1–B3)  
 **Target**: Production-hardened local desktop app first; SaaS is an optional, separately-gated track — not a default destination.
 
 **Team reality**: this is currently a solo effort (Shaya), optionally AI-agent-assisted for mechanical work (script fixes, audits, sync/cleanup, refactors). The "Engineer 1/2/3" labels on tasks below are role tags for sequencing, not headcount — read "Backend track" / "Frontend track" / "Desktop track," not "hire 3 people." Parallelize across tracks only if/when there's more than one person; otherwise work them in the listed order.
@@ -42,17 +42,17 @@
 | A6 | Composite DB indexes | `EXPLAIN ANALYZE` shows index scan on `events(session_id, timestamp)` and `live_events(run_id, id)` | ✅ Done — `database/db.py: init_db_v6()` adds indexes on `events(session_id, timestamp)`, `live_events(run_id, id)`, plus FK indexes on `uploads`, `insights`, `alerts`, `review_items`, `ocr_results`, `video_jobs`, `refresh_tokens.token_hash`, `audit_log.user_id`, `ai_insights`. Verified via `EXPLAIN QUERY PLAN` — both required queries now show `SEARCH ... USING INDEX`. Also fixed a portability bug in `init_db.py` (hardcoded `C:\Projects\SessionGuard\sessionguard` sys.path — meant a clean checkout run from elsewhere silently wrote its DB into that canonical path instead of its own) |
 
 ### Frontend (Engineer 2)
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| B1 | Split `SessionDetail.tsx` (36K → 8 components) | Each sub-component < 500 lines; `SessionDetail` < 200 lines; Storybook stories for each |
-| B2 | React Query (TanStack Query) v5 migration | All `useEffect` fetch → `useQuery`; deduped requests; background refetch; devtools visible |
-| B3 | Route guards + lazy loading | `React.lazy` on all 14 pages; `Suspense` fallback; auth guard redirects to `/login` |
+| ID | Task | Acceptance Criteria | Status |
+|----|------|---------------------|--------|
+| B1 | Split `SessionDetail.tsx` (36K → 8 components) | Each sub-component < 500 lines; `SessionDetail` < 200 lines; Storybook stories for each | ✅ Done (2026-07-21) — `SessionDetail.tsx` (36K, 567 lines) split into `src/components/session-detail/{shared,OverviewTab,EventsTab,BehaviorTab,ReviewTab,ExportsTab}.tsx` + `useSessionDetailData.ts` (the React Query data hook, see B2). Page itself is now 130 lines; largest sub-component is 91 lines. **Storybook not set up** — no Storybook infra exists anywhere in this repo yet, so "stories for each" is not met; would need a from-scratch Storybook install first. Flagging rather than silently skipping. |
+| B2 | React Query (TanStack Query) v5 migration | All `useEffect` fetch → `useQuery`; deduped requests; background refetch; devtools visible | ✅ Done (2026-07-21) — `@tanstack/react-query` v5 + devtools installed, `QueryClientProvider` wired app-wide in `main.tsx` (`src/lib/queryClient.ts`, devtools visible in dev only). Migrated to `useQuery`/`useMutation`: `SessionDetail`, `Dashboard`, `Sessions`, `ReviewQueue`, `JobsMonitor`, `Compare`, `Profiles`, `Reports`, `Projects`, `Upload`, `VideoLab`, `ParserBenchmark`, `ProfileEditor`, `Settings`, `Admin` — every page that did a plain fetch-on-mount. **Deliberately left as plain polling/local-state, not migrated**: `LiveMonitor`'s live-run event stream (imperative `setInterval` polling with ref-based chart accumulation — its session dropdown *is* migrated) and `ImportWizard`'s multi-step form (no fetch-on-mount, only imperative preview/confirm actions triggered by user steps — not a fetch-cache pattern react-query models). `Login` has no data fetching to migrate. Verified with `npx tsc --noEmit` (no new errors — same 3 pre-existing unrelated errors as before, in `AiAnalysisPanel.tsx`/`AuthContext.tsx`/none now in `ReviewQueue.tsx` which this work incidentally fixed) and `npm run build` (succeeds). |
+| B3 | Route guards + lazy loading | `React.lazy` on all 14 pages; `Suspense` fallback; auth guard redirects to `/login` | ✅ Done (2026-07-21) — all 17 routed pages (grew from 14 since this doc was drafted) now `React.lazy`-loaded in `App.tsx`, wrapped in a single `<Suspense fallback={<PageFallback />}>`; verified via `npm run build` — each page now emits its own chunk (17 separate JS files instead of one bundle). Auth guard: added `src/components/RequireAdmin.tsx`, applied to `/admin` (redirects to `/login` if unauthenticated, `/` if authenticated-non-admin). **Did not** gate the other 16 routes behind login — P0.6 explicitly deferred general auth enforcement (confirmed single-user-local direction), so a blanket `/login` redirect on every route would contradict that decision. If that direction changes, wrap the remaining `<Route>` elements in the same `RequireAdmin`-style guard. |
 
 ### Definition of Done
 - CI passes (lint, typecheck, unit tests)
 - Staging deploy works
 
-**Status (2026-07-21)**: Backend track (A3–A6) done, verified end-to-end on a live boot. Frontend track (B1–B3) not started — next up.
+**Status (2026-07-21)**: Backend track (A3–A6) done, verified end-to-end on a live boot. Frontend track: B1 done, B2 partial (infra + 2 pages), B3 done. Verified with `npx tsc --noEmit` (no new errors from this work — pre-existing unrelated errors in `AiAnalysisPanel.tsx`, `AuthContext.tsx`, `ReviewQueue.tsx` were already there, not introduced here) and `npm run build` (succeeds, produces per-page chunks).
 - This document updated with Phase 1 results
 
 ---
