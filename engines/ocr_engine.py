@@ -298,6 +298,8 @@ def extract_fields_from_image(
             "balance_region": [x, y, width, height],
             "bet_region":     [x, y, width, height],
             "win_region":     [x, y, width, height],
+            "bonus_region":   [x, y, width, height],
+            "jackpot_region": [x, y, width, height],
             "scale":          2.0,
             "threshold":      128,
         }
@@ -318,6 +320,8 @@ def extract_fields_from_image(
         "balance": "balance_region",
         "bet":     "bet_region",
         "win":     "win_region",
+        "bonus":   "bonus_region",
+        "jackpot": "jackpot_region",
     }
 
     # Check if EasyOCR is available for fallback
@@ -423,9 +427,11 @@ def persist_ocr_result(
         """INSERT INTO ocr_results
            (session_id, upload_id, frame_path,
             balance_value, bet_value, win_value,
+            bonus_value, jackpot_value,
             raw_text, confidence_avg,
-            confidence_bal, confidence_bet, confidence_win, flagged)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            confidence_bal, confidence_bet, confidence_win,
+            confidence_bonus, confidence_jackpot, flagged)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             session_id,
             upload_id,
@@ -433,11 +439,15 @@ def persist_ocr_result(
             f.get("balance", {}).get("value"),
             f.get("bet",     {}).get("value"),
             f.get("win",     {}).get("value"),
+            f.get("bonus",   {}).get("value"),
+            f.get("jackpot", {}).get("value"),
             str(fields.get("fields", {})),
             fields.get("overall_confidence", 0),
             f.get("balance", {}).get("confidence", 0),
             f.get("bet",     {}).get("confidence", 0),
             f.get("win",     {}).get("confidence", 0),
+            f.get("bonus",   {}).get("confidence", 0),
+            f.get("jackpot", {}).get("confidence", 0),
             int(fields.get("flagged", False)),
         )
     )

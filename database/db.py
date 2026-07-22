@@ -16,7 +16,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-BASE_DIR = Path(__file__).resolve().parent.parent
+def _resolve_base_dir() -> Path:
+    """Resolve base directory. Uses SG_DATA_DIR env var if set (portable mode)."""
+    if env_data_dir := os.getenv("SG_DATA_DIR", "").strip():
+        return Path(env_data_dir)
+    return Path(__file__).resolve().parent.parent
+
+BASE_DIR = _resolve_base_dir()
 DB_PATH  = BASE_DIR / "config" / "sessionguard.db"
 
 
@@ -744,3 +750,25 @@ def init_db_v9():
     conn.commit()
     conn.close()
     print("[DB] V9 AI cost tracking applied.")
+
+
+# ── Phase 5 (C8): multi-region OCR columns ─────────────────────────────────
+SCHEMA_V10_SQL = """
+ALTER TABLE ocr_results ADD COLUMN bonus_value REAL DEFAULT NULL;
+ALTER TABLE ocr_results ADD COLUMN confidence_bonus REAL DEFAULT NULL;
+ALTER TABLE ocr_results ADD COLUMN jackpot_value REAL DEFAULT NULL;
+ALTER TABLE ocr_results ADD COLUMN confidence_jackpot REAL DEFAULT NULL;
+"""
+
+
+def init_db_v10():
+    """Apply Phase 5 (C8) multi-region OCR bonus/jackpot columns — idempotent."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V10_SQL)
+        conn.commit()
+        print("[DB] V10 OCR bonus/jackpot columns added.")
+    except Exception as e:
+        if "duplicate column name" not in str(e).lower():
+            print(f"[DB] V10: {e}")
+    conn.close()
