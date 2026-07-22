@@ -10,8 +10,37 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from database.db import get_connection
 from engines.frame_annotator import annotate_frame, create_annotated_zip
+from engines.video_pipeline import get_video_job
 
 router = APIRouter(tags=["video-jobs"])
+
+
+@router.get("/{job_id}")
+def get_job(job_id: int):
+    """
+    Return video job details including chunking progress fields.
+    """
+    job = get_video_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Video job not found.")
+    return {
+        "id":                job.get("id"),
+        "session_id":        job.get("session_id"),
+        "upload_id":         job.get("upload_id"),
+        "status":            job.get("status"),
+        "frames_extracted":  job.get("frames_extracted", 0),
+        "frames_ocr_done":   job.get("frames_ocr_done", 0),
+        "scene_changes":     job.get("scene_changes", 0),
+        "events_built":      job.get("events_built", 0),
+        "current_chunk":     job.get("current_chunk", 0),
+        "total_chunks":      job.get("total_chunks", 0),
+        "chunk_size_seconds": job.get("chunk_size_seconds", 300),
+        "error_message":    job.get("error_message", ""),
+        "started_at":        job.get("started_at", ""),
+        "completed_at":     job.get("completed_at", ""),
+        "output_dir":        job.get("output_dir", ""),
+        "created_at":        job.get("created_at", ""),
+    }
 
 
 @router.get("/{job_id}/annotated-frames")

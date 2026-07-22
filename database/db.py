@@ -772,3 +772,24 @@ def init_db_v10():
         if "duplicate column name" not in str(e).lower():
             print(f"[DB] V10: {e}")
     conn.close()
+
+
+# ── Phase 5 (C10): video chunking ─────────────────────────────────────────────
+SCHEMA_V11_SQL = """
+ALTER TABLE video_jobs ADD COLUMN current_chunk INTEGER DEFAULT 0;
+ALTER TABLE video_jobs ADD COLUMN total_chunks INTEGER DEFAULT 0;
+ALTER TABLE video_jobs ADD COLUMN chunk_size_seconds INTEGER DEFAULT 300;
+"""
+
+
+def init_db_v11():
+    """Apply Phase 5 (C10) video chunking columns — idempotent."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V11_SQL)
+        conn.commit()
+        print("[DB] V11 video chunking columns added.")
+    except Exception as e:
+        if "duplicate column name" not in str(e).lower():
+            print(f"[DB] V11: {e}")
+    conn.close()

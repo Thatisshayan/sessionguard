@@ -80,6 +80,103 @@ def _ocr_worker(args: tuple) -> dict:
     return extract_fields_from_image(path, roi_config=roi_config)
 
 
+def _get_job_progress_chunks(job_id: int) -> tuple[int, int]:
+    """Return (current_chunk, total_chunks) for a video job."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT current_chunk, total_chunks FROM video_jobs WHERE id=?",
+        (job_id,)
+    ).fetchone()
+    conn.close()
+    return (row["current_chunk"] or 0, row["total_chunks"] or 0) if row else (0, 0)
+
+
+def _checkpoint_job_chunk(job_id: int, chunk_index: int):
+    """Update the current chunk checkpoint for a video job."""
+    try:
+        conn = get_connection()
+        conn.execute(
+            "UPDATE video_jobs SET current_chunk=? WHERE id=?",
+            (chunk_index, job_id)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def extract_frames_chunked(
+    video_path: str,
+    output_dir: str,
+    chunk_seconds: int = 300,
+    start_chunk: int = 0,
+) -> tuple[list[dict], int]:
+    """
+    Extract frames from a video file in chunk segments using FFmpeg.
+    Uses FFmpeg segment option to split video into chunk_seconds blocks.
+
+    Returns (chunk_frames, total_chunks) where chunk_frames is frames for
+    chunks from start_chunk onwards.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "json", video_path],
+        capture_output=True, text=True, timeout=30
+    )
+    try:
+        duration = float(json.loads(probe.stdout)["format"]["duration"])
+    except Exception:
+        duration = 0
+
+    total_chunks = max(1, int(duration / chunk_seconds))
+
+    if start_chunk >= total_chunks:
+        return [], total_chunks
+
+    all_frames = []
+
+    for chunk_idx in range(start_chunk, total_chunks):
+        chunk_start = chunk_idx * chunk_seconds
+        chunk_dir = output_dir / f"chunk_{chunk_idx:04d}"
+        chunk_dir.mkdir(exist_ok=True)
+
+        output_pattern = str(chunk_dir / "frame_%06d.png")
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(chunk_start),
+            "-i", video_path,
+            "-t", str(chunk_seconds),
+            "-vf", "fps=1",
+            "-q:v", "2",
+            output_pattern,
+        ]
+
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=chunk_seconds + 30)
+        except subprocess.TimeoutExpired:
+            pass
+
+        chunk_frames = sorted([
+            {"stored_path": str(p), "chunk_index": chunk_idx}
+            for p in chunk_dir.glob("frame_*.png")
+        ], key=lambda x: x["stored_path"])
+
+        for cf in chunk_frames:
+            cf["timestamp_seconds"] = (
+                int(Path(cf["stored_path"]).stem.split("_")[1])
+                if "frame_" in Path(cf["stored_path"]).stem
+                else 0
+            ) + chunk_start
+
+        all_frames.extend(chunk_frames)
+
+    return all_frames, total_chunks
+
+
 # ── 1. Dependency check ───────────────────────────────────────────────────────
 
 def check_ffmpeg() -> dict:
@@ -585,3 +682,141 @@ def get_video_jobs_for_session(session_id: int) -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def run_video_pipeline_chunked(
+    video_path: str,
+    session_id: int,
+    upload_id: int,
+    roi_config: dict | None = None,
+    fps: float = 1.0,
+    progress_cb: Optional[Callable[[str, int, int], None]] = None,
+    workers: int = 1,
+    dedup_threshold: int = 0,
+    chunk_seconds: int = 300,
+) -> dict:
+    """
+    Run the video → frames → OCR → events pipeline in chunks.
+    Supports resume: if current_chunk > 0, starts from that chunk.
+    Updates current_chunk and total_chunks on each chunk completion.
+
+    progress_cb(stage, current, total) called at each stage.
+    """
+    conn = get_connection()
+    job_cur = conn.execute(
+        """INSERT INTO video_jobs
+           (session_id, upload_id, status, started_at)
+           VALUES (?,?,'running',datetime('now'))""",
+        (session_id, upload_id)
+    )
+    job_id = job_cur.lastrowid
+    conn.commit()
+    conn.close()
+
+    def _update_job(**kwargs):
+        c = get_connection()
+        sets = ", ".join(f"{k}=?" for k in kwargs)
+        c.execute(f"UPDATE video_jobs SET {sets} WHERE id=?",
+                  [*kwargs.values(), job_id])
+        c.commit()
+        c.close()
+
+    try:
+        out_dir = FRAMES_DIR / Path(video_path).stem
+
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "json", video_path],
+            capture_output=True, text=True, timeout=30
+        )
+        try:
+            duration = float(json.loads(probe.stdout)["format"]["duration"])
+        except Exception:
+            duration = 0
+
+        total_chunks = max(1, int(duration / chunk_seconds))
+        _update_job(total_chunks=total_chunks, chunk_size_seconds=chunk_seconds)
+
+        current_chunk, _ = _get_job_progress_chunks(job_id)
+
+        all_frames = []
+        all_ocr_results = []
+        events_n_total = 0
+        review_n_total = 0
+
+        for chunk_idx in range(current_chunk, total_chunks):
+            _update_job(current_chunk=chunk_idx)
+
+            if progress_cb:
+                progress_cb(f"chunk_{chunk_idx}_extract", 0, 1)
+
+            chunk_start = chunk_idx * chunk_seconds
+            chunk_output_dir = out_dir / f"chunk_{chunk_idx:04d}"
+
+            frame_result = extract_frames_chunked(
+                video_path,
+                str(chunk_output_dir),
+                chunk_seconds=chunk_seconds,
+                start_chunk=chunk_idx,
+            )
+
+            chunk_frames, _ = frame_result
+            all_frames.extend(chunk_frames)
+
+            _update_job(
+                frames_extracted=len(all_frames),
+                output_dir=str(out_dir),
+            )
+            if progress_cb:
+                progress_cb(f"chunk_{chunk_idx}_extract", len(chunk_frames), len(chunk_frames))
+
+            if chunk_frames:
+                def ocr_progress(done, total):
+                    _update_job(frames_ocr_done=len(all_ocr_results) + done)
+                    if progress_cb:
+                        progress_cb(f"chunk_{chunk_idx}_ocr", done, total)
+
+                chunk_ocr_results = ocr_frames(
+                    chunk_frames,
+                    roi_config=roi_config,
+                    session_id=session_id,
+                    upload_id=upload_id,
+                    progress_cb=ocr_progress,
+                    workers=workers,
+                    dedup_threshold=dedup_threshold,
+                )
+                all_ocr_results.extend(chunk_ocr_results)
+
+                events_n, review_n = build_events_from_ocr(chunk_ocr_results, session_id)
+                events_n_total += events_n
+                review_n_total += review_n
+                _update_job(
+                    frames_ocr_done=len(all_ocr_results),
+                    events_built=events_n_total,
+                )
+                if progress_cb:
+                    progress_cb(f"chunk_{chunk_idx}_events", events_n, events_n)
+
+            _checkpoint_job_chunk(job_id, chunk_idx + 1)
+
+        _recalc_session_from_events(session_id)
+
+        _update_job(
+            status="complete",
+            completed_at="datetime('now')",
+        )
+
+        return {
+            "success":          True,
+            "job_id":           job_id,
+            "frames_extracted": len(all_frames),
+            "ocr_frames":       len(all_ocr_results),
+            "events_created":   events_n_total,
+            "review_items":     review_n_total,
+            "total_chunks":     total_chunks,
+            "output_dir":       str(out_dir),
+        }
+
+    except Exception as e:
+        _update_job(status="error", error_message=str(e))
+        return {"success": False, "error": str(e), "job_id": job_id}
