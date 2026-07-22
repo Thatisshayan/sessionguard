@@ -653,3 +653,24 @@ def init_db_v6():
     conn.commit()
     conn.close()
     print("[DB] V6 indexes applied.")
+
+
+# ── Phase 2 (A7): job retry tracking column ───────────────────────────────────
+SCHEMA_V7_SQL = """
+ALTER TABLE jobs ADD COLUMN attempt INTEGER DEFAULT 0;
+"""
+
+
+def init_db_v7():
+    """Apply Phase 2 (A7) job retry tracking — idempotent, safe to re-run."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V7_SQL)
+        conn.commit()
+        print("[DB] V7 job attempt column added.")
+    except Exception as e:
+        # Column may already exist
+        if "duplicate column name" not in str(e).lower():
+            raise
+    finally:
+        conn.close()

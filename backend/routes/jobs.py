@@ -2,13 +2,16 @@
 backend/routes/jobs.py
 -----------------------
 Job queue management endpoints.
-Maturity: Working Prototype
+Maturity: Working Prototype — enhanced with thread-pool worker health
 """
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
-from backend.workers.job_service import enqueue_job, get_job, list_jobs, cancel_job
+from backend.workers.job_service import (
+    enqueue_job, get_job, list_jobs, cancel_job,
+    get_worker_health, cleanup_completed_jobs
+)
 from backend.auth.service import get_current_user_from_token
 
 router = APIRouter(tags=["jobs"])
@@ -52,7 +55,7 @@ def poll_job(job_id: int):
 
 @router.post("/{job_id}/cancel")
 def cancel(job_id: int, authorization: Optional[str] = Header(None)):
-    """Cancel a pending job."""
+    """Cancel a pending or running job."""
     success = cancel_job(job_id)
     if not success:
         raise HTTPException(status_code=409, detail="Job cannot be cancelled (running or already done).")
@@ -70,3 +73,16 @@ def list_jobs_endpoint(
     user    = get_current_user_from_token(authorization)
     user_id = user["user_id"] if user else None
     return list_jobs(status=status, session_id=session_id, user_id=user_id, limit=limit)
+
+
+@router.get("/worker/health")
+def worker_health():
+    """Worker pool health: active/pending jobs, capacity."""
+    return get_worker_health()
+
+
+@router.post("/worker/cleanup")
+def cleanup_worker(max_age_seconds: int = 3600):
+    """Clean up completed job metadata older than max_age_seconds."""
+    removed = cleanup_completed_jobs(max_age_seconds)
+    return {"removed": removed, "max_age_seconds": max_age_seconds}

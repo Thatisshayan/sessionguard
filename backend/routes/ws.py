@@ -183,6 +183,21 @@ async def push_job_complete(job: dict):
     await manager.broadcast_global(msg)
 
 
+async def push_job_progress(job_id: int, progress: int, stage: str, session_id: int | None = None):
+    """Push job progress update to relevant session and global."""
+    msg = {
+        "type": "job_progress",
+        "data": {
+            "job_id": job_id,
+            "progress": progress,
+            "stage": stage,
+        }
+    }
+    if session_id:
+        await manager.broadcast(session_id, msg)
+    await manager.broadcast_global(msg)
+
+
 async def push_live_event(session_id: int, run_id: int, event: dict):
     """Push a live session event to session subscribers."""
     msg = {"type": "live_event", "run_id": run_id, "data": event}

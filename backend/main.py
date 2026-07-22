@@ -20,7 +20,7 @@ if platform.system() == "Windows":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, seed_demo_data, seed_demo_user
+from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, seed_demo_data, seed_demo_user
 from engines.alert_presets import seed_presets
 from backend.middleware.logging import configure_logging, RequestLoggingMiddleware
 
@@ -48,7 +48,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 @app.on_event("startup")
 def on_startup():
-    init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6()
+    init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6(); init_db_v7()
     seed_demo_data(); seed_demo_user(); seed_presets()
 
     # Load API key from environment (secure method)

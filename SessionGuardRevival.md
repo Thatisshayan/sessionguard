@@ -58,33 +58,6 @@
 ---
 
 ## Phase 2 — Backend Hardening + Frontend Polish (Weeks 4–6)
-**Goal**: Resilient async processing; fast, cacheable frontend
-
-### Backend (Engineer 1)
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| A7 | Background job worker (enhance thread-pool + SQLite) | Video/OCR jobs enqueue via `POST /jobs`; worker pool picks up; retries ×3 with exponential backoff; progress via WebSocket; cancellation kills worker thread; worker health endpoint |
-| A8 | Upload validation (size, MIME, virus scan hook) | 500MB max; only `video/mp4`, `text/csv`, `image/*`; ClamAV scan (stub) before processing |
-| A9 | Test suite (pytest + httpx + testcontainers) | 80%+ coverage on 30+ endpoints; `pytest -x` < 60s; runs in GitHub Actions on every PR |
-| A10 | API versioning (`/api/v1/`) | All routes under `/api/v1/`; deprecation header on v0; OpenAPI spec at `/api/v1/openapi.json` |
-
-### Frontend (Engineer 2)
-| ID | Task | Acceptance Criteria |
-|----|------|---------------------|
-| B4 | Design tokens (Tailwind v4 `@theme`) | Colors, spacing, radii, shadows in `global.css`; dark mode via `data-theme`; zero hardcoded values |
-| B5 | Aggregated dashboard endpoint | `GET /api/v1/dashboard/summary` returns all 7 KPIs + charts in < 200ms; FE uses single `useQuery` |
-| B6 | Playwright E2E (5 critical flows) | Login → Upload CSV → SessionDetail → Export PDF → Live Monitor; runs in CI on Chromium/Firefox |
-
-### Definition of Done
-- Load test (k6): 100 concurrent users, p95 < 500ms
-- E2E green in CI
-- Staging = production parity
-
-**Status (2026-07-21)**: Phase 2 not started. A7 decision confirmed: enhance thread-pool job service (skip Redis/Celery for local-first).
-
----
-
-## Phase 2 — Backend Hardening + Frontend Polish (Weeks 4–6)
 **Goal**: Hardened backend with validation, tests, API versioning; frontend with design tokens, aggregated dashboard, E2E tests
 
 > **A7 decision**: Redis/Celery deferred — thread-pool + SQLite job queue enhanced instead (sufficient for single-user local).
@@ -92,8 +65,8 @@
 ### Backend (Engineer 1)
 | ID | Task | Acceptance Criteria | Status |
 |----|------|---------------------|--------|
-| A7 | Background job worker (enhance thread-pool + SQLite) | Video/OCR jobs enqueue via `POST /jobs`; worker pool picks up; retries ×3 with exponential backoff; progress via WebSocket; cancellation kills worker thread; worker health endpoint | ⏳ In progress |
-| A8 | Upload validation (file type/size, virus scan) | `POST /upload` rejects >2GB, non-video MIME; ClamAV scan on upload; returns job_id | ⏳ Pending |
+| A7 | Background job worker (enhance thread-pool + SQLite) | Video/OCR jobs enqueue via `POST /jobs`; worker pool picks up; retries ×3 with exponential backoff; progress via WebSocket; cancellation kills worker thread; worker health endpoint | ✅ Done — added retry logic with exponential backoff (2s base, 60s cap), WebSocket progress broadcasts via `push_job_progress`, cooperative cancellation with `threading.Event` flag, worker health endpoint at `/jobs/worker/health` |
+| A8 | Upload validation (file type/size, virus scan) | `POST /upload` rejects >2GB, non-video MIME; ClamAV scan on upload; returns job_id | ⏳ In progress |
 | A9 | Test suite (pytest + coverage ≥80%) | `pytest --cov=backend --cov-fail-under=80` passes; tests for auth, jobs, upload, video pipeline | ⏳ Pending |
 | A10 | API versioning (`/api/v1` prefix) | All routes under `/api/v1`; `/health`, `/docs` unversioned; OpenAPI split by version | ⏳ Pending |
 
@@ -103,6 +76,11 @@
 | B4 | Design tokens (Tailwind + CSS variables) | `tokens.css` with colors/spacing/radius; dark mode via `[data-theme]`; zero hardcoded colors in components | ⏳ Pending |
 | B5 | Aggregated dashboard endpoint | `GET /api/v1/dashboard/summary` returns sessions, events, alerts, insights aggregates in < 200ms | ⏳ Pending |
 | B6 | Playwright E2E tests (critical flows) | `npm run test:e2e` passes: login → upload → session list → dashboard → export; CI runs on PR | ⏳ Pending |
+
+### Definition of Done
+- Load test (k6): 100 concurrent users, p95 < 500ms
+- E2E green in CI
+- Staging = production parity
 
 ---
 
@@ -208,7 +186,7 @@
 | **Database** | SQLite (single-file, no concurrency) | PostgreSQL + RLS, multi-tenant, PITR |
 | **API** | 30+ routes, no versioning, no rate limits | `/api/v1/`, versioned, rate-limited, OpenAPI |
 | **Auth** | JWT + refresh, per-process secret | Env-secret, rotation, SSO/OIDC, SCIM |
-| **Background Jobs** | Blocking in-request | Celery + Redis, retries, progress WS |
+| **Background Jobs** | Blocking in-request | Thread-pool + SQLite, retries ×3 with backoff, WS progress, cancellation
 | **Testing** | Zero tests | 80%+ coverage, E2E (Playwright), load tested |
 | **OCR** | Tesseract only, sequential, 90s/300 frames | Tesseract + EasyOCR GPU, parallel (8×), 15s/300 frames |
 | **Video Pipeline** | Basic, no resume, no progress | Chunked, resumable, annotated debug export |
