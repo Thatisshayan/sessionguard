@@ -3,7 +3,7 @@
  * Dependency status, auth info, version, engine inventory, API quick links.
  */
 
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
 
@@ -12,16 +12,16 @@ const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 interface DepRow { label: string; ok: boolean; detail: string; install?: string; group: string }
 
 export default function Settings() {
-  const { user, accessToken } = useAuth()
-  const [rows,    setRows]    = useState<DepRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user } = useAuth()
 
-  useEffect(() => {
-    Promise.allSettled([
-      axios.get(`${BASE}/health`).then(r => r.data),
-      axios.get(`${BASE}/video-status`).then(r => r.data),
-      axios.get(`${BASE}/ocr-status`).then(r => r.data),
-    ]).then(([health, video, ocr]) => {
+  const rowsQ = useQuery({
+    queryKey: ['settings', 'diagnostics', !!user],
+    queryFn: async () => {
+      const [health, video, ocr] = await Promise.allSettled([
+        axios.get(`${BASE}/health`).then(r => r.data),
+        axios.get(`${BASE}/video-status`).then(r => r.data),
+        axios.get(`${BASE}/ocr-status`).then(r => r.data),
+      ])
       const out: DepRow[] = []
 
       out.push({
@@ -86,9 +86,11 @@ export default function Settings() {
         out.push({ label, ok: health.status === 'fulfilled', detail, group: 'engine' })
       })
 
-      setRows(out)
-    }).finally(() => setLoading(false))
-  }, [user])
+      return out
+    },
+  })
+  const rows = rowsQ.data ?? []
+  const loading = rowsQ.isPending
 
   const groups = [
     ['core',     'Core Services'],

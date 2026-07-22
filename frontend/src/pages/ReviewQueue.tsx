@@ -2,30 +2,25 @@
  * src/pages/ReviewQueue.tsx
  * Maturity: Working Prototype — actions wired to real API.
  */
-import { useEffect, useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getReviewQueue, getQueueSummary, resolveReviewItem } from '../services/api'
-import type { ReviewItem, QueueSummary } from '../services/api'
 
 export default function ReviewQueue() {
-  const [items,   setItems]   = useState<ReviewItem[]>([])
-  const [summary, setSummary] = useState<QueueSummary | null>(null)
-  const [loading, setLoading] = useState(true)
+  const qc = useQueryClient()
+  const itemsQ   = useQuery({ queryKey: ['review-queue', 'pending'], queryFn: () => getReviewQueue({ status: 'pending' }) })
+  const summaryQ = useQuery({ queryKey: ['review-queue', 'summary'], queryFn: getQueueSummary })
+  const items   = itemsQ.data ?? []
+  const summary = summaryQ.data ?? null
+  const loading = itemsQ.isPending || summaryQ.isPending
 
-  const fetchAll = () => {
-    Promise.all([
-      getReviewQueue({ status: 'pending' }),
-      getQueueSummary(),
-    ]).then(([items, summary]) => { setItems(items); setSummary(summary) })
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { fetchAll() }, [])
-
-  const resolve = async (id: number, action: string) => {
-    await resolveReviewItem(id, action)
-    setItems(prev => prev.filter(i => i.id !== id))
-    getQueueSummary().then(setSummary)
-  }
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: string }) => resolveReviewItem(id, action),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['review-queue', 'pending'] })
+      qc.invalidateQueries({ queryKey: ['review-queue', 'summary'] })
+    },
+  })
+  const resolve = (id: number, action: string) => resolveMutation.mutate({ id, action })
 
   return (
     <div style={{ padding: 'var(--page-margin)' }}>

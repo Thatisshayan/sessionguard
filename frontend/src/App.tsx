@@ -6,28 +6,37 @@
 
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { NotificationCenter } from './components/NotificationCenter'
+import { RequireAdmin } from './components/RequireAdmin'
 
-// â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-import Dashboard       from './pages/Dashboard'
-import Sessions        from './pages/Sessions'
-import SessionDetail   from './pages/SessionDetail'
-import Compare         from './pages/Compare'
-import LiveMonitor     from './pages/LiveMonitor'
-import Upload          from './pages/Upload'
-import ReviewQueue     from './pages/ReviewQueue'
-import Reports         from './pages/Reports'
-import Projects        from './pages/Projects'
-import Profiles        from './pages/Profiles'
-import ProfileEditor   from './pages/ProfileEditor'
-import ParserBenchmark from './pages/ParserBenchmark'
-import JobsMonitor     from './pages/JobsMonitor'
-import Admin           from './pages/Admin'
-import Login           from './pages/Login'
-import Settings        from './pages/Settings'
-import VideoLab        from './pages/VideoLab'
-import ImportWizard    from './pages/ImportWizard'
+// ── Pages (lazy-loaded — each page is its own chunk, split from the main bundle) ──
+const Dashboard       = lazy(() => import('./pages/Dashboard'))
+const Sessions        = lazy(() => import('./pages/Sessions'))
+const SessionDetail   = lazy(() => import('./pages/SessionDetail'))
+const Compare         = lazy(() => import('./pages/Compare'))
+const LiveMonitor     = lazy(() => import('./pages/LiveMonitor'))
+const Upload           = lazy(() => import('./pages/Upload'))
+const ReviewQueue     = lazy(() => import('./pages/ReviewQueue'))
+const Reports         = lazy(() => import('./pages/Reports'))
+const Projects        = lazy(() => import('./pages/Projects'))
+const Profiles        = lazy(() => import('./pages/Profiles'))
+const ProfileEditor   = lazy(() => import('./pages/ProfileEditor'))
+const ParserBenchmark = lazy(() => import('./pages/ParserBenchmark'))
+const JobsMonitor     = lazy(() => import('./pages/JobsMonitor'))
+const Admin           = lazy(() => import('./pages/Admin'))
+const Login           = lazy(() => import('./pages/Login'))
+const Settings        = lazy(() => import('./pages/Settings'))
+const VideoLab        = lazy(() => import('./pages/VideoLab'))
+const ImportWizard    = lazy(() => import('./pages/ImportWizard'))
+
+function PageFallback() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+      Loading…
+    </div>
+  )
+}
 
 // â”€â”€ WebSocket status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useWsStatus() {
@@ -239,27 +248,30 @@ function AppShell() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
         <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)' }}>
-          <Routes>
-            <Route path="/login"             element={<Login />} />
-            <Route path="/"                  element={<Dashboard />} />
-            <Route path="/sessions"          element={<Sessions />} />
-            <Route path="/sessions/:id"      element={<SessionDetail />} />
-            <Route path="/sessions/:id/video" element={<VideoLab />} />
-            <Route path="/compare"           element={<Compare />} />
-            <Route path="/live"              element={<LiveMonitor />} />
-            <Route path="/import" element={<ImportWizard />} /><Route path="/upload"            element={<Upload />} />
-            <Route path="/review"            element={<ReviewQueue />} />
-            <Route path="/reports"           element={<Reports />} />
-            <Route path="/projects"          element={<Projects />} />
-            <Route path="/profiles"          element={<Profiles />} />
-            <Route path="/profiles/new"      element={<ProfileEditor />} />
-            <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
-            <Route path="/benchmark"         element={<ParserBenchmark />} />
-            <Route path="/jobs"              element={<JobsMonitor />} />
-            <Route path="/admin"             element={<Admin />} />
-            <Route path="/settings"          element={<Settings />} />
-            <Route path="*"                  element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/login"             element={<Login />} />
+              <Route path="/"                  element={<Dashboard />} />
+              <Route path="/sessions"          element={<Sessions />} />
+              <Route path="/sessions/:id"      element={<SessionDetail />} />
+              <Route path="/sessions/:id/video" element={<VideoLab />} />
+              <Route path="/compare"           element={<Compare />} />
+              <Route path="/live"              element={<LiveMonitor />} />
+              <Route path="/import"            element={<ImportWizard />} />
+              <Route path="/upload"            element={<Upload />} />
+              <Route path="/review"            element={<ReviewQueue />} />
+              <Route path="/reports"           element={<Reports />} />
+              <Route path="/projects"          element={<Projects />} />
+              <Route path="/profiles"          element={<Profiles />} />
+              <Route path="/profiles/new"      element={<ProfileEditor />} />
+              <Route path="/profiles/:id/edit" element={<ProfileEditor />} />
+              <Route path="/benchmark"         element={<ParserBenchmark />} />
+              <Route path="/jobs"              element={<JobsMonitor />} />
+              <Route path="/admin"             element={<RequireAdmin><Admin /></RequireAdmin>} />
+              <Route path="/settings"          element={<Settings />} />
+              <Route path="*"                  element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </div>

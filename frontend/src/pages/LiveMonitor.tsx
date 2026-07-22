@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -36,7 +37,8 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 export default function LiveMonitor() {
-  const [sessions,   setSessions]   = useState<Session[]>([])
+  const sessionsQ = useQuery({ queryKey: ['sessions', { limit: 100 }], queryFn: () => getSessions({ limit: 100 }) })
+  const sessions: Session[] = sessionsQ.data ?? []
   const [sessionId,  setSessionId]  = useState<number | null>(null)
   const [mode,       setMode]       = useState<'mock' | 'screen'>('mock')
   const [run,        setRun]        = useState<LiveRun | null>(null)
@@ -49,10 +51,6 @@ export default function LiveMonitor() {
   const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastIdRef = useRef(0)
   const cumRef    = useRef(0)
-
-  useEffect(() => {
-    getSessions({ limit: 100 }).then(setSessions)
-  }, [])
 
   // ── Polling ─────────────────────────────────────────────────────────────────
   const startPolling = useCallback((runId: number) => {

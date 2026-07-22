@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useState, useRef } from 'react'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { getProfiles } from '../services/api'
 
@@ -45,59 +46,64 @@ function ConfBar({ value }: { value: number }) {
 }
 
 export default function ParserBenchmark() {
-  const [profiles,  setProfiles]  = useState<any[]>([])
   const [profileId, setProfileId] = useState<string>('')
   const [roiJson,   setRoiJson]   = useState('{}')
-  const [result,    setResult]    = useState<BenchmarkResult | null>(null)
-  const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState('')
-  const [uploaded,  setUploaded]  = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const profilesQ = useQuery({ queryKey: ['profiles'], queryFn: getProfiles })
+  const profiles = profilesQ.data ?? []
+
   useEffect(() => {
-    getProfiles().then(ps => {
-      setProfiles(ps)
-      if (ps.length > 0) {
-        setProfileId(String(ps[0].id))
-        setRoiJson(JSON.stringify(ps[0].roi_config ?? {}, null, 2))
-      }
-    })
-  }, [])
+    if (profiles.length > 0 && !profileId) {
+      setProfileId(String(profiles[0].id))
+      setRoiJson(JSON.stringify(profiles[0].roi_config ?? {}, null, 2))
+    }
+  }, [profiles])
 
   const handleProfileChange = (id: string) => {
     setProfileId(id)
-    const p = profiles.find(p => String(p.id) === id)
+    const p = profiles.find((p: any) => String(p.id) === id)
     if (p) setRoiJson(JSON.stringify(p.roi_config ?? {}, null, 2))
   }
 
-  const handleUpload = async (file: File) => {
-    setLoading(true); setError('')
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('roi_config', roiJson)
-    try {
-      const res = await axios.post(`${BASE}/parser-benchmark/upload-frame`, fd, {
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('roi_config', roiJson)
+      return axios.post(`${BASE}/parser-benchmark/upload-frame`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      setResult(res.data)
-      setUploaded(prev => [...prev, file.name])
+      }).then(res => res.data as BenchmarkResult)
+    },
+  })
+  const runMutation = useMutation({
+    mutationFn: () => axios.post(`${BASE}/parser-benchmark`, {
+      frame_paths: [],
+      profile_id:  Number(profileId),
+    }).then(res => res.data as BenchmarkResult),
+  })
+
+  const loading = uploadMutation.isPending || runMutation.isPending
+  const result: BenchmarkResult | null = uploadMutation.data ?? runMutation.data ?? null
+
+  const handleUpload = async (file: File) => {
+    setError('')
+    try {
+      await uploadMutation.mutateAsync(file)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Benchmark failed.')
-    } finally { setLoading(false) }
+    }
   }
 
   const runWithFramePaths = async () => {
     if (!profileId) { setError('Select a profile first.'); return }
-    setLoading(true); setError('')
+    setError('')
     try {
-      const res = await axios.post(`${BASE}/parser-benchmark`, {
-        frame_paths: [],
-        profile_id:  Number(profileId),
-      })
-      setResult(res.data)
+      await runMutation.mutateAsync()
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to run benchmark.')
-    } finally { setLoading(false) }
+    }
   }
 
   const selStyle: React.CSSProperties = {

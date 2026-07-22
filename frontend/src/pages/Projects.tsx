@@ -6,8 +6,9 @@
  * Maturity: Working Prototype
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
 
@@ -35,53 +36,72 @@ const inputStyle: React.CSSProperties = {
 export default function Projects() {
   const { accessToken, user } = useAuth()
   const navigate = useNavigate()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [form,     setForm]     = useState({ name: '', description: '', tags: '' })
-  const [error,    setError]    = useState('')
-  const [selected, setSelected] = useState<Project | null>(null)
+  const qc = useQueryClient()
+  const [form,       setForm]       = useState({ name: '', description: '', tags: '' })
+  const [error,      setError]      = useState('')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
 
-  const fetchProjects = async () => {
-    try {
-      const res = await axios.get(`${BASE}/projects`, { headers })
-      setProjects(res.data)
-    } catch (e: any) {
-      if (e?.response?.status === 401) navigate('/login')
-    } finally { setLoading(false) }
-  }
+  const projectsQ = useQuery({
+    queryKey: ['projects', accessToken],
+    queryFn: async () => {
+      try {
+        const res = await axios.get(`${BASE}/projects`, { headers })
+        return res.data as Project[]
+      } catch (e: any) {
+        if (e?.response?.status === 401) navigate('/login')
+        throw e
+      }
+    },
+  })
+  const projects = projectsQ.data ?? []
+  const loading = projectsQ.isPending
 
-  useEffect(() => { fetchProjects() }, [accessToken])
+  const selectedQ = useQuery({
+    queryKey: ['projects', selectedId],
+    queryFn: async () => (await axios.get(`${BASE}/projects/${selectedId}`, { headers })).data as Project,
+    enabled: selectedId != null,
+  })
+  const selected = selectedQ.data ?? null
+
+  const createMutation = useMutation({
+    mutationFn: () => axios.post(`${BASE}/projects`, {
+      name:        form.name,
+      description: form.description,
+      tags:        form.tags.split(',').map(t => t.trim()).filter(Boolean),
+    }, { headers }),
+    onSuccess: () => {
+      setForm({ name: '', description: '', tags: '' })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+  const creating = createMutation.isPending
 
   const createProject = async () => {
     if (!form.name.trim()) { setError('Project name is required.'); return }
-    setCreating(true); setError('')
+    setError('')
     try {
-      await axios.post(`${BASE}/projects`, {
-        name:        form.name,
-        description: form.description,
-        tags:        form.tags.split(',').map(t => t.trim()).filter(Boolean),
-      }, { headers })
-      setForm({ name: '', description: '', tags: '' })
-      await fetchProjects()
+      await createMutation.mutateAsync()
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to create project.')
-    } finally { setCreating(false) }
+    }
   }
 
-  const deleteProject = async (id: number) => {
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => axios.delete(`${BASE}/projects/${id}`, { headers }),
+    onSuccess: (_r, id) => {
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      if (selectedId === id) setSelectedId(null)
+    },
+  })
+
+  const deleteProject = (id: number) => {
     if (!confirm('Delete this project?')) return
-    await axios.delete(`${BASE}/projects/${id}`, { headers })
-    await fetchProjects()
-    if (selected?.id === id) setSelected(null)
+    deleteMutation.mutate(id)
   }
 
-  const loadProject = async (id: number) => {
-    const res = await axios.get(`${BASE}/projects/${id}`, { headers })
-    setSelected(res.data)
-  }
+  const loadProject = (id: number) => setSelectedId(id)
 
   return (
     <div style={{ padding: 'var(--page-margin)', maxWidth: 1100 }}>
@@ -157,7 +177,7 @@ export default function Projects() {
               <div className="card" style={{ marginBottom: 'var(--gutter)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <div style={{ fontWeight: 600, fontSize: 15 }}>{selected.name}</div>
-                  <button onClick={() => setSelected(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
+                  <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>×</button>
                 </div>
 
                 {/* Sessions in project */}

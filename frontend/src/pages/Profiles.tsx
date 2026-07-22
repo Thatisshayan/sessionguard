@@ -2,31 +2,38 @@
  * src/pages/Profiles.tsx
  * Maturity: Working Prototype — lists and creates profiles from API.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProfiles, createProfile } from '../services/api'
 
 export default function Profiles() {
-  const [profiles, setProfiles] = useState<any[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [creating, setCreating] = useState(false)
-  const [form,     setForm]     = useState({ name: '', game_name: '', platform: '' })
-  const [error,    setError]    = useState('')
+  const qc = useQueryClient()
+  const profilesQ = useQuery({ queryKey: ['profiles'], queryFn: getProfiles })
+  const profiles = profilesQ.data ?? []
+  const loading = profilesQ.isPending
 
-  const fetch_ = () => getProfiles().then(setProfiles).finally(() => setLoading(false))
-  useEffect(() => { fetch_() }, [])
+  const [form,  setForm]  = useState({ name: '', game_name: '', platform: '' })
+  const [error, setError] = useState('')
+
+  const createMutation = useMutation({
+    mutationFn: (data: typeof form) => createProfile(data),
+    onSuccess: () => {
+      setForm({ name: '', game_name: '', platform: '' })
+      qc.invalidateQueries({ queryKey: ['profiles'] })
+    },
+  })
+  const creating = createMutation.isPending
 
   const submit = async () => {
     if (!form.name || !form.game_name || !form.platform) {
       setError('All fields are required.'); return
     }
-    setCreating(true); setError('')
+    setError('')
     try {
-      await createProfile(form)
-      setForm({ name: '', game_name: '', platform: '' })
-      fetch_()
+      await createMutation.mutateAsync(form)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to create profile.')
-    } finally { setCreating(false) }
+    }
   }
 
   const inputStyle = {
