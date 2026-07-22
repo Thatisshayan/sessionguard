@@ -63,7 +63,7 @@
 ### Backend (Engineer 1)
 | ID | Task | Acceptance Criteria |
 |----|------|---------------------|
-| A7 | Background job worker (Celery + Redis) | Video/OCR jobs enqueue via `POST /jobs`; worker picks up; progress via WebSocket; retries ×3 |
+| A7 | Background job worker (enhance thread-pool + SQLite) | Video/OCR jobs enqueue via `POST /jobs`; worker pool picks up; retries ×3 with exponential backoff; progress via WebSocket; cancellation kills worker thread; worker health endpoint |
 | A8 | Upload validation (size, MIME, virus scan hook) | 500MB max; only `video/mp4`, `text/csv`, `image/*`; ClamAV scan (stub) before processing |
 | A9 | Test suite (pytest + httpx + testcontainers) | 80%+ coverage on 30+ endpoints; `pytest -x` < 60s; runs in GitHub Actions on every PR |
 | A10 | API versioning (`/api/v1/`) | All routes under `/api/v1/`; deprecation header on v0; OpenAPI spec at `/api/v1/openapi.json` |
@@ -79,6 +79,30 @@
 - Load test (k6): 100 concurrent users, p95 < 500ms
 - E2E green in CI
 - Staging = production parity
+
+**Status (2026-07-21)**: Phase 2 not started. A7 decision confirmed: enhance thread-pool job service (skip Redis/Celery for local-first).
+
+---
+
+## Phase 2 — Backend Hardening + Frontend Polish (Weeks 4–6)
+**Goal**: Hardened backend with validation, tests, API versioning; frontend with design tokens, aggregated dashboard, E2E tests
+
+> **A7 decision**: Redis/Celery deferred — thread-pool + SQLite job queue enhanced instead (sufficient for single-user local).
+
+### Backend (Engineer 1)
+| ID | Task | Acceptance Criteria | Status |
+|----|------|---------------------|--------|
+| A7 | Background job worker (enhance thread-pool + SQLite) | Video/OCR jobs enqueue via `POST /jobs`; worker pool picks up; retries ×3 with exponential backoff; progress via WebSocket; cancellation kills worker thread; worker health endpoint | ⏳ In progress |
+| A8 | Upload validation (file type/size, virus scan) | `POST /upload` rejects >2GB, non-video MIME; ClamAV scan on upload; returns job_id | ⏳ Pending |
+| A9 | Test suite (pytest + coverage ≥80%) | `pytest --cov=backend --cov-fail-under=80` passes; tests for auth, jobs, upload, video pipeline | ⏳ Pending |
+| A10 | API versioning (`/api/v1` prefix) | All routes under `/api/v1`; `/health`, `/docs` unversioned; OpenAPI split by version | ⏳ Pending |
+
+### Frontend (Engineer 2)
+| ID | Task | Acceptance Criteria | Status |
+|----|------|---------------------|--------|
+| B4 | Design tokens (Tailwind + CSS variables) | `tokens.css` with colors/spacing/radius; dark mode via `[data-theme]`; zero hardcoded colors in components | ⏳ Pending |
+| B5 | Aggregated dashboard endpoint | `GET /api/v1/dashboard/summary` returns sessions, events, alerts, insights aggregates in < 200ms | ⏳ Pending |
+| B6 | Playwright E2E tests (critical flows) | `npm run test:e2e` passes: login → upload → session list → dashboard → export; CI runs on PR | ⏳ Pending |
 
 ---
 
@@ -226,7 +250,7 @@ If it's still just you: work top-to-bottom within a phase before moving to the n
 |-------|-----------------|------------------|----------------------|
 | 0 | P0.1–P0.3, P0.5 | — | P0.4 |
 | 1 | A1–A6 *(A1/A2 SaaS-gated, see above)* | B1–B3 | — |
-| 2 | A7–A10 | B4–B6 | — |
+| 2 | A7–A10 *(A7: enhance thread-pool job service)* | B4–B6 | — |
 | 3 | C1–C4 | — | E1–E3 |
 | 4 | C5–C7, D1–D3 | — | E4–E5 |
 | 5 | C8–C10, D4–D10 | — | E6–E10 |
