@@ -156,6 +156,49 @@
 - Desktop app passes Microsoft Store / Mac App Store pre-checks
 - Evidence package accepted by legal review
 
+### Status — ✅ COMPLETE (2026-07-22)
+
+All 14 Phase 5 tasks implemented, tested (72 passing, 2 skipped), pushed to `main`.
+
+| ID | Task | Commit | Status |
+|----|------|--------|--------|
+| C8 | Multi-region OCR (bonus + jackpot) | `721be15` | ✅ Done |
+| C9 | OCR accuracy benchmarks + CI gate | `45a5a82` | ✅ Done |
+| C10 | Video chunking + resume | `3f6fa16` | ✅ Done |
+| D4 | HDBSCAN clustering (optional, cosine fallback) | `9f9790f` | ✅ Done |
+| D5 | Explain this alert (LLM root cause) | `c9a565a` | ✅ Done |
+| D6 | Cost tracking + budget alerts | `c078e0e` | ✅ Done |
+| D7 | Offline AI fallback (Ollama) | `f4d669c` | ✅ Done |
+| D8 | Session Coach (real-time intervention) | *(Phase 4)* | ✅ Done |
+| D9 | Evidence package (hash manifest + AI narrative) | `c3a384c` | ✅ Done |
+| D10 | Dataset quality report | `06fe54d` | ✅ Done |
+| E6 | Native notifications (Tauri) | `5123a5d` | ✅ Done |
+| E7 | Crash reporting (Sentry) | `0a6221a` | ✅ Done |
+| E8 | Portable mode (--portable flag) | `3b976d34` | ✅ Done |
+| E9 | Code signing config (Windows + macOS) | `eb88a14` | ✅ Done |
+| E10 | CI/CD pipeline (GitHub Actions) | `459e167` | ✅ Done |
+
+**Test fixes:** OCR benchmark tests fixed with proper ROI config + Tesseract on PATH (`fe29de0`).
+
+**Key files created/modified:**
+- `engines/offline_ai.py` — Ollama integration
+- `engines/dataset_quality.py` — compliance metrics
+- `backend/routes/dataset_quality.py` — dataset quality endpoint
+- `backend/routes/alerts.py` — explain endpoint
+- `backend/routes/evidence.py` — evidence verification
+- `frontend/src/lib/sentry.ts` — Sentry init
+- `tests/test_ocr_benchmark.py` — benchmark suite with ROI config
+- `tests/fixtures/generate_fixtures.py` — synthetic OCR frames
+- `.github/workflows/build.yml` — cross-platform CI
+- `.github/workflows/test.yml` — test CI gate
+- `desktop_shell/signing/README.md` — signing instructions
+- `desktop_shell/portable/README.md` — portable mode docs
+
+**Deferred / requires external setup:**
+- E9 production signing: needs actual cert (self-signed for dev documented)
+- E7 Sentry: needs `VITE_SENTRY_DSN` + `SENTRY_DSN` env vars set
+- D7 Ollama: needs model pulled (`ollama pull llama3.2:latest`)
+
 ---
 
 ## Phase 6 — SaaS Foundations + Launch Prep (Weeks 16–18)  — ⚠️ OPTIONAL / BUSINESS-GATED
