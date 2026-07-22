@@ -16,7 +16,6 @@ def get_dataset_quality() -> dict:
     total_sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
     total_events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
 
-    # Completeness — null rates for critical fields
     completeness = {}
     for table, columns in [
         ("sessions", ["game_name", "platform", "date", "start_balance", "end_balance", "rtp"]),
@@ -32,22 +31,18 @@ def get_dataset_quality() -> dict:
             ).fetchone()[0]
             completeness.setdefault(table, {})[col] = round(non_null / table_total, 4)
 
-    # Game distribution
     games = [dict(r) for r in conn.execute(
         "SELECT game_name, COUNT(*) as count FROM sessions GROUP BY game_name ORDER BY count DESC"
     ).fetchall()]
 
-    # Platform distribution
     platforms = [dict(r) for r in conn.execute(
         "SELECT platform, COUNT(*) as count FROM sessions GROUP BY platform ORDER BY count DESC"
     ).fetchall()]
 
-    # Session status distribution
     statuses = [dict(r) for r in conn.execute(
         "SELECT status, COUNT(*) as count FROM sessions GROUP BY status ORDER BY count DESC"
     ).fetchall()]
 
-    # Event confidence distribution
     confidence_buckets = [dict(r) for r in conn.execute("""
         SELECT
             CASE
@@ -61,13 +56,11 @@ def get_dataset_quality() -> dict:
         ORDER BY bucket
     """).fetchall()]
 
-    # Temporal distribution (sessions per month)
     monthly = [dict(r) for r in conn.execute(
         "SELECT strftime('%Y-%m', date) as month, COUNT(*) as count "
         "FROM sessions GROUP BY month ORDER BY month DESC LIMIT 12"
     ).fetchall()]
 
-    # Net result distribution
     net_stats = dict(conn.execute(
         "SELECT ROUND(AVG(net_result),2) as avg, ROUND(MIN(net_result),2) as min, "
         "ROUND(MAX(net_result),2) as max, ROUND(AVG(rtp),2) as avg_rtp FROM sessions"
