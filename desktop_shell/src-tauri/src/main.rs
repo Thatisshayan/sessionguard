@@ -195,6 +195,20 @@ fn handle_tray(app: &AppHandle, event: SystemTrayEvent) {
 }
 
 fn main() {
+    // ── Portable mode detection ─────────────────────────────────────────────
+    let args: Vec<String> = std::env::args().collect();
+    let portable_mode = args.iter().any(|a| a == "--portable");
+
+    if portable_mode {
+        if let Some(exe_path) = std::env::current_exe().ok() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let data_dir = exe_dir.join("data");
+                std::env::set_var("SG_DATA_DIR", data_dir.to_string_lossy().to_string());
+                println!("[Tauri] Portable mode ON — data at: {}", data_dir.display());
+            }
+        }
+    }
+
     tauri::Builder::default()
         .manage(BackendProcess(Arc::new(Mutex::new(None))))
         .system_tray(build_tray())
