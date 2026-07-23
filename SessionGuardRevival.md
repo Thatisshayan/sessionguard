@@ -1,12 +1,13 @@
 # SessionGuard Revival — Phased Handoff Document
 
-**Generated**: 2026-07-10 · **Last revised**: 2026-07-23 (Phase 5 complete + NVIDIA NIM migration done — all Claude/Anthropic references replaced with NVIDIA NIM; model selector added; 19 files changed, pushed to `main`) · **Phase 6 (SaaS) deferred**: business-gated, not started
+**Generated**: 2026-07-10 · **Last revised**: 2026-07-23 (CI pipeline repaired end-to-end; desktop installer bug found and fixed — see below; AI analysis router found unmounted and fixed) · **Phase 6 (SaaS) deferred**: business-gated, not started
 **Target**: Production-hardened local desktop app first; SaaS is an optional, separately-gated track — not a default destination.
-**Next sprints**: See [`SESSIONGUARDREVIVAL1.2.md`](SESSIONGUARDREVIVAL1.2.md) for the active 15-task / 5-sprint plan (Sprint 1 started 2026-07-23).
+
+**Current phase / where to start**: Phases 0–5 below and the NVIDIA NIM migration are complete. `SESSIONGUARDREVIVAL1.2.md`'s Sprint 1 (tests) landed; Sprint 2 (async DB, streaming, toasts) landed **with documented gaps** — see that doc's "Honest Task Audit." **Active work is now tracked in [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md)** (trust/verification sprint — read this one first), with a dedicated, deliberately-separate future sprint in [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) (full embeddable-runtime bundling: Python + Tesseract + FFmpeg). If you're new here: `AGENTS.md` → this document → `SESSIONGUARDREVIVAL1.3.md`.
 
 **Team reality**: this is currently a solo effort (Shaya), optionally AI-agent-assisted for mechanical work (script fixes, audits, sync/cleanup, refactors). The "Engineer 1/2/3" labels on tasks below are role tags for sequencing, not headcount — read "Backend track" / "Frontend track" / "Desktop track," not "hire 3 people." Parallelize across tracks only if/when there's more than one person; otherwise work them in the listed order.
 
-**Repository state**: don't hardcode a commit hash here — it goes stale immediately (this section already did, twice). Check `git log --oneline -5` and `git status` in both `C:\Projects\SessionGuard\sessionguard` (canonical — feeds the installed `SessionGuard.exe`) and any other clone before starting a phase. As of 2026-07-21 the two known trees are merged and in sync.
+**Repository state — this section has been wrong before, verify, don't trust it**: don't hardcode a commit hash here — it goes stale immediately (it already has, three times). Check `git log --oneline -5` and `git status` in both `C:\Projects\SessionGuard\sessionguard` (canonical — feeds the installed `SessionGuard.exe`) and any other clone before starting a phase. **This doc claimed as of 2026-07-21 the two known trees were "merged and in sync." They were not** — on 2026-07-23, `C:\Projects\SessionGuard\sessionguard` was found stuck at commit `09dbf59` (Phase 2 era), six phases behind `origin/main`, and the installed desktop app was silently running that stale code (see `SESSIONGUARDREVIVAL1.3.md` finding #13). Re-verify this with `git log` yourself before trusting any "in sync" claim in this file, including this one, the next time you read it.
 
 ---
 
@@ -115,7 +116,7 @@
 | D1 | Structured AI outputs (Pydantic + function calling) | BE | `AIInsight` model: `headline`, `risk_level`, `discipline_score`, `behavior_tags[]`, `evidence[]` | ✅ Done (2026-07-22) — Pydantic models in `backend/schemas/ai.py`; `parse_ai_response()` replaces ad-hoc dict parsing; for NVIDIA NIM; 6 tests passing |
 | D2 | pgvector embeddings + similarity search | BE | `POST /intelligence/embed` stores vectors; `GET /intelligence/similar/{id}` returns top-5 in < 100ms | **Deferred** — requires PostgreSQL (SaaS-gated with A1/A2); revisit when multi-tenant track is committed |
 | D3 | Prompt versioning + A/B framework | BE | Prompts in DB with `version`, `model`, `params`; `/intelligence/ai/compare` runs A/B on demand | ✅ Done (2026-07-22) — `engines/prompt_manager.py` with CRUD + A/B recording; `prompt_versions` + `ab_results` tables (V8 schema); `GET/POST /api/v1/prompts` endpoints; `ai_insights_engine.py` loads active prompt from DB (falls back to hardcoded SYSTEM_PROMPT) |
-| E4 | Bundle deps (Tesseract, FFmpeg, Python) | DESKTOP | Installer includes all; no external deps; `sessionguard --version` works offline | ✅ Done (2026-07-22) — `tauri.conf.json` updated with `externalBin`, `resources`, expanded bundle targets; `main.rs` checks bundled paths first; `bundle/README.md` with setup instructions |
+| E4 | Bundle deps (Tesseract, FFmpeg, Python) | DESKTOP | Installer includes all; no external deps; `sessionguard --version` works offline | ⚠️ **Corrected 2026-07-23 — this was not actually done.** The 2026-07-22 entry below described config that referenced binaries nobody had placed (`bundle/README.md` documented manual steps that were never completed); the installer shipped no backend and no runtimes at all, and `main.rs` silently fell back to a hardcoded dev-machine path instead of failing. Backend **source** bundling is now genuinely done (`desktop_shell/stage-backend.js`, see `SESSIONGUARDREVIVAL1.3.md` finding #13). Bundling the actual **runtimes** (Python/Tesseract/FFmpeg binaries) is unstarted — tracked as its own dedicated sprint in [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md). Original (inaccurate) note, kept for history: "`tauri.conf.json` updated with `externalBin`, `resources`, expanded bundle targets; `main.rs` checks bundled paths first; `bundle/README.md` with setup instructions" |
 | E5 | SQLCipher encrypted SQLite | DESKTOP | DB file unreadable without key; key derived from user password + Argon2id | ✅ Done (2026-07-22) — `database/encryption.py` with PBKDF2 key derivation, optional SQLCipher, graceful degradation; `get_connection()` checks encryption config; 7 tests passing (2 skipped — pysqlcipher3 not installed) |
 
 ### Definition of Done
@@ -125,9 +126,9 @@
 - ✅ Debug frame annotation export (C7 done)
 - ✅ Prompt versioning and A/B framework (D3 done)
 - ✅ SQLCipher encryption support (E5 done)
-- ✅ Desktop bundle configuration (E4 done)
+- ⚠️ Desktop bundle configuration (E4 — corrected 2026-07-23, was not actually done; see entry above and `SESSIONGUARDREVIVAL1.4.md`)
 - ✅ Installers signed/notarized (E9 done in Phase 5 — config + docs; actual signing requires cert)
-- ✅ Offline install works (E4 + E8 done in Phase 5 — bundled paths + portable mode)
+- ⚠️ Offline install (E4 + E8) — E8 portable mode is real; E4's "no external deps" claim was false until `SESSIONGUARDREVIVAL1.4.md` lands (backend source now bundles as of 2026-07-23, runtimes still do not)
 
 ---
 
@@ -353,16 +354,22 @@ If it's still just you: work top-to-bottom within a phase before moving to the n
 
 ## Definition of "Revival Complete"
 
-SessionGuard is **revived** when:
+SessionGuard is **revived** when (checkmarks below are the *target*, not the current state — corrected 2026-07-23; they read as already-achieved before, which was wrong: this is a solo local app, Phase 6/SaaS is explicitly deferred, and there is no revenue or SOC2 track yet):
 
-1. ✅ **Local-first desktop app** installs in < 30s, works offline, auto-updates
-2. ✅ **SaaS backend** handles 1000+ concurrent users, multi-tenant, billed via Stripe
-3. ✅ **AI intelligence** provides structured, explainable, cost-controlled insights
-4. ✅ **Video→Events pipeline** processes 2hr recordings in < 10min with > 95% accuracy
-5. ✅ **Test coverage** > 80% backend, > 70% frontend, E2E green in CI
-6. ✅ **SOC2 evidence** package ready for auditor
-7. ✅ **First revenue** recognized from paying customer
+1. ⏳ **Local-first desktop app** installs in < 30s, works offline, auto-updates — installer now bundles its own backend source (2026-07-23) but not yet the full runtime; see `SESSIONGUARDREVIVAL1.4.md`
+2. ⏳ **SaaS backend** handles 1000+ concurrent users, multi-tenant, billed via Stripe — Phase 6, not started, business-gated
+3. ⏳ **AI intelligence** provides structured, explainable, cost-controlled insights — structurally present, but the router serving it was found unmounted (dead code) on 2026-07-23 and has only just been fixed; not yet verified against a live API (`SESSIONGUARDREVIVAL1.3.md` B3)
+4. ⏳ **Video→Events pipeline** processes 2hr recordings in < 10min with > 95% accuracy — pipeline exists, but `video_pipeline.py` is at ~10% test coverage; accuracy claim unverified at scale
+5. ⏳ **Test coverage** > 80% backend, > 70% frontend, E2E green in CI — currently ~42% backend overall (concentrated in older code); E2E exists but isn't part of the CI gate yet
+6. ⏳ **SOC2 evidence** package ready for auditor — not started
+7. ⏳ **First revenue** recognized from paying customer — not applicable yet; no SaaS/paid track exists
 
 ---
 
-*This document lives at `SessionGuardRevival.md` in the repo root. Update at each phase gate.*
+## Session Log
+
+**2026-07-23** — Full audit + CI/desktop repair session. CI pipeline was failing on every push; found and fixed 9 independent bugs across `build.yml`/`test.yml`/`Cargo.toml`/`tauri.conf.json` (invalid GHA expressions, broken pip installs, phantom Rust dependencies, silently-stripped Tauri features, platform-specific bundler quirks on all three OSes, missing release permissions). Smoke-testing the resulting installer found a severe correctness bug: the app silently ran six-phases-stale backend code from a hardcoded dev-machine path instead of the code it was built from — fixed by actually bundling backend source into the installer and making failures visible instead of silent. While verifying that fix, found `backend/routes/ai_analysis.py` (the entire NVIDIA AI insights/streaming feature) was never mounted in `main.py` and had been dead code at the API level. Full findings, fixes, and the forward task board: [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md). Runtime-bundling work split into its own sprint: [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md).
+
+---
+
+*This document lives at `SessionGuardRevival.md` in the repo root. Update at each phase gate. When you find a status claim in this file that turns out to be wrong, correct it in place and add a line to the Session Log above — don't just silently fix the code and leave the doc's old claim standing, that's exactly the pattern that caused the 2026-07-23 findings.*

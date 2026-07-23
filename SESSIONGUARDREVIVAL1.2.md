@@ -1,6 +1,10 @@
 # SessionGuard Revival 1.2 — Next Sprint Roadmap
 
-**Created**: 2026-07-23 · **Status**: Active · **Parent doc**: `SessionGuardRevival.md`
+**Created**: 2026-07-23 · **Status**: ⚠️ Superseded — kept for history · **Parent doc**: `SessionGuardRevival.md`
+
+> **This document is no longer the active plan.** Sprint 1 (tests) and Sprint 2 (async DB/streaming/toasts, with documented gaps) below are this document's actual output. Everything from Sprint 3 onward — plus a set of severe bugs found while smoke-testing this sprint's own "done" claims (the AI streaming feature this doc calls partial was actually **completely unreachable**, not partial — see below) — is now tracked in **[`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md)**. Read that document for current status. This one stays as-is for history; don't update its status columns further.
+>
+> **2026-07-23 correction**: this document's B4 entry below says AI streaming is "~70% done" and its biggest gap is "never tested with a real NVIDIA NIM API." That's true but incomplete — a later session the same day found `backend/routes/ai_analysis.py` (which B4's own streaming endpoint lives in) was **never imported or mounted in `main.py` at all**. Every endpoint this task built — including the ones B4 lists as "done" — 404'd. See `SESSIONGUARDREVIVAL1.3.md` finding #14. This is the clearest example yet of why 1.3 exists: even this document's own honest-audit section wasn't honest enough, because nobody actually called the endpoints from outside the code that defines them.
 
 ---
 

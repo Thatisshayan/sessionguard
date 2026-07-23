@@ -1,8 +1,8 @@
-# SessionGuard v1.5.0 — Local-First Session Intelligence Platform
+# SessionGuard v1.5.2 — Local-First Session Intelligence Platform
 
 Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (NVIDIA NIM + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
 
-> **Current project status**: see [`SessionGuardRevival.md`](SessionGuardRevival.md) — **Phases 0–5 all complete** (2026-07-22). 72 tests passing, 0 TS errors. Phase 6 (SaaS) is business-gated/deferred. For a point-in-time code audit, see [`10072026auditbytopencode.md`](10072026auditbytopencode.md) (dated 2026-07-10 — check the revival doc for anything more recent).
+> **Current project status**: Phases 0–5 and the NVIDIA NIM migration are complete, but a 2026-07-23 audit + CI/desktop-repair session found and fixed several severe bugs hiding behind "done" status — a broken CI pipeline (every workflow failing), a desktop installer that silently ran six-phases-stale code instead of crashing, and an entire AI-insights API router that was never mounted (404 on every call). **Read [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) first** — it has the full findings list and the active task board. [`SessionGuardRevival.md`](SessionGuardRevival.md) has the phase history and session log; [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) is a dedicated future sprint for full runtime bundling (Python/Tesseract/FFmpeg — not started). [`10072026auditbytopencode.md`](10072026auditbytopencode.md) is a 2026-07-10 point-in-time audit, superseded by the above.
 
 ---
 
@@ -70,7 +70,7 @@ bash scripts/run_all.sh
 ```
 sessionguard/
 ├── backend/                      # FastAPI application (30+ endpoints)
-│   ├── main.py                   # App factory — 22 route groups registered
+│   ├── main.py                   # App factory — 40 route groups registered (ai_analysis added 2026-07-23, was previously missing)
 │   ├── routes/                   # One file per endpoint group
 │   │   ├── health, sessions, metrics, insights, alerts, review_queue
 │   │   ├── uploads, exports, compare, profiles, video_status, ocr_status
@@ -99,7 +99,7 @@ sessionguard/
 │   ├── frame_annotator.py        # OpenCV frame annotation with ROI boxes + OCR text overlay
 │   └── dataset_quality.py        # Dataset completeness/bias/distribution metrics
 ├── frontend/                     # React 18 + TypeScript + Vite
-│   ├── src/pages/                # 14 pages
+│   ├── src/pages/                # 18 pages
 │   │   ├── Dashboard, Sessions, SessionDetail, LiveMonitor, Compare
 │   │   ├── Upload, ReviewQueue, Reports, Profiles, Settings
 │   │   ├── ParserBenchmark, JobsMonitor, Admin, Login
@@ -107,7 +107,7 @@ sessionguard/
 │   ├── src/store/appStore.ts     # Zustand-like store (error, loading, user, sessions)
 │   └── src/components/           # 8 shared components
 ├── desktop_app/                  # PySide6 embedded browser shell (legacy)
-├── desktop_shell/                # Tauri v2 (Rust) native build — primary desktop target
+├── desktop_shell/                # Tauri v1 (Rust) native build — primary desktop target; v2 migration not started (see SESSIONGUARDREVIVAL1.3.md, Track C2). Bundles its own backend source as of 2026-07-23 (desktop_shell/stage-backend.js); full runtime (Python/Tesseract/FFmpeg) bundling is future work (SESSIONGUARDREVIVAL1.4.md)
 ├── database/                     # SQLite + 5 schema migrations (15 tables)
 │   └── db.py                     # WAL mode, FK enforcement, versioned init_db_vN()
 ├── config/                       # app_config.json + per-game OCR profiles
@@ -138,7 +138,8 @@ sessionguard/
 | Jobs | `GET/POST /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/cancel`, `GET /jobs/worker/health` |
 | Admin | `GET /admin/system-health`, `GET /admin/system-stats`, `GET /admin/audit-log` |
 | Intelligence | `POST /intelligence/clusters/build`, `GET /intelligence/clusters`, `GET /intelligence/anomalies`, `GET /intelligence/dataset-quality` (D10) |
-| AI Coach | `GET /intelligence/ai/status`, `GET /intelligence/ai/session/{id}`, `POST /intelligence/ai/compare` |
+| AI Analysis | `GET /api/v1/ai/status`, `GET /api/v1/ai/models`, `POST /api/v1/ai/model`, `GET/POST /api/v1/sessions/{id}/ai`, `GET /api/v1/sessions/{id}/ai/stream` — router was unmounted until 2026-07-23, now fixed |
+| Intelligence (AI sub-routes) | `POST /intelligence/ai/compare`, `GET /intelligence/ai/session/{id}`, `GET /intelligence/ai/status` ⚠️ — this router's paths double their own segment under its mount prefix (`/api/v1/intelligence/intelligence/...`); known bug, not yet fixed, see `SESSIONGUARDREVIVAL1.3.md` task A5 |
 | AI Cost | `GET /api/v1/ai-cost/usage` (D6 — token usage + budget tracking) |
 | Prompts | `GET/POST /api/v1/prompts` (D3 — prompt versioning + A/B) |
 | OCR Calibrate | `POST /ocr/process`, `POST /ocr/calibrate`, `POST /ocr-calibrate/auto` (C2), `GET /ocr/status` |
@@ -165,7 +166,7 @@ sessionguard/
 | Alerts + Acknowledgement | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Alert Explanations (LLM root cause) | ✅ | ❌ | — | ✅ | ✅ |
 | Insights (rule-based) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| AI Narrative (NVIDIA NIM + Ollama fallback) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| AI Narrative (NVIDIA NIM + Ollama fallback) | ⚠️ | ✅ | ✅ | ⚠️ | ⚠️ |
 | AI Cost Tracking + Budget | ✅ | ❌ | — | ✅ | ✅ |
 | Prompt Versioning + A/B | ✅ | ❌ | — | ✅ | ✅ |
 | Compare Sessions | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -189,14 +190,21 @@ sessionguard/
 
 **Legend**: ✅ Complete | ⚠️ Partial/WIP | ❌ Missing
 
+> **AI Narrative note (2026-07-23)**: this row was previously all-✅. It was wrong — the router serving every one of these endpoints (`backend/routes/ai_analysis.py`) was never mounted in `main.py`, so the feature 404'd end-to-end despite tests passing at the unit level. Now fixed (router mounted, live curl confirms the model list endpoint works) but downgraded to ⚠️ because it has still never been exercised against a real NVIDIA NIM API key end-to-end — see `SESSIONGUARDREVIVAL1.3.md` task B3.
+
 ---
 
 ## Documentation
 
+Read in this order if you're new to the repo:
+
 | Document | Description |
 |----------|-------------|
-| [`10072026auditbytopencode.md`](10072026auditbytopencode.md) | **Deep codebase audit** — architecture, code quality, security, performance, 50 prioritized tasks |
-| [`SessionGuardRevival.md`](SessionGuardRevival.md) | **6-phase execution handoff** (18 weeks) — tasks, owners, acceptance criteria, success metrics |
+| [`SessionGuardRevival.md`](SessionGuardRevival.md) | **Phase history** (0–5 + NVIDIA migration, complete) + session log — read first |
+| [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) | **Active sprint plan** as of 2026-07-23 — full findings from the CI/desktop-repair session + forward task board. Read second, before assuming anything is done or broken |
+| [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) | Dedicated future sprint — full embeddable-runtime bundling (Python + Tesseract + FFmpeg). Not started; read to understand what's deliberately deferred |
+| [`SESSIONGUARDREVIVAL1.2.md`](SESSIONGUARDREVIVAL1.2.md) | Superseded by 1.3, kept for history (Sprint 1–2 detail) |
+| [`10072026auditbytopencode.md`](10072026auditbytopencode.md) | Point-in-time deep codebase audit, dated 2026-07-10 — stale, superseded by the above |
 
 ---
 
@@ -214,21 +222,24 @@ bash scripts/seed_db.sh
 
 ---
 
-## What's Next — Roadmap to Production (v2.0)
+## What's Next — Roadmap to Production
 
-See [`SessionGuardRevival.md`](SessionGuardRevival.md) for the detailed 18-week plan. High-level:
+See [`SessionGuardRevival.md`](SessionGuardRevival.md) for phase history and [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) for the active plan. High-level:
 
-| Phase | Weeks | Focus | Status |
-|-------|-------|-------|--------|
-| 0 | — | Immediate hardening | ✅ Done (2026-07-21) |
-| 1 | 1–3 | Foundations — Rate limiting, structured logging, secret management, DB indexes, React Query, route guards | ✅ Done |
-| 2 | 4–6 | Hardening + FE Polish — Job workers, upload validation, test suite, API versioning, design tokens, Playwright E2E | ✅ Done |
-| 3 | 7–9 | OCR/Video + Desktop Core — EasyOCR fallback, ROI auto-calibration, parallel OCR (8×), pHash dedup, auto-updater, system tray | ✅ Done (E1 Tauri v2 deferred) |
-| 4 | 10–12 | AI Intelligence + Distribution — Structured AI outputs, prompt versioning, bundled deps, SQLCipher, event validation | ✅ Done (D2 pgvector deferred) |
-| 5 | 13–15 | Advanced AI + Desktop Polish — Multi-region OCR, HDBSCAN, alert explanations, cost tracking, offline AI (Ollama), Coach, evidence packages, native notif, Sentry, portable mode, code signing, CI/CD | ✅ Done (2026-07-22) |
-| 6 | 16–18 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 0 | Immediate hardening | ✅ Done (2026-07-21) |
+| 1 | Foundations — Rate limiting, structured logging, secret management, DB indexes, React Query, route guards | ✅ Done |
+| 2 | Hardening + FE Polish — Job workers, upload validation, test suite, API versioning, design tokens, Playwright E2E | ✅ Done |
+| 3 | OCR/Video + Desktop Core — EasyOCR fallback, ROI auto-calibration, parallel OCR (8×), pHash dedup, auto-updater, system tray | ✅ Done (E1 Tauri v2 migration still deferred) |
+| 4 | AI Intelligence + Distribution — Structured AI outputs, prompt versioning, bundled deps, SQLCipher, event validation | ⚠️ Mostly done, but "bundled deps" (E4) was a false claim — corrected 2026-07-23, see below (D2 pgvector still deferred) |
+| 5 | Advanced AI + Desktop Polish — Multi-region OCR, HDBSCAN, alert explanations, cost tracking, offline AI (Ollama), Coach, evidence packages, native notif, Sentry, portable mode, code signing, CI/CD | ✅ Done (2026-07-22), though CI itself was found broken on every push as of 2026-07-23 and has since been repaired |
+| 1.2 | Async DB, AI streaming, toast notifications | ⚠️ Landed with documented gaps — see `SESSIONGUARDREVIVAL1.2.md` (superseded) |
+| **1.3** | **Trust & verification sprint — active.** CI repair, desktop-installer bundling fix, AI router mount fix, plus a forward task board prioritizing "actually run it" verification over new features | 🟡 Active — see `SESSIONGUARDREVIVAL1.3.md` |
+| 1.4 | Full embeddable-runtime bundling (Python + Tesseract + FFmpeg) — true zero-dependency installers | ⏳ Not started — dedicated future sprint, see `SESSIONGUARDREVIVAL1.4.md` |
+| 6 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
 
-**Target**: v1.5.0 — production local desktop app with signed installers, offline AI, evidence packages. Phase 6 (SaaS) requires committed business decision.
+**Current version**: `v1.5.2`. Production-local-desktop-app readiness is close but not there yet — read `SESSIONGUARDREVIVAL1.3.md`'s findings before assuming any given feature works end-to-end; several "done" claims in earlier phases turned out to be wrong on 2026-07-23. Phase 6 (SaaS) requires a committed business decision that hasn't been made.
 
 ---
 
