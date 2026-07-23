@@ -60,6 +60,10 @@ jobs:
   build-macos:
     name: macOS (DMG)
     runs-on: macos-latest
+    env:
+      # `secrets` isn't allowed inside `if:` conditionals — GitHub Actions
+      # only exposes it to env/with. Route the check through env instead.
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,7 +95,7 @@ jobs:
         run: rustup target add x86_64-apple-darwin
 
       - name: Import signing certificate
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        if: ${{ env.HAS_APPLE_CERT == 'true' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -109,7 +113,7 @@ jobs:
       # APPLE_SIGNING_IDENTITY as "sign now" — an empty string from an unset
       # secret still triggers `codesign` with a blank identity and fails.
       - name: Build Tauri app (signed)
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
+        if: ${{ env.HAS_APPLE_CERT == 'true' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -126,7 +130,7 @@ jobs:
           args: --target x86_64-apple-darwin
 
       - name: Build Tauri app (unsigned)
-        if: ${{ secrets.APPLE_CERTIFICATE == '' }}
+        if: ${{ env.HAS_APPLE_CERT == 'false' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
