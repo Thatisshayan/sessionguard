@@ -2,6 +2,7 @@
 
 **Generated**: 2026-07-10 · **Last revised**: 2026-07-23 (Phase 5 complete + NVIDIA NIM migration done — all Claude/Anthropic references replaced with NVIDIA NIM; model selector added; 19 files changed, pushed to `main`) · **Phase 6 (SaaS) deferred**: business-gated, not started
 **Target**: Production-hardened local desktop app first; SaaS is an optional, separately-gated track — not a default destination.
+**Next sprints**: See [`SESSIONGUARDREVIVAL1.2.md`](SESSIONGUARDREVIVAL1.2.md) for the active 15-task / 5-sprint plan (Sprint 1 started 2026-07-23).
 
 **Team reality**: this is currently a solo effort (Shaya), optionally AI-agent-assisted for mechanical work (script fixes, audits, sync/cleanup, refactors). The "Engineer 1/2/3" labels on tasks below are role tags for sequencing, not headcount — read "Backend track" / "Frontend track" / "Desktop track," not "hire 3 people." Parallelize across tracks only if/when there's more than one person; otherwise work them in the listed order.
 
