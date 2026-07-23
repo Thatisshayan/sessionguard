@@ -14,6 +14,7 @@ import json
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import AsyncGenerator, Optional
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 def _resolve_base_dir() -> Path:
@@ -45,6 +46,90 @@ def get_connection():
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+# ── Async DB Support (Sprint 2: B3) ────────────────────────────────────────────
+
+async def get_async_connection():
+    """
+    Get an async database connection using aiosqlite.
+    Non-blocking alternative to get_connection() for async routes.
+    """
+    try:
+        import aiosqlite
+    except ImportError:
+        raise ImportError(
+            "aiosqlite is required for async DB operations. "
+            "Install with: pip install aiosqlite"
+        )
+    
+    from database.encryption import get_encryption_config, SQLCIPHER_AVAILABLE
+    
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db_path_str = str(DB_PATH)
+    encryption = get_encryption_config()
+    
+    if encryption and SQLCIPHER_AVAILABLE:
+        password = encryption.get("password") or os.getenv("SG_DB_PASSWORD", "")
+        if password:
+            # For encrypted DBs, use SQLCipher with aiosqlite
+            conn = await aiosqlite.connect(db_path_str)
+            await conn.execute("PRAGMA key=?", [password])
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA foreign_keys=ON")
+            conn.row_factory = aiosqlite.Row
+            return conn
+    
+    # Fallback: plain async SQLite
+    conn = await aiosqlite.connect(db_path_str)
+    await conn.execute("PRAGMA journal_mode=WAL")
+    await conn.execute("PRAGMA foreign_keys=ON")
+    conn.row_factory = aiosqlite.Row
+    return conn
+
+
+async def async_fetch_one(query: str, params: tuple = ()) -> Optional[dict]:
+    """Execute a query and return one row as a dict."""
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.execute(query, params)
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        await conn.close()
+
+
+async def async_fetch_all(query: str, params: tuple = ()) -> list[dict]:
+    """Execute a query and return all rows as dicts."""
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.execute(query, params)
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        await conn.close()
+
+
+async def async_execute(query: str, params: tuple = ()) -> int:
+    """Execute a write query and return lastrowid (for INSERTs) or rowcount (for UPDATE/DELETE)."""
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.execute(query, params)
+        await conn.commit()
+        return cursor.lastrowid if cursor.lastrowid else cursor.rowcount
+    finally:
+        await conn.close()
+
+
+async def async_execute_many(query: str, params_list: list[tuple]) -> int:
+    """Execute a write query with multiple param sets and return rowcount."""
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.executemany(query, params_list)
+        await conn.commit()
+        return cursor.rowcount
+    finally:
+        await conn.close()
 
 
 SCHEMA_SQL = """

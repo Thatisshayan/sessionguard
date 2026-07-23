@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createExport, getExports, getSessions } from '../services/api'
 import type { Session } from '../services/api'
+import { toast } from '../components/Toast'
 
 const FORMATS = [
   { key: 'pdf',   label: 'PDF Report',    icon: '📄', desc: 'Styled report with charts & insights' },
@@ -29,7 +30,10 @@ export default function Reports() {
       const sid = sessionId === 'global' ? undefined : Number(sessionId)
       return createExport(fmt, sid)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['exports', 'all'] }),
+    onSuccess: () => {
+      toast.success('Export generated')
+      qc.invalidateQueries({ queryKey: ['exports', 'all'] })
+    },
   })
   const generating = generateMutation.isPending ? (generateMutation.variables ?? '') : ''
   const result = generateMutation.data ?? null
@@ -40,6 +44,7 @@ export default function Reports() {
       await generateMutation.mutateAsync(fmt)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Export failed.')
+      toast.error('Export failed')
     }
   }
 

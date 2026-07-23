@@ -10,6 +10,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import axios from 'axios'
 import { getProfiles } from '../services/api'
+import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -76,12 +77,16 @@ export default function ParserBenchmark() {
         headers: { 'Content-Type': 'multipart/form-data' },
       }).then(res => res.data as BenchmarkResult)
     },
+    onSuccess: () => { toast.success('Frame uploaded') },
+    onError: () => { toast.error('Operation failed') },
   })
   const runMutation = useMutation({
     mutationFn: () => axios.post(`${BASE}/parser-benchmark`, {
       frame_paths: [],
       profile_id:  Number(profileId),
     }).then(res => res.data as BenchmarkResult),
+    onSuccess: () => { toast.success('Benchmark complete') },
+    onError: () => { toast.error('Operation failed') },
   })
 
   const loading = uploadMutation.isPending || runMutation.isPending

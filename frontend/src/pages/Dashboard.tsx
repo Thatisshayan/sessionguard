@@ -14,6 +14,7 @@ import {
   getDashboardSummary,
   acknowledgeAlert, resolveReviewItem,
 } from '../services/api'
+import { toast } from '../components/Toast'
 
 const fmtC  = (n: number) => `${n >= 0 ? '+$' : '-$'}${Math.abs(n).toFixed(2)}`
 const col   = (n: number) => n >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'
@@ -60,11 +61,23 @@ export default function Dashboard() {
 
   const ackMutation = useMutation({
     mutationFn: (id: number) => acknowledgeAlert(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('Alert acknowledged')
+    },
+    onError: () => {
+      toast.error('Action failed')
+    },
   })
   const resolveMutation = useMutation({
     mutationFn: ({ id, action }: { id: number; action: string }) => resolveReviewItem(id, action),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+      toast.success('Review item resolved')
+    },
+    onError: () => {
+      toast.error('Action failed')
+    },
   })
 
   const handleAcknowledge = (id: number) => ackMutation.mutate(id)

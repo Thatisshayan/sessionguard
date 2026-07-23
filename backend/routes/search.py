@@ -7,13 +7,13 @@ Maturity: Working Prototype
 """
 
 from fastapi import APIRouter, Query
-from database.db import get_connection
+from database.db import get_connection, async_fetch_all
 
 router = APIRouter(tags=["search"])
 
 
 @router.get("/search")
-def global_search(
+async def global_search(
     q:     str = Query(..., min_length=1, max_length=200),
     limit: int = Query(20, le=100),
 ):
@@ -22,16 +22,15 @@ def global_search(
     Returns grouped results with type labels.
     """
     term  = f"%{q}%"
-    conn  = get_connection()
     results = []
 
     # Sessions — match name, game_name, platform, notes
-    sessions = conn.execute("""
+    sessions = await async_fetch_all("""
         SELECT id, name, game_name, platform, date, net_result, rtp, status
         FROM sessions
         WHERE name LIKE ? OR game_name LIKE ? OR platform LIKE ? OR notes LIKE ?
         ORDER BY date DESC LIMIT ?
-    """, (term, term, term, term, limit)).fetchall()
+    """, (term, term, term, term, limit))
     for r in sessions:
         results.append({
             "type":    "session",
@@ -43,12 +42,12 @@ def global_search(
         })
 
     # Insights — match text
-    insights = conn.execute("""
+    insights = await async_fetch_all("""
         SELECT i.id, i.session_id, i.text, i.severity, s.name AS session_name
         FROM insights i JOIN sessions s ON s.id = i.session_id
         WHERE i.text LIKE ?
         ORDER BY i.created_at DESC LIMIT ?
-    """, (term, limit)).fetchall()
+    """, (term, limit))
     for r in insights:
         results.append({
             "type":    "insight",
@@ -60,12 +59,12 @@ def global_search(
         })
 
     # Alerts — match message
-    alerts = conn.execute("""
+    alerts = await async_fetch_all("""
         SELECT a.id, a.session_id, a.message, a.severity, s.name AS session_name
         FROM alerts a JOIN sessions s ON s.id = a.session_id
         WHERE a.message LIKE ?
         ORDER BY a.created_at DESC LIMIT ?
-    """, (term, limit)).fetchall()
+    """, (term, limit))
     for r in alerts:
         results.append({
             "type":    "alert",
@@ -77,12 +76,12 @@ def global_search(
         })
 
     # Notes — match note text
-    notes = conn.execute("""
+    notes = await async_fetch_all("""
         SELECT n.id, n.session_id, n.note, n.version, s.name AS session_name
         FROM session_notes n JOIN sessions s ON s.id = n.session_id
         WHERE n.note LIKE ?
         ORDER BY n.created_at DESC LIMIT ?
-    """, (term, limit)).fetchall()
+    """, (term, limit))
     for r in notes:
         results.append({
             "type":    "note",
@@ -92,8 +91,6 @@ def global_search(
             "meta":    {"session_id": r["session_id"]},
             "url":     f"/sessions/{r['session_id']}",
         })
-
-    conn.close()
 
     # Group by type for UI
     grouped = {}

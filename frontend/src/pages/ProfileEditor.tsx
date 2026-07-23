@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import axios from 'axios'
+import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -107,10 +108,12 @@ export default function ProfileEditor() {
     setError(''); setSuccess('')
     try {
       await saveMutation.mutateAsync()
+      toast.success('Profile saved')
       setSuccess('Profile saved.')
       setTimeout(() => navigate('/profiles'), 1200)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Save failed.')
+      toast.error('Failed to save profile')
     }
   }
 

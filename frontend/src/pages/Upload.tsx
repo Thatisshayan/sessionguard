@@ -5,6 +5,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { uploadFile, getUploads } from '../services/api'
+import { toast } from '../components/Toast'
 
 const FILE_TYPES = 'CSV, MP4, MKV, MOV, AVI, PNG, JPEG'
 const ACCEPT     = '.csv,video/mp4,video/x-matroska,video/quicktime,video/x-msvideo,image/png,image/jpeg'
@@ -43,7 +44,13 @@ export default function Upload() {
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadFile(file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['uploads'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['uploads'] })
+      toast.success('File uploaded successfully')
+    },
+    onError: (e: any) => {
+      toast.error('Upload failed: ' + (e?.response?.data?.detail ?? e?.message ?? 'Unknown error'))
+    },
   })
   const uploading = uploadMutation.isPending
   const result = uploadMutation.data ?? null

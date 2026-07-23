@@ -8,7 +8,7 @@ import io
 import zipfile
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from database.db import get_connection
+from database.db import get_connection, async_fetch_one, async_fetch_all
 from engines.frame_annotator import annotate_frame, create_annotated_zip
 from engines.video_pipeline import get_video_job
 
@@ -44,30 +44,26 @@ def get_job(job_id: int):
 
 
 @router.get("/{job_id}/annotated-frames")
-def get_annotated_frames(job_id: int):
+async def get_annotated_frames(job_id: int):
     """
     Download annotated frames for a video job as a ZIP.
     Each frame has ROI boxes and OCR text overlay.
     """
-    conn = get_connection()
-    job = conn.execute("SELECT * FROM video_jobs WHERE id=?", (job_id,)).fetchone()
-    if not job:
-        conn.close()
+    job_row = await async_fetch_one("SELECT * FROM video_jobs WHERE id=?", (job_id,))
+    if not job_row:
         raise HTTPException(status_code=404, detail="Video job not found.")
 
-    job = dict(job)
+    job = dict(job_row)
     output_dir = job.get("output_dir")
     if not output_dir:
-        conn.close()
         raise HTTPException(status_code=404, detail="No output directory for this job.")
 
     session_id = job.get("session_id")
-    ocr_rows = conn.execute(
+    ocr_rows = await async_fetch_all(
         "SELECT frame_path, balance_value, bet_value, win_value, confidence_bal, confidence_bet, confidence_win "
         "FROM ocr_results WHERE session_id=? ORDER BY id",
         (session_id,),
-    ).fetchall()
-    conn.close()
+    )
 
     frames_data = []
     for row in ocr_rows:

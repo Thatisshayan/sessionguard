@@ -151,14 +151,12 @@ def me(authorization: Optional[str] = Header(None)):
 
 # ── Admin: list users (admin role only) ───────────────────────────────────────
 @router.get("/users")
-def list_users(authorization: Optional[str] = Header(None)):
+async def list_users(authorization: Optional[str] = Header(None)):
     current = get_current_user_from_token(authorization)
     if not current or current["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
-    from database.db import get_connection
-    conn = get_connection()
-    rows = conn.execute(
+    from database.db import async_fetch_all
+    rows = await async_fetch_all(
         "SELECT id, email, username, role, is_active, created_at, last_login FROM users ORDER BY created_at DESC"
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    )
+    return rows

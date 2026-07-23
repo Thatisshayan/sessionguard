@@ -267,6 +267,64 @@ def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, mo
         raise RuntimeError(f"NVIDIA API error {e.code}: {error_body}")
 
 
+def _stream_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None):
+    """
+    Stream API call to NVIDIA NIM (OpenAI-compatible).
+    Yields chunks as they arrive. Returns final usage at the end.
+    """
+    messages = []
+    if system_prompt or SYSTEM_PROMPT:
+        messages.append({"role": "system", "content": system_prompt or SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = json.dumps({
+        "model":       model or MODEL,
+        "max_tokens":  MAX_TOKENS,
+        "temperature": 0.7,
+        "stream":      True,
+        "messages":    messages,
+    }).encode()
+
+    req = urllib.request.Request(
+        API_URL,
+        data=payload,
+        headers={
+            "Content-Type":    "application/json",
+            "Authorization":   f"Bearer {api_key}",
+            "Accept":          "text/event-stream",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            full_text = ""
+            usage = {}
+            for line in response:
+                line = line.decode("utf-8").strip()
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            full_text += content
+                            yield {"type": "chunk", "content": content}
+                        if chunk.get("usage"):
+                            usage = chunk["usage"]
+                    except json.JSONDecodeError:
+                        continue
+            yield {"type": "done", "full_text": full_text, "usage": usage}
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        yield {"type": "error", "error": f"NVIDIA API error {e.code}: {error_body}"}
+
+
 # ── Fallback rule-based response ──────────────────────────────────────────────
 
 def _fallback_analysis(session_id: int, summary: dict) -> dict:
@@ -498,6 +556,67 @@ def _persist_ai_insights(session_id: int, analysis: dict):
         )
     conn.commit()
     conn.close()
+
+
+def stream_analyse_session(session_id: int):
+    """
+    Generator that streams AI analysis for a session.
+    Yields SSE-formatted events:
+      - type: 'start' — analysis beginning
+      - type: 'chunk' — text chunk from AI
+      - type: 'done'  — full analysis result
+      - type: 'error' — error occurred
+    """
+    summary = _build_session_summary(session_id)
+    if not summary:
+        yield {"type": "error", "error": f"Session {session_id} not found."}
+        return
+
+    api_key = _get_api_key()
+    if not api_key:
+        # Fallback to rule-based (no streaming needed)
+        result = _fallback_analysis(session_id, summary)
+        result["session_id"] = session_id
+        yield {"type": "done", "analysis": result}
+        return
+
+    try:
+        from engines.prompt_manager import get_active_prompt
+        active = get_active_prompt("session_analysis")
+        system_prompt = active["system_prompt"] if active else None
+        prompt = _build_user_prompt(summary)
+
+        yield {"type": "start", "model": MODEL}
+
+        full_text = ""
+        usage = {}
+        for chunk in _stream_nvidia(prompt, api_key, system_prompt=system_prompt):
+            if chunk["type"] == "chunk":
+                full_text += chunk["content"]
+                yield {"type": "chunk", "content": chunk["content"]}
+            elif chunk["type"] == "done":
+                full_text = chunk.get("full_text", full_text)
+                usage = chunk.get("usage", {})
+            elif chunk["type"] == "error":
+                yield {"type": "error", "error": chunk["error"]}
+                return
+
+        # Parse and persist
+        _log_ai_cost(session_id, MODEL, usage)
+        from backend.schemas.ai import parse_ai_response
+        response = parse_ai_response(full_text)
+        analysis = response.model_dump()
+        analysis["source"] = "nvidia_ai"
+        analysis["model"] = MODEL
+        analysis["ai_available"] = True
+        analysis["session_id"] = session_id
+        analysis["generated_at"] = datetime.now().isoformat()
+        _persist_ai_insights(session_id, analysis)
+
+        yield {"type": "done", "analysis": analysis}
+
+    except Exception as e:
+        yield {"type": "error", "error": str(e)}
 
 
 

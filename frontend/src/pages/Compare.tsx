@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { compareSessions, getSessions } from '../services/api'
 import type { Session } from '../services/api'
+import { toast } from '../components/Toast'
 
 // Local shape — backend /compare returns varying structures across versions
 // Using a loose type here so the page never crashes on unexpected fields
@@ -87,6 +88,7 @@ export default function Compare() {
     try {
       await compareMutation.mutateAsync(selected)
     } catch (e: any) {
+      toast.error('Comparison failed')
       setError(e?.response?.data?.detail ?? 'Comparison failed.')
     }
   }

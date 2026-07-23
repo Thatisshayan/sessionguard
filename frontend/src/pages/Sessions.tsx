@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { getSessions, deleteSession } from '../services/api'
+import { toast } from '../components/Toast'
 import type { Session } from '../services/api'
 
 const GAMES     = ['All', 'Book of Dead', 'Gates of Olympus', 'Sweet Bonanza', 'Starburst', 'Wolf Gold']
@@ -36,7 +37,13 @@ export default function Sessions() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteSession(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sessions'] })
+      toast.success('Session deleted')
+    },
+    onError: () => {
+      toast.error('Failed to delete session')
+    },
   })
   const deleting = deleteMutation.isPending ? (deleteMutation.variables ?? null) : null
 

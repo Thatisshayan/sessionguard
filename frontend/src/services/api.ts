@@ -248,6 +248,55 @@ export const getAiReviewSuggestion = (id: number) => client.get(`/intelligence/a
 export const switchAiModel         = (model: string) => client.post('/ai/model', { model }).then(r => r.data)
 export const getAiModels           = () => client.get('/ai/models').then(r => r.data)
 
+// ── V14 Streaming AI ──────────────────────────────────────────────────────────
+export interface StreamEvent {
+  type: 'start' | 'chunk' | 'done' | 'error'
+  content?: string
+  analysis?: AiAnalysis
+  model?: string
+  error?: string
+}
+
+export async function* streamAiAnalysis(sessionId: number): AsyncGenerator<StreamEvent> {
+  const token = sessionStorage.getItem('sg_access_token')
+  const response = await fetch(`${BASE}${API_VERSION}/sessions/${sessionId}/ai/stream`, {
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : '',
+      'Accept': 'text/event-stream',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Streaming failed: ${response.statusText}`)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('No response body')
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const event = JSON.parse(line.slice(6))
+          yield event
+        } catch (e) {
+          // Ignore malformed JSON
+        }
+      }
+    }
+  }
+}
+
 // ── System + Recorder ─────────────────────────────────────────────────────────
 export const getSystemConfig   = () => client.get('/system-config').then(r => r.data)
 export const updateSystemConfig= (key: string, value: any) => client.patch('/system-config', { key, value }).then(r => r.data)

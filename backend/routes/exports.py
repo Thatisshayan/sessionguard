@@ -10,6 +10,7 @@ Maturity: Working Prototype — all formats implemented.
 Future:   Evidence package builder (V7), streaming download (V9).
 """
 
+import asyncio
 import json
 import csv
 import io
@@ -19,7 +20,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
-from database.db import get_connection
+from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from engines.analysis_engine import get_session_metrics, get_global_metrics
 from backend.services.export_service import generate_pdf, generate_excel
 
@@ -36,7 +37,7 @@ class ExportRequest(BaseModel):
 
 
 @router.post("")
-def create_export(body: ExportRequest):
+async def create_export(body: ExportRequest):
     """
     Generate an export artifact.
     All four formats (JSON, PDF, Excel, CSV) are fully implemented.
@@ -51,7 +52,7 @@ def create_export(body: ExportRequest):
 
     # ── PDF ───────────────────────────────────────────────────────────────────
     if fmt == "pdf":
-        result = generate_pdf(session_id=body.session_id)
+        result = await asyncio.to_thread(generate_pdf, body.session_id)
         if not result["success"]:
             raise HTTPException(status_code=500, detail=result["error"])
         return {
@@ -64,7 +65,7 @@ def create_export(body: ExportRequest):
 
     # ── Excel ─────────────────────────────────────────────────────────────────
     if fmt == "excel":
-        result = generate_excel(session_id=body.session_id)
+        result = await asyncio.to_thread(generate_excel, body.session_id)
         if not result["success"]:
             raise HTTPException(status_code=500, detail=result["error"])
         return {
@@ -77,8 +78,9 @@ def create_export(body: ExportRequest):
 
     # ── JSON ──────────────────────────────────────────────────────────────────
     if fmt == "json":
-        data = (get_session_metrics(body.session_id)
-                if body.session_id else get_global_metrics())
+        data = await asyncio.to_thread(
+            get_session_metrics, body.session_id
+        ) if body.session_id else await asyncio.to_thread(get_global_metrics)
         if not data:
             raise HTTPException(status_code=404, detail="Session not found.")
 
@@ -88,13 +90,10 @@ def create_export(body: ExportRequest):
             json.dump({"exported_at": datetime.now().isoformat(), "data": data},
                       f, indent=2)
 
-        conn = get_connection()
-        cur  = conn.execute(
+        export_id = await async_execute(
             "INSERT INTO exports (session_id, format, file_path) VALUES (?, 'json', ?)",
             (body.session_id, str(filepath))
         )
-        export_id = cur.lastrowid
-        conn.commit(); conn.close()
         return {
             "format": "json", "filename": filename,
             "file_path": str(filepath), "export_id": export_id, "status": "complete",
@@ -102,16 +101,14 @@ def create_export(body: ExportRequest):
 
     # ── CSV ───────────────────────────────────────────────────────────────────
     if fmt == "csv":
-        conn  = get_connection()
         if body.session_id:
-            rows = conn.execute(
+            rows = await async_fetch_all(
                 "SELECT * FROM sessions WHERE id=?", (body.session_id,)
-            ).fetchall()
+            )
         else:
-            rows = conn.execute(
+            rows = await async_fetch_all(
                 "SELECT * FROM sessions ORDER BY date DESC"
-            ).fetchall()
-        conn.close()
+            )
 
         if not rows:
             raise HTTPException(status_code=404, detail="No sessions found.")
@@ -124,13 +121,10 @@ def create_export(body: ExportRequest):
             for row in rows:
                 writer.writerow(dict(row))
 
-        conn2    = get_connection()
-        cur      = conn2.execute(
+        export_id = await async_execute(
             "INSERT INTO exports (session_id, format, file_path) VALUES (?, 'csv', ?)",
             (body.session_id, str(filepath))
         )
-        export_id = cur.lastrowid
-        conn2.commit(); conn2.close()
         return {
             "format": "csv", "filename": filename,
             "file_path": str(filepath), "export_id": export_id, "status": "complete",
@@ -138,28 +132,24 @@ def create_export(body: ExportRequest):
 
 
 @router.get("")
-def list_exports(session_id: Optional[int] = None):
+async def list_exports(session_id: Optional[int] = None):
     """Return export history."""
-    conn = get_connection()
     if session_id:
-        rows = conn.execute(
+        rows = await async_fetch_all(
             "SELECT * FROM exports WHERE session_id=? ORDER BY created_at DESC",
             (session_id,)
-        ).fetchall()
+        )
     else:
-        rows = conn.execute(
+        rows = await async_fetch_all(
             "SELECT * FROM exports ORDER BY created_at DESC LIMIT 200"
-        ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+        )
+    return rows
 
 
 @router.get("/{export_id}/download")
-def download_export(export_id: int):
+async def download_export(export_id: int):
     """Stream the export file directly to the client."""
-    conn = get_connection()
-    row  = conn.execute("SELECT * FROM exports WHERE id=?", (export_id,)).fetchone()
-    conn.close()
+    row = await async_fetch_one("SELECT * FROM exports WHERE id=?", (export_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Export not found.")
 

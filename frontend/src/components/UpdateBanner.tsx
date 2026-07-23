@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import { toast } from './Toast'
 
 const BASE = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '')
 const POLL_MS = 4 * 60 * 60 * 1000
@@ -47,8 +48,8 @@ export default function UpdateBanner() {
   const handleDismiss  = async () => {
     if (!info?.latest_version) { setVisible(false); return }
     setDismiss(true)
-    try { await axios.post(`${BASE}/updater/dismiss`, { version: info.latest_version }, { timeout: 12000 }) }
-    catch { /* ignore */ } finally { setVisible(false); setDismiss(false) }
+    try { await axios.post(`${BASE}/updater/dismiss`, { version: info.latest_version }, { timeout: 12000 }); toast.info('Update dismissed') }
+    catch { toast.error('Failed to dismiss update') } finally { setVisible(false); setDismiss(false) }
   }
 
   if (!visible || !info) return null

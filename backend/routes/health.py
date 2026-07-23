@@ -19,10 +19,10 @@ def health_check():
 
 
 @router.get("/health/detailed")
-def health_detailed():
+async def health_detailed():
     """Full system health — DB, FFmpeg, Tesseract, all engines."""
     import shutil, subprocess
-    from database.db import get_connection
+    from database.db import get_connection, async_fetch_one
 
     result = {
         "status":    "ok",
@@ -33,11 +33,13 @@ def health_detailed():
 
     # DB
     try:
-        conn     = get_connection()
-        tables   = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
-        sessions = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-        conn.close()
-        result["checks"]["database"] = {"ok": True, "tables": tables, "sessions": sessions}
+        tables_row   = await async_fetch_one("SELECT COUNT(*) AS cnt FROM sqlite_master WHERE type='table'")
+        sessions_row = await async_fetch_one("SELECT COUNT(*) AS cnt FROM sessions")
+        result["checks"]["database"] = {
+            "ok": True,
+            "tables": tables_row["cnt"] if tables_row else 0,
+            "sessions": sessions_row["cnt"] if sessions_row else 0,
+        }
     except Exception as e:
         result["checks"]["database"] = {"ok": False, "error": str(e)}
         result["status"] = "degraded"

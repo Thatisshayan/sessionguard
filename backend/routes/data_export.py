@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from typing import Optional
 import json
 from pathlib import Path
-from database.db import get_connection, get_db_path
+from database.db import get_connection, get_db_path, async_fetch_all
 from backend.auth.service import get_current_user_from_token
 
 router = APIRouter(tags=["data-export"])
@@ -28,20 +28,19 @@ def _require_admin(authorization):
 
 
 @router.get("/data-export/dump")
-def dump_all(authorization: Optional[str] = Header(None)):
+async def dump_all(authorization: Optional[str] = Header(None)):
     """Export all session/event/insight data as JSON. Excludes auth tokens."""
     _require_admin(authorization)
-    conn   = get_connection()
-    tables = [r[0] for r in conn.execute(
+    tables_row = await async_fetch_all(
         "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()]
+    )
+    tables = [r[0] for r in tables_row]
     result = {}
     for t in tables:
         if t in SKIP_TABLES or t == "sqlite_sequence":
             continue
-        rows = conn.execute(f"SELECT * FROM {t}").fetchall()
-        result[t] = [dict(r) for r in rows]
-    conn.close()
+        rows = await async_fetch_all(f"SELECT * FROM {t}")
+        result[t] = rows
     return JSONResponse(content={"tables": list(result.keys()), "data": result})
 
 

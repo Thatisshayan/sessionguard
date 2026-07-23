@@ -1,7 +1,7 @@
 """backend/routes/coach.py - Live coaching endpoint."""
 from fastapi import APIRouter, Query
 from engines.live_coach_engine import get_coaching_message, reset_coach
-from database.db import get_connection
+from database.db import get_connection, async_fetch_all
 import os, json
 from pathlib import Path
 
@@ -27,17 +27,15 @@ def coach_status():
 
 
 @router.get("/coach/{run_id}")
-def get_coach_message(
+async def get_coach_message(
     run_id: int,
     style:  str  = Query('balanced'),
     force:  bool = Query(False),
 ):
-    conn   = get_connection()
-    rows   = conn.execute(
+    rows   = await async_fetch_all(
         "SELECT * FROM live_events WHERE run_id=? ORDER BY id DESC LIMIT 100",
         (run_id,)
-    ).fetchall()
-    conn.close()
+    )
     events = list(reversed([dict(r) for r in rows]))
     msg    = get_coaching_message(events, style=style, force=force)
     return {"message": msg, "run_id": run_id, "event_count": len(events)}

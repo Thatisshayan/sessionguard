@@ -24,17 +24,15 @@ def build_clusters(threshold: float = Query(0.88, ge=0.5, le=1.0)):
 
 
 @router.get("/intelligence/clusters")
-def get_clusters():
+async def get_clusters():
     """Return existing cluster assignments from DB."""
-    from database.db import get_connection
-    conn = get_connection()
-    rows = conn.execute("""
+    from database.db import async_fetch_all
+    rows = await async_fetch_all("""
         SELECT sc.cluster_label, sc.session_id, sc.similarity_score,
                s.name, s.game_name, s.rtp, s.net_result, s.date
         FROM session_clusters sc JOIN sessions s ON s.id = sc.session_id
         ORDER BY sc.cluster_label, sc.similarity_score DESC
-    """).fetchall()
-    conn.close()
+    """)
     clusters: dict = {}
     for r in rows:
         d = dict(r)

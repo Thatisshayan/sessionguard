@@ -9,7 +9,7 @@ Maturity: Working Prototype
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-from database.db import get_connection
+from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.auth.service import get_current_user_from_token
 
 router = APIRouter(tags=["notes"])
@@ -20,21 +20,19 @@ class NoteCreate(BaseModel):
 
 
 @router.get("/{session_id}/notes")
-def list_notes(session_id: int):
+async def list_notes(session_id: int):
     """Return all note versions for a session, newest first."""
-    conn = get_connection()
-    rows = conn.execute(
+    rows = await async_fetch_all(
         "SELECT n.*, u.username FROM session_notes n "
         "LEFT JOIN users u ON u.id = n.user_id "
         "WHERE n.session_id=? ORDER BY n.version DESC",
         (session_id,)
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    )
+    return rows
 
 
 @router.post("/{session_id}/notes", status_code=201)
-def add_note(
+async def add_note(
     session_id: int,
     body:       NoteCreate,
     authorization: Optional[str] = Header(None),
@@ -43,25 +41,20 @@ def add_note(
     user    = get_current_user_from_token(authorization)
     user_id = user["user_id"] if user else None
 
-    conn = get_connection()
     # Check session exists
-    if not conn.execute("SELECT id FROM sessions WHERE id=?", (session_id,)).fetchone():
-        conn.close()
+    if not await async_fetch_one("SELECT id FROM sessions WHERE id=?", (session_id,)):
         raise HTTPException(status_code=404, detail="Session not found.")
 
     # Get next version
-    last = conn.execute(
-        "SELECT MAX(version) FROM session_notes WHERE session_id=?", (session_id,)
-    ).fetchone()[0]
-    version = (last or 0) + 1
+    last_row = await async_fetch_one(
+        "SELECT MAX(version) AS max_ver FROM session_notes WHERE session_id=?", (session_id,)
+    )
+    version = (last_row["max_ver"] if last_row else 0) + 1
 
-    cur = conn.execute(
+    note_id = await async_execute(
         "INSERT INTO session_notes (session_id, user_id, note, version) VALUES (?,?,?,?)",
         (session_id, user_id, body.note, version)
     )
-    note_id = cur.lastrowid
-    conn.commit()
-    conn.close()
 
     return {
         "id":         note_id,
@@ -73,16 +66,14 @@ def add_note(
 
 
 @router.get("/{session_id}/notes/latest")
-def latest_note(session_id: int):
+async def latest_note(session_id: int):
     """Return only the most recent note version."""
-    conn = get_connection()
-    row  = conn.execute(
+    row = await async_fetch_one(
         "SELECT n.*, u.username FROM session_notes n "
         "LEFT JOIN users u ON u.id = n.user_id "
         "WHERE n.session_id=? ORDER BY n.version DESC LIMIT 1",
         (session_id,)
-    ).fetchone()
-    conn.close()
+    )
     if not row:
         return {"session_id": session_id, "note": None, "version": 0}
     return dict(row)

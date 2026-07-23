@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { playCoachSound } from '../utils/coachSounds'
+import { toast } from './Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -37,7 +38,7 @@ export default function LiveCoach({ runId, running, style = 'balanced' }: Props)
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current)
     if (!running || !runId) return
-    axios.post(`${BASE}/coach/${runId}/reset`).catch(() => {})
+    axios.post(`${BASE}/coach/${runId}/reset`).catch(() => { toast.error('Failed to reset coach') })
     pollRef.current = setInterval(() => {
       axios.get(`${BASE}/coach/${runId}?style=${style}`).then(res => {
         const msg = res.data.message

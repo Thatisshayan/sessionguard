@@ -2,15 +2,17 @@
 backend/routes/sessions.py
 ---------------------------
 Session CRUD endpoints. Thin — delegates to DB and engines.
+Uses async DB operations for non-blocking I/O.
 
 Maturity: Working Prototype (GET list/detail, POST create, PATCH update)
 Future:   Add pagination, advanced filtering, project grouping (V6+).
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
-from database.db import get_connection
+from database.db import get_connection, async_fetch_all, async_fetch_one, async_execute
 from engines.analysis_engine import get_session_metrics
 from engines.insights_engine import generate_and_persist_insights
 from engines.alerts_engine import generate_and_persist_alerts
@@ -41,7 +43,7 @@ class SessionUpdate(BaseModel):
 
 
 @router.get("")
-def list_sessions(
+async def list_sessions(
     skip:   int = Query(0, ge=0),
     status:    Optional[str] = Query(None),
     game_name: Optional[str] = Query(None),
@@ -49,7 +51,6 @@ def list_sessions(
     limit:     int           = Query(100, le=500),
 ):
     """List sessions with optional filters. Returns newest first."""
-    conn = get_connection()
     filters, params = [], []
 
     if status:
@@ -63,27 +64,25 @@ def list_sessions(
         params.append(platform)
 
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
-    rows = conn.execute(
+    rows = await async_fetch_all(
         f"SELECT * FROM sessions {where} ORDER BY date DESC, created_at DESC LIMIT ?",
-        [*params, limit]
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+        (*params, limit)
+    )
+    return rows
 
 
 @router.get("/{session_id}")
-def get_session(session_id: int):
+async def get_session(session_id: int):
     """Return detailed metrics for one session."""
-    result = get_session_metrics(session_id)
+    result = await asyncio.to_thread(get_session_metrics, session_id)
     if not result:
         raise HTTPException(status_code=404, detail="Session not found.")
     return result
 
 
 @router.post("", status_code=201)
-def create_session(body: SessionCreate):
+async def create_session(body: SessionCreate):
     """Create a new session and auto-generate insights + alerts."""
-    conn = get_connection()
     data = body.dict()
     data["net_result"] = round(data["end_balance"] - data["start_balance"], 2)
     data["rtp"] = (
@@ -92,7 +91,7 @@ def create_session(body: SessionCreate):
     )
     data["status"] = "complete"
 
-    cur = conn.execute(
+    session_id = await async_execute(
         "INSERT INTO sessions (name,game_name,platform,date,duration_minutes,"
         "start_balance,end_balance,total_bets,total_wins,net_result,rtp,spins,"
         "biggest_win,biggest_loss,losing_streak,status,notes) VALUES "
@@ -101,59 +100,46 @@ def create_session(body: SessionCreate):
         ":biggest_win,:biggest_loss,:losing_streak,:status,:notes)",
         data
     )
-    session_id = cur.lastrowid
-    conn.commit()
-    conn.close()
 
     # Auto-generate insights and alerts for new session
-    generate_and_persist_insights(session_id)
-    generate_and_persist_alerts(session_id)
+    await asyncio.to_thread(generate_and_persist_insights, session_id)
+    await asyncio.to_thread(generate_and_persist_alerts, session_id)
 
     return {"id": session_id, "message": "Session created.", **data}
 
 
 @router.patch("/{session_id}")
-def update_session(session_id: int, body: SessionUpdate):
+async def update_session(session_id: int, body: SessionUpdate):
     """Update mutable fields on an existing session."""
-    conn = get_connection()
-    existing = conn.execute("SELECT id FROM sessions WHERE id = ?", (session_id,)).fetchone()
+    existing = await async_fetch_one("SELECT id FROM sessions WHERE id = ?", (session_id,))
     if not existing:
-        conn.close()
         raise HTTPException(status_code=404, detail="Session not found.")
 
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if not updates:
-        conn.close()
         return {"message": "Nothing to update."}
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
-    conn.execute(
+    await async_execute(
         f"UPDATE sessions SET {set_clause} WHERE id = ?",
-        [*updates.values(), session_id]
+        (*updates.values(), session_id)
     )
-    conn.commit()
-    conn.close()
     return {"id": session_id, "updated": list(updates.keys())}
 
 
 @router.delete("/{session_id}", status_code=204)
-def delete_session(session_id: int):
+async def delete_session(session_id: int):
     """Delete a session and all cascaded data."""
-    conn = get_connection()
-    cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-    conn.commit()
-    conn.close()
-    if cur.rowcount == 0:
+    rowcount = await async_execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    if rowcount == 0:
         raise HTTPException(status_code=404, detail="Session not found.")
 
 
 @router.get("/{session_id}/ocr-results")
-def get_session_ocr_results(session_id: int, limit: int = 100):
+async def get_session_ocr_results(session_id: int, limit: int = 100):
     """Return OCR results for a session — used by Video Lab page."""
-    conn = get_connection()
-    rows = conn.execute(
+    rows = await async_fetch_all(
         "SELECT * FROM ocr_results WHERE session_id=? ORDER BY id LIMIT ?",
         (session_id, limit)
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    )
+    return rows

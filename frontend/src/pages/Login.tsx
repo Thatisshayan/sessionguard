@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { toast } from '../components/Toast'
 
 type Mode = 'login' | 'signup'
 
@@ -50,13 +51,16 @@ export default function Login() {
     try {
       if (mode === 'login') {
         await login(email, password)
+        toast.success('Welcome back!')
       } else {
         if (!username.trim()) { setError('Username is required.'); setLoading(false); return }
         if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return }
         await signup(email, username, password)
+        toast.success('Account created')
       }
       navigate('/')
     } catch (e: any) {
+      toast.error('Authentication failed')
       const detail = e?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : 'Authentication failed. Check credentials.')
     } finally { setLoading(false) }

@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
+import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -55,7 +56,13 @@ export default function Admin() {
 
   const patchUserMutation = useMutation({
     mutationFn: ({ uid, patch }: { uid: number; patch: any }) => axios.patch(`${BASE}/admin/users/${uid}`, patch, hdrs),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'all'] }),
+    onSuccess: () => {
+      toast.success('User updated')
+      qc.invalidateQueries({ queryKey: ['admin', 'all'] })
+    },
+    onError: () => {
+      toast.error('Failed to update user')
+    },
   })
 
   const toggleUser = (uid: number, isActive: boolean) => patchUserMutation.mutate({ uid, patch: { is_active: !isActive } })

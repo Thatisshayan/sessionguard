@@ -27,14 +27,12 @@ def create_evidence_package(session_id: int):
 
 
 @router.get("/{session_id}/evidence/{export_id}/download")
-def download_evidence(session_id: int, export_id: int):
+async def download_evidence(session_id: int, export_id: int):
     """Stream the evidence package ZIP to the client."""
-    from database.db import get_connection
-    conn = get_connection()
-    row  = conn.execute(
+    from database.db import async_fetch_one
+    row = await async_fetch_one(
         "SELECT * FROM exports WHERE id=? AND session_id=?", (export_id, session_id)
-    ).fetchone()
-    conn.close()
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Evidence package not found.")
     p = Path(row["file_path"])
@@ -47,18 +45,16 @@ def download_evidence(session_id: int, export_id: int):
 
 
 @router.get("/{session_id}/evidence/verify")
-def verify_evidence(session_id: int):
+async def verify_evidence(session_id: int):
     """
     Verify SHA-256 manifest integrity for an evidence package.
     Returns per-file status (ok/tampered/not_found).
     """
-    from database.db import get_connection
-    conn = get_connection()
-    row = conn.execute(
+    from database.db import async_fetch_one
+    row = await async_fetch_one(
         "SELECT file_path FROM exports WHERE session_id=? AND format='evidence' ORDER BY created_at DESC LIMIT 1",
         (session_id,)
-    ).fetchone()
-    conn.close()
+    )
 
     if not row:
         raise HTTPException(status_code=404, detail="No evidence package found for session.")

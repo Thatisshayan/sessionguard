@@ -9,6 +9,7 @@ import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useJobWebSocket } from '../hooks/useJobWebSocket'
 import { getJobs, cancelJobApi, Job } from '../services/api'
+import { toast } from '../components/Toast'
 
 const STATUS_STYLE: Record<string, string> = {
   complete: 'var(--accent-green)',
@@ -48,7 +49,8 @@ export default function JobsMonitor() {
 
   const cancelM = useMutation({
     mutationFn: (id: number) => cancelJobApi(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); toast.success('Job cancelled') },
+    onError: () => { toast.error('Failed to cancel job') },
   })
 
   const handleProgress = useCallback((data: { job_id: number; progress: number; stage: string }) => {

@@ -43,7 +43,7 @@ def _is_newer(latest, current): return _vtuple(latest) > _vtuple(current)
 def _get_setting(key):
     try:
         conn = get_connection()
-        row  = conn.execute("SELECT value FROM system_settings WHERE key=? LIMIT 1", (key,)).fetchone()
+        row = conn.execute("SELECT value FROM system_settings WHERE key=? LIMIT 1", (key,)).fetchone()
         conn.close()
         return row["value"] if row else None
     except: return None
@@ -52,7 +52,9 @@ def _set_setting(key, value):
     try:
         conn = get_connection()
         conn.execute("INSERT OR REPLACE INTO system_settings (key,value) VALUES (?,?)", (key, value))
-        conn.commit(); conn.close(); return True
+        conn.commit()
+        conn.close()
+        return True
     except: return False
 
 def _github_url(cfg):

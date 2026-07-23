@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import axios from 'axios'
+import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -72,6 +73,7 @@ export default function Projects() {
       tags:        form.tags.split(',').map(t => t.trim()).filter(Boolean),
     }, { headers }),
     onSuccess: () => {
+      toast.success('Project created')
       setForm({ name: '', description: '', tags: '' })
       qc.invalidateQueries({ queryKey: ['projects'] })
     },
@@ -85,14 +87,19 @@ export default function Projects() {
       await createMutation.mutateAsync()
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to create project.')
+      toast.error('Operation failed')
     }
   }
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => axios.delete(`${BASE}/projects/${id}`, { headers }),
     onSuccess: (_r, id) => {
+      toast.success('Project deleted')
       qc.invalidateQueries({ queryKey: ['projects'] })
       if (selectedId === id) setSelectedId(null)
+    },
+    onError: () => {
+      toast.error('Operation failed')
     },
   })
 

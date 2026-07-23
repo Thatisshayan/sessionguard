@@ -4,6 +4,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getReviewQueue, getQueueSummary, resolveReviewItem } from '../services/api'
+import { toast } from '../components/Toast'
 
 export default function ReviewQueue() {
   const qc = useQueryClient()
@@ -18,6 +19,10 @@ export default function ReviewQueue() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['review-queue', 'pending'] })
       qc.invalidateQueries({ queryKey: ['review-queue', 'summary'] })
+      toast.success('Review item resolved')
+    },
+    onError: () => {
+      toast.error('Failed to resolve review item')
     },
   })
   const resolve = (id: number, action: string) => resolveMutation.mutate({ id, action })

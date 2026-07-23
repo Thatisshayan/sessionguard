@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { NotificationCenter } from './components/NotificationCenter'
 import { RequireAdmin } from './components/RequireAdmin'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastProvider } from './components/Toast'
 
 // ── Pages (lazy-loaded — each page is its own chunk, split from the main bundle) ──
 const Dashboard       = lazy(() => import('./pages/Dashboard'))
@@ -286,6 +287,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppShell />
+        <ToastProvider />
       </AuthProvider>
     </BrowserRouter>
   )

@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getProfiles, createProfile } from '../services/api'
+import { toast } from '../components/Toast'
 
 export default function Profiles() {
   const qc = useQueryClient()
@@ -18,6 +19,7 @@ export default function Profiles() {
   const createMutation = useMutation({
     mutationFn: (data: typeof form) => createProfile(data),
     onSuccess: () => {
+      toast.success('Profile created')
       setForm({ name: '', game_name: '', platform: '' })
       qc.invalidateQueries({ queryKey: ['profiles'] })
     },
@@ -33,6 +35,7 @@ export default function Profiles() {
       await createMutation.mutateAsync(form)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to create profile.')
+      toast.error('Failed to create profile')
     }
   }
 

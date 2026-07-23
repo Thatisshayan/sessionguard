@@ -15,7 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from typing import Optional
-from database.db import get_connection
+from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
 from backend.middleware.rate_limit import check_rate_limit, rate_limit_headers, get_client_ip
@@ -214,16 +214,12 @@ async def upload_file(
             detail=f"File rejected by virus scan: {scan_message}"
         )
 
-    conn = get_connection()
-    cur  = conn.execute(
+    upload_id = await async_execute(
         "INSERT INTO uploads (session_id, filename, file_type, file_path, status) "
         "VALUES (?, ?, ?, ?, ?)",
         (session_id, file.filename, file_type, str(dest_path),
          "processing" if file_type in ("csv", "video") else "complete")
     )
-    upload_id = cur.lastrowid
-    conn.commit()
-    conn.close()
 
     # Trigger background processing
     if file_type == "csv":
@@ -249,28 +245,24 @@ async def upload_file(
 
 
 @router.get("")
-def list_uploads(session_id: Optional[int] = None):
+async def list_uploads(session_id: Optional[int] = None):
     """Return upload history, optionally filtered by session."""
-    conn = get_connection()
     if session_id:
-        rows = conn.execute(
+        rows = await async_fetch_all(
             "SELECT * FROM uploads WHERE session_id=? ORDER BY created_at DESC",
             (session_id,)
-        ).fetchall()
+        )
     else:
-        rows = conn.execute(
+        rows = await async_fetch_all(
             "SELECT * FROM uploads ORDER BY created_at DESC LIMIT 200"
-        ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+        )
+    return rows
 
 
 @router.get("/{upload_id}/status")
-def get_upload_status(upload_id: int):
+async def get_upload_status(upload_id: int):
     """Poll status of a specific upload (for background processing)."""
-    conn = get_connection()
-    row  = conn.execute("SELECT * FROM uploads WHERE id=?", (upload_id,)).fetchone()
-    conn.close()
+    row = await async_fetch_one("SELECT * FROM uploads WHERE id=?", (upload_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Upload not found.")
     return dict(row)

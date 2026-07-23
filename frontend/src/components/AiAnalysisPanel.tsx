@@ -7,9 +7,10 @@
  * Maturity: Working Prototype
  */
 
-import { useState, useEffect } from 'react'
-import { runAiAnalysis, getCachedAiAnalysis, getAiStatus, switchAiModel } from '../services/api'
+import { useState, useEffect, useRef } from 'react'
+import { runAiAnalysis, getCachedAiAnalysis, getAiStatus, switchAiModel, streamAiAnalysis } from '../services/api'
 import type { AiAnalysis, AiStatus } from '../services/api'
+import { toast } from './Toast'
 
 const SEV_COLOR: Record<string, string> = {
   critical: 'var(--severity-critical)',
@@ -59,11 +60,57 @@ export function AiAnalysisPanel({ sessionId }: Props) {
   const run = async () => {
     setRunning(true); setError('')
     try {
-      const result = await runAiAnalysis(sessionId)
-      setAnalysis(result)
-      if (result.error) setError(result.error)
+      // Try streaming first, fall back to regular API
+      try {
+        let fullText = ''
+        let finalAnalysis: AiAnalysis | null = null
+        
+        for await (const event of streamAiAnalysis(sessionId)) {
+          if (event.type === 'start') {
+            // Streaming started
+          } else if (event.type === 'chunk' && event.content) {
+            fullText += event.content
+          } else if (event.type === 'done' && event.analysis) {
+            finalAnalysis = event.analysis
+          } else if (event.type === 'error') {
+            throw new Error(event.error)
+          }
+        }
+        
+        if (finalAnalysis) {
+          setAnalysis(finalAnalysis)
+          if (finalAnalysis.error) {
+            setError(finalAnalysis.error)
+            toast.error(finalAnalysis.error)
+          } else {
+            toast.success('AI analysis complete')
+          }
+        } else if (fullText) {
+          // Partial response — use regular API as fallback
+          const result = await runAiAnalysis(sessionId)
+          setAnalysis(result)
+          if (result.error) {
+            setError(result.error)
+            toast.error(result.error)
+          } else {
+            toast.success('AI analysis complete')
+          }
+        }
+      } catch (streamError) {
+        // Streaming not supported or failed, fall back to regular API
+        const result = await runAiAnalysis(sessionId)
+        setAnalysis(result)
+        if (result.error) {
+          setError(result.error)
+          toast.error(result.error)
+        } else {
+          toast.success('AI analysis complete')
+        }
+      }
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Analysis failed.')
+      const errorMsg = e?.response?.data?.detail ?? e?.message ?? 'Analysis failed.'
+      setError(errorMsg)
+      toast.error(errorMsg)
     } finally { setRunning(false) }
   }
 
@@ -73,8 +120,11 @@ export function AiAnalysisPanel({ sessionId }: Props) {
       await switchAiModel(model)
       const status = await getAiStatus()
       setAiStatus(status)
+      toast.success(`Switched to ${model}`)
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Model switch failed.')
+      const errorMsg = e?.response?.data?.detail ?? 'Model switch failed.'
+      setError(errorMsg)
+      toast.error(errorMsg)
     } finally { setSwitching(false) }
   }
 

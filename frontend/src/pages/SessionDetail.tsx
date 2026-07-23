@@ -18,6 +18,7 @@ import { BehaviorTab } from '../components/session-detail/BehaviorTab'
 import { ReviewTab } from '../components/session-detail/ReviewTab'
 import { ExportsTab } from '../components/session-detail/ExportsTab'
 import { AiAnalysisPanel } from '../components/AiAnalysisPanel'
+import { toast } from '../components/Toast'
 
 type Tab = 'overview' | 'events' | 'behavior' | 'review' | 'exports' | 'ai'
 
@@ -33,8 +34,21 @@ export default function SessionDetail() {
   } = useSessionDetailData(sessionId)
 
   const [liveRun, setLiveRun] = useState<any>(null)
-  const handleStartLive = async () => setLiveRun(await startLive())
-  const handleStopLive  = async () => { if (liveRun) { await stopLive(liveRun.id); setLiveRun(null) } }
+  const handleStartLive = async () => {
+    try {
+      const run = await startLive()
+      setLiveRun(run)
+      toast.success('Live monitoring started')
+    } catch { toast.error('Failed to start live monitoring') }
+  }
+  const handleStopLive  = async () => {
+    if (!liveRun) return
+    try {
+      await stopLive(liveRun.id)
+      setLiveRun(null)
+      toast.success('Live monitoring stopped')
+    } catch { toast.error('Failed to stop live monitoring') }
+  }
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>

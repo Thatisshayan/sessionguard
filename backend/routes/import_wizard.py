@@ -2,13 +2,14 @@
 backend/routes/import_wizard.py - V14 Session Import Wizard
 Original: ChatGPT | Reviewed + integrated: Claude
 """
+import asyncio
 import json, shutil, uuid, logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from database.db import get_connection
+from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from engines.csv_import_engine import import_csv, preview_csv
 
 log = logging.getLogger(__name__)
@@ -116,20 +117,18 @@ async def preview_import(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 
 @router.post("/confirm")
-def confirm_import(payload: ConfirmImportRequest) -> Dict[str, Any]:
+async def confirm_import(payload: ConfirmImportRequest) -> Dict[str, Any]:
     """Apply the column mapping, create a session, insert events, return counts."""
     fp         = _get_file(payload.upload_id)
-    session_id = _create_session()
-    result     = import_csv(fp, payload.column_mapping.model_dump(exclude_none=True), session_id)
+    session_id = await asyncio.to_thread(_create_session)
+    result     = await asyncio.to_thread(import_csv, fp, payload.column_mapping.model_dump(exclude_none=True), session_id)
     imported   = int(result.get("imported", 0))
     # Update event_count
     try:
-        conn = get_connection()
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()}
+        cols_row = await async_fetch_all("PRAGMA table_info(sessions)")
+        cols = {r[1] for r in cols_row}
         if "event_count" in cols:
-            conn.execute("UPDATE sessions SET event_count=? WHERE id=?", (imported, session_id))
-            conn.commit()
-        conn.close()
+            await async_execute("UPDATE sessions SET event_count=? WHERE id=?", (imported, session_id))
     except Exception as e:
         log.warning("event_count_update_failed", session_id=session_id, error=str(e))
     return {"session_id": session_id, "event_count": imported, "skipped": int(result.get("skipped",0)), "warnings": result.get("warnings",[])}

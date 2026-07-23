@@ -14,6 +14,7 @@ import {
   acknowledgeAlert, resolveReviewItem, createExport, getExports,
   startLiveRun, getLiveRun, stopLiveRun,
 } from '../../services/api'
+import { toast } from '../Toast'
 
 const keys = {
   session:  (id: number) => ['session', id] as const,
@@ -41,20 +42,24 @@ export function useSessionDetailData(sessionId: number) {
 
   const ackMutation = useMutation({
     mutationFn: (alertId: number) => acknowledgeAlert(alertId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.alerts(sessionId) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: keys.alerts(sessionId) }); toast.success('Alert acknowledged') },
+    onError: () => { toast.error('Failed to acknowledge alert') },
   })
 
   const resolveMutation = useMutation({
     mutationFn: ({ id, action }: { id: number; action: string }) => resolveReviewItem(id, action),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.queue(sessionId) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: keys.queue(sessionId) }); toast.success('Review item resolved') },
+    onError: () => { toast.error('Failed to resolve review item') },
   })
 
   const exportMutation = useMutation({
     mutationFn: (fmt: string) => createExport(fmt, sessionId),
     onSuccess: (r: any) => {
       qc.invalidateQueries({ queryKey: keys.exports(sessionId) })
+      toast.success('Export generated')
       if (r?.export_id) window.open(`http://127.0.0.1:8000/exports/${r.export_id}/download`, '_blank')
     },
+    onError: () => { toast.error('Export failed') },
   })
 
   const startLiveMutation = useMutation({
