@@ -8,7 +8,7 @@
 
 Phases 0–5 are complete (2026-07-22). NVIDIA NIM migration done (2026-07-23). The product is a **local-first desktop app** — SaaS is deferred until a business decision is made. This document tracks the **next 15 tasks** to harden SessionGuard for production use.
 
-**Current state**: 72 tests passing, 0 TS errors, all pushed to `main`.
+**Current state**: 134 tests passing, 0 TS errors, all pushed to `main`.
 
 ---
 
@@ -20,8 +20,8 @@ Phases 0–5 are complete (2026-07-22). NVIDIA NIM migration done (2026-07-23). 
 |---|------|--------|---------------------|-------|
 | B1 | **Expand test coverage to 80%+** (engines + routes) | 🟡 Partial | `pytest --cov=engines --cov=backend --cov-fail-under=80` passes | 42% overall (up from 35%); 8 new test files added; more engine/route tests needed |
 | B2 | **Fix video pipeline bugs** (`video_pipeline.py:225-249`) | ✅ Done | Events created correctly from OCR; review items generated | Audit found undefined `ts` variable and `conf_avg` typo — already fixed in current code |
-| B3 | **Implement async DB operations** | ✅ Done | `aiosqlite` or connection pooling; routes use `async def` | Added `aiosqlite` dependency + `get_async_connection()` + `async_fetch_one/all/execute/execute_many` helpers |
-| B4 | **Add streaming AI responses** | ✅ Done | NVIDIA API streams tokens; frontend shows progressive text | Added `_stream_nvidia()` generator + `stream_analyse_session()` + SSE endpoint + frontend streaming consumer |
+| B3 | **Implement async DB operations** | ✅ Done | `aiosqlite` or connection pooling; routes use `async def` | Added `aiosqlite` dependency + `get_async_connection()` + `async_fetch_one/all/execute/execute_many` helpers; wrapped sync engine calls with `asyncio.to_thread()` in async routes |
+| B4 | **Add streaming AI responses** | ✅ Done | NVIDIA API streams tokens; frontend shows progressive text | Added `_stream_nvidia()` generator + `stream_analyse_session()` + SSE endpoint `/sessions/{id}/ai/stream` + frontend streaming consumer |
 | B5 | **Add request deduplication middleware** | ⏳ Sprint 4 | Same endpoint called rapidly → only one request fires | Wasted API calls on fast navigation |
 
 ### Frontend (5 tasks)
@@ -30,7 +30,7 @@ Phases 0–5 are complete (2026-07-22). NVIDIA NIM migration done (2026-07-23). 
 |---|------|--------|---------------------|-------|
 | F1 | **Virtualized lists for Sessions/Events** (`react-window`) | ⏳ Sprint 3 | 10K+ rows scroll at 60fps; no DOM lag | Sessions table + Events tab need virtualization |
 | F2 | **WebSocket hook for LiveMonitor** | ⏳ Sprint 3 | Replace polling with WS; real-time events | Currently polls `/live/{id}` every 2s |
-| F3 | **Error boundaries + toast notifications** (`sonner`) | ✅ Done | Errors caught gracefully; toasts for success/error/fallback | `sonner` installed; `Toast.tsx` wrapper; `ToastProvider` in App; toasts on AI analysis + model switch |
+| F3 | **Error boundaries + toast notifications** (`sonner`) | ✅ Done | Errors caught gracefully; toasts for success/error/fallback | `sonner` installed; `Toast.tsx` wrapper; `ToastProvider` in App; toasts on ALL 18 mutation files (AI, upload, delete, resolve, export, auth, live, etc.) |
 | F4 | **Keyboard navigation + ARIA** | ⏳ Sprint 3 | All interactive elements keyboard-accessible; screen reader labels | WCAG 2.2 AA compliance |
 | F5 | **Consolidate frontend state** | ⏳ Sprint 4 | Single state solution (Zustand/Jotai); remove prop drilling | `appStore.ts` + React state + URL params fragmentation |
 
@@ -72,9 +72,9 @@ Phases 0–5 are complete (2026-07-22). NVIDIA NIM migration done (2026-07-23). 
 
 | Task | Work | Result |
 |------|------|--------|
-| B3 | Added `aiosqlite` dependency + `get_async_connection()` + `async_fetch_one/all/execute/execute_many` helpers in `database/db.py` | Async DB support ready for routes |
-| B4 | Added `_stream_nvidia()` generator + `stream_analyse_session()` + SSE endpoint `/sessions/{id}/ai/stream` + frontend streaming consumer | AI responses stream in real-time |
-| F3 | Installed `sonner` + created `Toast.tsx` wrapper + `ToastProvider` in App.tsx + toasts on AI analysis/model switch | Success/error toasts for user actions |
+| B3 | Added `aiosqlite` dependency + async helpers in `database/db.py`; fixed `async_execute` return semantics; fixed `updater.py` broken async; wrapped sync engine calls with `asyncio.to_thread()` in `sessions.py`, `ai_analysis.py`, `exports.py`, `import_wizard.py` | 134 tests passing; no event loop blocking in async routes |
+| B4 | Added `_stream_nvidia()` generator + `stream_analyse_session()` + SSE endpoint `/sessions/{id}/ai/stream` + frontend `streamAiAnalysis()` async generator | AI responses stream in real-time via SSE; frontend consumes with fallback |
+| F3 | Installed `sonner` + created `Toast.tsx` wrapper + `ToastProvider` in App.tsx + toasts on ALL 18 mutation files (Upload, Sessions, SessionDetail, ReviewQueue, Dashboard, Projects, Profiles, ProfileEditor, Admin, Reports, JobsMonitor, Compare, ParserBenchmark, Login, LiveCoach, UpdateBanner, AuthContext, useSessionDetailData) | Success/error toasts for all user actions |
 
 ### Sprint 3 — Frontend Performance + Accessibility
 **Focus**: Virtualized lists, WebSocket, keyboard nav
