@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   # ── Windows ────────────────────────────────────────────────────────────────
   build-windows:
@@ -85,6 +88,9 @@ jobs:
       - name: Build frontend
         run: cd frontend && npm run build
 
+      - name: Install Rust target
+        run: rustup target add x86_64-apple-darwin
+
       - name: Import signing certificate
         if: env.APPLE_SIGNING_IDENTITY != ''
         env:
@@ -150,7 +156,7 @@ jobs:
       - name: Install Linux deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
