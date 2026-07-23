@@ -142,7 +142,7 @@ def _api_key():
     except: return ''
 
 
-def _claude_coach(stats, style):
+def _nvidia_coach(stats, style):
     key=_api_key()
     if not key: return None
     try:
@@ -192,7 +192,7 @@ def get_coaching_message(events, style='balanced', force=False):
                stats['cumulative_net']<=-50 or
                stats['session_style'] in ('aggressive','inconsistent'))
     msg=None
-    if has_issue: msg=_claude_coach(stats,style)
+    if has_issue: msg=_nvidia_coach(stats,style)
     if not msg:   msg=_detect_patterns(stats,style)
     if msg:
         d=msg.to_dict(); _log.append(d); return d

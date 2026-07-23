@@ -53,7 +53,7 @@ def regenerate_alerts(session_id: int):
 def explain_alert(alert_id: int):
     """
     Return AI-generated root cause explanation for an alert.
-    Calls Claude or Ollama with session context; falls back to rule-based.
+    Calls NVIDIA AI or Ollama with session context; falls back to rule-based.
     """
     from engines.alerts_engine import get_alerts
     from engines.ai_insights_engine import _build_session_summary, _call_claude, _get_api_key, SYSTEM_PROMPT
@@ -92,7 +92,7 @@ Output JSON only:
             raw_text, _ = _call_claude(explain_prompt, api_key, system_prompt=SYSTEM_PROMPT)
             import json
             data = json.loads(raw_text)
-            return {"alert_id": alert_id, "source": "claude", "explanation": data}
+            return {"alert_id": alert_id, "source": "nvidia_ai", "explanation": data}
         except Exception:
             pass
 

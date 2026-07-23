@@ -55,7 +55,7 @@ def _get_ai_narrative(session_id: int) -> str | None:
     try:
         from engines.ai_insights_engine import analyse_session_with_ai
         result = analyse_session_with_ai(session_id)
-        if result and result.get("source") in ("claude_ai", "ollama_ai"):
+        if result and result.get("source") in ("nvidia_ai", "ollama_ai"):
             return json.dumps({
                 "headline": result.get("headline", ""),
                 "risk_level": result.get("risk_level", ""),

@@ -28,7 +28,7 @@ def create_prompt_version(
     name: str,
     system_prompt: str,
     version: Optional[int] = None,
-    model: str = "claude-sonnet-4-6",
+    model: str = "nvidia/llama-3.1-nemotron-70b-instruct",
     temperature: float = 1.0,
     max_tokens: int = 1024,
     activate: bool = False,

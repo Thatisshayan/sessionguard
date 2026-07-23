@@ -11,18 +11,18 @@ router = APIRouter(tags=["coach"])
 @router.get("/coach-status")
 def coach_status():
     """Check if AI coaching is available. Separate path to avoid {run_id} conflict."""
-    has_key = bool(os.getenv('ANTHROPIC_API_KEY', ''))
+    has_key = bool(os.getenv('NVIDIA_API_KEY', ''))
     if not has_key:
         try:
             cfg = json.loads((Path(__file__).resolve().parent.parent.parent / 'config' / 'app_config.json').read_text())
-            has_key = bool(cfg.get('ai', {}).get('anthropic_api_key', ''))
+            has_key = bool(cfg.get('ai', {}).get('nvidia_api_key', ''))
         except Exception:
             pass
     return {
         "ai_available":       has_key,
         "fallback_available": True,
         "styles":             ['strict', 'balanced', 'supportive'],
-        "message":            "Claude AI coach active" if has_key else "Rule-based coach active — add ANTHROPIC_API_KEY for Claude AI",
+        "message":            "NVIDIA AI coach active" if has_key else "Rule-based coach active — add NVIDIA_API_KEY for AI coaching",
     }
 
 

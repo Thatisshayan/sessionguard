@@ -60,9 +60,9 @@ def on_startup():
     seed_demo_data(); seed_demo_user(); seed_presets()
 
     # Load API key from environment (secure method)
-    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    api_key = os.getenv("NVIDIA_API_KEY", "").strip()
     if api_key:
-        os.environ["ANTHROPIC_API_KEY"] = api_key
+        os.environ["NVIDIA_API_KEY"] = api_key
 
     print("[API] SessionGuard v1.2.0 ready -> http://127.0.0.1:8000")
     print("[API] Login -> demo@sessionguard.local / demo123")

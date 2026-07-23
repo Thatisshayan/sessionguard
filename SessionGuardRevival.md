@@ -1,6 +1,6 @@
 # SessionGuard Revival — Phased Handoff Document
 
-**Generated**: 2026-07-10 · **Last revised**: 2026-07-22 (Phase 5 complete: all 14 tasks implemented, 72 tests passing, 72+0 TS errors, all pushed to `main` — see Phase 5 status table below) · **Phase 6 (SaaS) deferred**: business-gated, not started
+**Generated**: 2026-07-10 · **Last revised**: 2026-07-23 (Phase 5 complete + NVIDIA NIM migration done — all Claude/Anthropic references replaced with NVIDIA NIM; model selector added; 19 files changed, pushed to `main`) · **Phase 6 (SaaS) deferred**: business-gated, not started
 **Target**: Production-hardened local desktop app first; SaaS is an optional, separately-gated track — not a default destination.
 
 **Team reality**: this is currently a solo effort (Shaya), optionally AI-agent-assisted for mechanical work (script fixes, audits, sync/cleanup, refactors). The "Engineer 1/2/3" labels on tasks below are role tags for sequencing, not headcount — read "Backend track" / "Frontend track" / "Desktop track," not "hire 3 people." Parallelize across tracks only if/when there's more than one person; otherwise work them in the listed order.
@@ -179,6 +179,45 @@ All 14 Phase 5 tasks implemented, tested (72 passing, 2 skipped), pushed to `mai
 | E10 | CI/CD pipeline (GitHub Actions) | `459e167` | ✅ Done |
 
 **Test fixes:** OCR benchmark tests fixed with proper ROI config + Tesseract on PATH (`fe29de0`).
+
+---
+
+## NVIDIA NIM Migration (2026-07-23)
+
+**Goal**: Replace all Anthropic/Claude references with NVIDIA NIM (OpenAI-compatible API). Add user-selectable model support.
+
+### What changed (19 files)
+
+| File | Change |
+|------|--------|
+| `engines/ai_insights_engine.py` | `_call_claude` → `_call_nvidia`, added `NVIDIA_MODELS` list (5 models), `_get_model()` resolver (env→config→default), `set_model()` for runtime switching, cleaned `MODEL_PRICING` to NVIDIA-only |
+| `engines/live_coach_engine.py` | `_claude_coach` → `_nvidia_coach` |
+| `engines/prompt_manager.py` | Default model updated to `nvidia/llama-3.1-nemotron-70b-instruct` |
+| `database/db.py` | Schema defaults: `claude-sonnet-*` → `nvidia/llama-3.1-nemotron-70b-instruct` |
+| `backend/main.py` | `ANTHROPIC_API_KEY` → `NVIDIA_API_KEY` |
+| `backend/routes/ai_analysis.py` | Docstrings updated, added `POST /ai/model` + `GET /ai/models` endpoints |
+| `backend/routes/alerts.py` | Docstring + source string updated |
+| `backend/routes/coach.py` | `ANTHROPIC_API_KEY` → `NVIDIA_API_KEY` in coach status |
+| `backend/routes/intelligence.py` | Docstrings updated |
+| `backend/routes/prompts.py` | Default model updated |
+| `backend/schemas/ai.py` | Docstring updated |
+| `backend/services/evidence_package.py` | Source string `"claude_ai"` → `"nvidia_ai"` |
+| `.env.example` | `ANTHROPIC_API_KEY` → `NVIDIA_API_KEY` + `NVIDIA_MODEL` config |
+| `requirements.txt` | Removed `anthropic` dependency (NIM uses stdlib urllib) |
+| `frontend/src/components/AiAnalysisPanel.tsx` | "Claude" → "NVIDIA", setup instructions → `build.nvidia.com`, **added model selector dropdown** |
+| `frontend/src/components/LiveCoach.tsx` | Source type + badge updated |
+| `frontend/src/services/api.ts` | Added `switchAiModel()`, `getAiModels()`, `AiStatus.available_models` |
+| `tests/test_ai_cost.py` | Tests updated to NVIDIA model pricing |
+| `scripts/calibrate_ocr.py` | Comment updated |
+
+### Model Selector — now live
+- **API**: `GET /ai/models` lists available models, `POST /ai/model` switches at runtime
+- **UI**: Dropdown in `AiAnalysisPanel` header — user can pick from 5 NVIDIA models
+- **Config**: `NVIDIA_MODEL` env var or `config/app_config.json → ai.nvidia_model`
+- **Models available**: `nvidia/llama-3.1-nemotron-70b-instruct`, `nvidia/llama-3.3-70b-instruct`, `nvidia/mistral-large-2-instruct`, `meta/llama-3.1-405b-instruct`, `mistralai/mistral-large-2-instruct`
+
+### Backward compatibility
+- `_call_claude = _call_nvidia` alias kept in `ai_insights_engine.py` so `alerts.py` import path works without breakage
 
 **Key files created/modified:**
 - `engines/offline_ai.py` — Ollama integration

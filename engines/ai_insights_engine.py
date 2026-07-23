@@ -32,8 +32,28 @@ from engines.offline_ai import is_ollama_available, call_ollama_json, list_avail
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
 API_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
-MODEL        = "nvidia/llama-3.1-nemotron-70b-instruct"
 MAX_TOKENS   = 1024
+
+NVIDIA_MODELS = [
+    "nvidia/llama-3.1-nemotron-70b-instruct",
+    "nvidia/llama-3.3-70b-instruct",
+    "nvidia/mistral-large-2-instruct",
+    "meta/llama-3.1-405b-instruct",
+    "mistralai/mistral-large-2-instruct",
+]
+
+def _get_model() -> str:
+    """Resolve active model: env → config → default."""
+    m = os.getenv("NVIDIA_MODEL", "").strip()
+    if m:
+        return m
+    try:
+        cfg = json.loads(_CONFIG_PATH.read_text())
+        return cfg.get("ai", {}).get("nvidia_model", "").strip() or NVIDIA_MODELS[0]
+    except Exception:
+        return NVIDIA_MODELS[0]
+
+MODEL = _get_model()
 
 
 def _get_api_key() -> str | None:
@@ -211,7 +231,7 @@ Produce the JSON analysis now."""
 
 # ── API call ──────────────────────────────────────────────────────────────────
 
-def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) -> tuple[str, dict]:
+def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None) -> tuple[str, dict]:
     """Make raw API call to NVIDIA NIM (OpenAI-compatible). Returns (response_text, usage_dict)."""
     messages = []
     if system_prompt or SYSTEM_PROMPT:
@@ -219,7 +239,7 @@ def _call_claude(prompt: str, api_key: str, system_prompt: str | None = None) ->
     messages.append({"role": "user", "content": prompt})
 
     payload = json.dumps({
-        "model":       MODEL,
+        "model":       model or MODEL,
         "max_tokens":  MAX_TOKENS,
         "temperature": 0.7,
         "messages":    messages,
@@ -336,7 +356,7 @@ def analyse_session_with_ai(session_id: int) -> dict:
         active = get_active_prompt("session_analysis")
         system_prompt = active["system_prompt"] if active else None
         prompt      = _build_user_prompt(summary)
-        raw_text, usage = _call_claude(prompt, api_key, system_prompt=system_prompt)
+        raw_text, usage = _call_nvidia(prompt, api_key, system_prompt=system_prompt)
         _log_ai_cost(session_id, MODEL, usage)
 
         from backend.schemas.ai import parse_ai_response
@@ -388,10 +408,10 @@ def _is_budget_exceeded_unsafe() -> bool:
 
 MODEL_PRICING = {
     "nvidia/llama-3.1-nemotron-70b-instruct": {"input": 0.12, "output": 0.12},
-    "nvidia/llama-3.1-nemotron-70b-instruct": {"input": 0.12, "output": 0.12},
-    "claude-sonnet-4-6": {"input": 3.0, "output": 15.0},
-    "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
-    "claude-haiku-3.5": {"input": 0.80, "output": 4.0},
+    "nvidia/llama-3.3-70b-instruct":          {"input": 0.12, "output": 0.12},
+    "nvidia/mistral-large-2-instruct":        {"input": 0.15, "output": 0.15},
+    "meta/llama-3.1-405b-instruct":           {"input": 0.20, "output": 0.20},
+    "mistralai/mistral-large-2-instruct":     {"input": 0.15, "output": 0.15},
 }
 
 
@@ -491,12 +511,13 @@ def get_ai_status() -> dict:
     
     return {
         "available": _api_available(),
-        "has_library": None,  # NVIDIA doesn't require wrapper library
+        "has_library": None,
         "has_api_key": api_key_present,
         "model": MODEL,
+        "available_models": NVIDIA_MODELS,
         "cached_responses": cached[0] or 0,
         "total_tokens": cached[1] or 0,
-        "install_cmd": None,  # No NVIDIA wrapper library needed
+        "install_cmd": None,
         "key_env_var": "NVIDIA_API_KEY",
         "console_url": "https://build.nvidia.com",
         "ollama_available": is_ollama_available(),
@@ -504,16 +525,32 @@ def get_ai_status() -> dict:
         "message": (
             f"NVIDIA NIM active — model {MODEL}"
             if _api_available()
-            else ("AI fallback: Ollama" if is_ollama_available() 
+            else ("AI fallback: Ollama" if is_ollama_available()
                  else "Fallback mode active — set NVIDIA_API_KEY or install Ollama to enable AI.")
         ),
         "cost_today": get_daily_cost(),
     }
 
 
+def set_model(model_id: str) -> dict:
+    """Switch active NVIDIA model at runtime (persisted to config)."""
+    global MODEL
+    if model_id not in NVIDIA_MODELS:
+        return {"error": f"Unknown model: {model_id}", "available": NVIDIA_MODELS}
+    MODEL = model_id
+    try:
+        cfg = json.loads(_CONFIG_PATH.read_text())
+        cfg.setdefault("ai", {})["nvidia_model"] = model_id
+        _CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    except Exception:
+        pass
+    return {"model": MODEL, "message": f"Switched to {MODEL}"}
+
+
 # ── Aliases for route compatibility ───────────────────────────────────────────
 
 _api_available = is_available
+_call_claude = _call_nvidia
 generate_session_narrative = analyse_session_with_ai
 
 
@@ -532,8 +569,8 @@ def generate_comparison_narrative(session_ids: list) -> dict:
     import json as _json
     prompt = f"Compare these {len(sessions)} sessions in 3-4 sentences, focusing on behaviour patterns:\n{_json.dumps(data, indent=2)}"
     if api_key:
-        text, _ = _call_claude(prompt, api_key)
-        if text: return {"content": text, "source": "claude", "model": MODEL}
+        text, _ = _call_nvidia(prompt, api_key)
+        if text: return {"content": text, "source": "nvidia_ai", "model": MODEL}
     best = max(sessions, key=lambda x: float(x["rtp"] or 0))
     worst = min(sessions, key=lambda x: float(x["rtp"] or 0))
     fallback = (f"Compared {len(sessions)} sessions. Best RTP: {best['game_name']} at {best['rtp']}%. "

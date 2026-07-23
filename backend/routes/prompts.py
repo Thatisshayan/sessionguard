@@ -18,7 +18,7 @@ router = APIRouter(tags=["prompts"])
 class PromptVersionRequest(BaseModel):
     name: str = "session_analysis"
     system_prompt: str
-    model: str = "claude-sonnet-4-6"
+    model: str = "nvidia/llama-3.1-nemotron-70b-instruct"
     temperature: float = 1.0
     max_tokens: int = 1024
     activate: bool = False

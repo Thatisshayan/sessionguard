@@ -1,19 +1,22 @@
 """
 backend/routes/ai_analysis.py
 ------------------------------
-Claude AI analysis endpoints.
+NVIDIA AI analysis endpoints.
 
 GET  /ai/status              — Is AI configured? What model? What cost?
-POST /sessions/{id}/ai       — Run Claude analysis on a session
+POST /sessions/{id}/ai       — Run NVIDIA AI analysis on a session
 GET  /sessions/{id}/ai       — Get cached AI analysis (from insights table)
 
 Maturity: Working Prototype
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel
 from engines.ai_insights_engine import (
     analyse_session_with_ai,
     get_ai_status,
+    set_model,
+    NVIDIA_MODELS,
 )
 from database.db import get_connection
 
@@ -26,10 +29,28 @@ def ai_status():
     return get_ai_status()
 
 
+class ModelSwitch(BaseModel):
+    model: str
+
+@router.post("/ai/model")
+def switch_model(body: ModelSwitch):
+    """Switch the active NVIDIA AI model."""
+    result = set_model(body.model)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@router.get("/ai/models")
+def list_models():
+    """Return available NVIDIA models."""
+    return {"models": NVIDIA_MODELS, "current": get_ai_status()["model"]}
+
+
 @router.post("/sessions/{session_id}/ai")
 def run_ai_analysis(session_id: int):
     """
-    Run Claude AI analysis on a session.
+    Run NVIDIA AI analysis on a session.
     Returns immediately with analysis result (synchronous for now).
     Falls back to rule-based if no API key configured.
     """

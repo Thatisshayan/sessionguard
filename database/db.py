@@ -632,7 +632,7 @@ CREATE TABLE IF NOT EXISTS ai_insights (
     insight_type TEXT   NOT NULL DEFAULT 'narrative',
     prompt_hash TEXT    NOT NULL DEFAULT '',
     content     TEXT    NOT NULL,
-    model       TEXT    NOT NULL DEFAULT 'claude-sonnet-4-20250514',
+    model       TEXT    NOT NULL DEFAULT 'nvidia/llama-3.1-nemotron-70b-instruct',
     tokens_used INTEGER DEFAULT 0,
     created_at  TEXT    DEFAULT (datetime('now'))
 );
@@ -701,7 +701,7 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
     name TEXT NOT NULL,
     version INTEGER NOT NULL,
     system_prompt TEXT NOT NULL,
-    model TEXT DEFAULT 'claude-sonnet-4-6',
+    model TEXT DEFAULT 'nvidia/llama-3.1-nemotron-70b-instruct',
     temperature REAL DEFAULT 1.0,
     max_tokens INTEGER DEFAULT 1024,
     is_active INTEGER DEFAULT 0,

@@ -1,14 +1,14 @@
 /**
  * src/components/AiAnalysisPanel.tsx
  * ------------------------------------
- * Displays Claude AI-powered session analysis.
+ * Displays NVIDIA AI-powered session analysis.
  * Shows setup instructions when no API key configured.
  * Falls back gracefully to rule-based results.
  * Maturity: Working Prototype
  */
 
 import { useState, useEffect } from 'react'
-import { runAiAnalysis, getCachedAiAnalysis, getAiStatus } from '../services/api'
+import { runAiAnalysis, getCachedAiAnalysis, getAiStatus, switchAiModel } from '../services/api'
 import type { AiAnalysis, AiStatus } from '../services/api'
 
 const SEV_COLOR: Record<string, string> = {
@@ -42,6 +42,7 @@ export function AiAnalysisPanel({ sessionId }: Props) {
   const [running,   setRunning]   = useState(false)
   const [loaded,    setLoaded]    = useState(false)
   const [error,     setError]     = useState('')
+  const [switching, setSwitching] = useState(false)
 
   useEffect(() => {
     // Load AI status and check for cached analysis
@@ -66,6 +67,17 @@ export function AiAnalysisPanel({ sessionId }: Props) {
     } finally { setRunning(false) }
   }
 
+  const handleModelSwitch = async (model: string) => {
+    setSwitching(true)
+    try {
+      await switchAiModel(model)
+      const status = await getAiStatus()
+      setAiStatus(status)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Model switch failed.')
+    } finally { setSwitching(false) }
+  }
+
   if (!loaded) return (
     <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: 13 }}>Loading AI status…</div>
   )
@@ -78,7 +90,7 @@ export function AiAnalysisPanel({ sessionId }: Props) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <span style={{ fontSize: 20 }}>🤖</span>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>Claude AI Analysis</div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>NVIDIA AI Analysis</div>
               {analysis?.model && (
                 <span style={{ fontSize: 10, background: 'rgba(59,130,246,0.15)', color: 'var(--accent-blue)', padding: '2px 8px', borderRadius: 99, fontFamily: 'var(--font-mono)' }}>
                   {analysis.model}
@@ -90,9 +102,25 @@ export function AiAnalysisPanel({ sessionId }: Props) {
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
               {aiStatus?.available
-                ? `Powered by ${aiStatus.model} · ~${aiStatus.cost_per_session} per analysis`
+                ? <>Powered by
+                    <select
+                      value={aiStatus.model}
+                      onChange={e => handleModelSwitch(e.target.value)}
+                      disabled={switching}
+                      style={{
+                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                        background: 'var(--bg-elevated)', color: 'var(--accent-blue)',
+                        border: '1px solid var(--bg-border)', borderRadius: 4,
+                        padding: '2px 6px', cursor: switching ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {(aiStatus.available_models ?? []).map((m: string) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </>
                 : 'Add API key to enable AI-powered insights'}
             </div>
           </div>
@@ -111,24 +139,24 @@ export function AiAnalysisPanel({ sessionId }: Props) {
 
         {/* API key setup instructions */}
         {!aiStatus?.available && (
-          <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-blue)' }}>
+            <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--accent-blue)' }}>
             <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: 'var(--accent-blue)' }}>
               Setup — 2 minutes
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
               1. Get your free API key at{' '}
-              <a href="https://console.anthropic.com" target="_blank" rel="noreferrer"
+              <a href="https://build.nvidia.com" target="_blank" rel="noreferrer"
                 style={{ color: 'var(--accent-blue)' }}>
-                console.anthropic.com
+                build.nvidia.com
               </a>
               <br />
               2. Set it in one of these ways:
             </div>
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {[
-                ['Windows (Command Prompt)', 'set ANTHROPIC_API_KEY=sk-ant-your-key-here'],
-                ['Mac / Linux (Terminal)',   'export ANTHROPIC_API_KEY=sk-ant-your-key-here'],
-                ['Config file',              'config/app_config.json → ai.anthropic_api_key'],
+                ['Windows (Command Prompt)', 'set NVIDIA_API_KEY=nvapi-your-key-here'],
+                ['Mac / Linux (Terminal)',   'export NVIDIA_API_KEY=nvapi-your-key-here'],
+                ['Config file',              'config/app_config.json → ai.nvidia_api_key'],
               ].map(([label, cmd]) => (
                 <div key={label}>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}:</div>
@@ -139,7 +167,7 @@ export function AiAnalysisPanel({ sessionId }: Props) {
               ))}
             </div>
             <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-              3. Restart the backend. Pricing: ~$0.001–0.003 per session analysis.
+              3. Restart the backend. Pricing: ~$0.0001–0.0002 per session analysis.
             </div>
           </div>
         )}
@@ -243,10 +271,10 @@ export function AiAnalysisPanel({ sessionId }: Props) {
 
           {/* Meta */}
           <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right' }}>
-            {analysis.source === 'claude_ai' && analysis.generated_at
+            {analysis.source === 'nvidia_ai' && analysis.generated_at
               ? `Analysed by ${analysis.model} · ${new Date(analysis.generated_at).toLocaleString()}`
               : analysis.source === 'rule_based'
-              ? 'Rule-based analysis · Add ANTHROPIC_API_KEY for Claude AI'
+              ? 'Rule-based analysis · Add NVIDIA_API_KEY for AI insights'
               : ''}
           </div>
         </>
@@ -259,7 +287,7 @@ export function AiAnalysisPanel({ sessionId }: Props) {
           <div style={{ fontSize: 14, fontWeight: 600 }}>No analysis yet</div>
           <div style={{ fontSize: 12, textAlign: 'center', maxWidth: 320 }}>
             {aiStatus?.available
-              ? 'Click "Run Analysis" to get Claude AI-powered insights for this session.'
+              ? 'Click "Run Analysis" to get NVIDIA AI-powered insights for this session.'
               : 'Configure your API key above, then click "Run Analysis".'}
           </div>
         </div>

@@ -12,7 +12,7 @@ const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
 interface CoachMsg {
   type: 'tip' | 'warning' | 'critical' | 'positive' | 'neutral'
-  message: string; trigger: string; source: 'claude' | 'rule'; timestamp: number
+  message: string; trigger: string; source: 'nvidia' | 'rule'; timestamp: number
 }
 interface Props { runId: number | null; running: boolean; style?: 'strict' | 'balanced' | 'supportive' }
 
@@ -60,7 +60,7 @@ export default function LiveCoach({ runId, running, style = 'balanced' }: Props)
         <div style={{ flex:1 }}>
           <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)' }}>
             Live Coach
-            {aiActive && <span style={{ marginLeft:8, fontSize:9, fontWeight:600, background:'rgba(59,130,246,0.15)', color:'var(--accent-blue)', padding:'2px 6px', borderRadius:4, textTransform:'uppercase' }}>Claude AI</span>}
+            {aiActive && <span style={{ marginLeft:8, fontSize:9, fontWeight:600, background:'rgba(59,130,246,0.15)', color:'var(--accent-blue)', padding:'2px 6px', borderRadius:4, textTransform:'uppercase' }}>NVIDIA AI</span>}
           </div>
           <div style={{ fontSize:10, color:'var(--text-muted)', marginTop:2 }}>
             {running ? `${aiActive?'AI':'Rule-based'} coaching active — ${style}` : 'Start a session to activate coaching'}
@@ -79,7 +79,7 @@ export default function LiveCoach({ runId, running, style = 'balanced' }: Props)
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
                 <span style={{ fontSize:20 }}>{ls.icon}</span>
                 <span style={{ fontSize:10, fontWeight:700, color:ls.border, textTransform:'uppercase', letterSpacing:'0.06em' }}>{ls.label}</span>
-                <span style={{ fontSize:10, color:'var(--text-muted)', marginLeft:'auto' }}>{latest.source==='claude'?'🤖 Claude':'📋 Rule'}</span>
+                <span style={{ fontSize:10, color:'var(--text-muted)', marginLeft:'auto' }}>{latest.source==='nvidia'?'🤖 NVIDIA':'📋 Rule'}</span>
               </div>
               <div style={{ fontSize:13, color:'var(--text-primary)', lineHeight:1.7, fontWeight:500 }}>{latest.message}</div>
             </div>

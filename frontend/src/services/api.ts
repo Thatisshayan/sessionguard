@@ -79,7 +79,7 @@ export interface AiAnalysis {
 }
 export interface AiStatus {
   available: boolean; has_library: boolean; has_api_key: boolean
-  model: string; message: string; install_cmd: string | null
+  model: string; available_models?: string[]; message: string; install_cmd: string | null
   key_env_var: string; console_url: string; cost_per_session?: string
 }
 // CompareResult — returned by /compare endpoint
@@ -245,6 +245,8 @@ export const runAiAnalysis         = (id: number, force = false) => client.get(`
 export const getCachedAiAnalysis   = (id: number) => client.get(`/intelligence/ai/session/${id}`).then(r => r.data)
 export const getAiComparison       = (session_ids: number[]) => client.post('/intelligence/ai/compare', { session_ids }).then(r => r.data)
 export const getAiReviewSuggestion = (id: number) => client.get(`/intelligence/ai/review/${id}`).then(r => r.data)
+export const switchAiModel         = (model: string) => client.post('/ai/model', { model }).then(r => r.data)
+export const getAiModels           = () => client.get('/ai/models').then(r => r.data)
 
 // ── System + Recorder ─────────────────────────────────────────────────────────
 export const getSystemConfig   = () => client.get('/system-config').then(r => r.data)

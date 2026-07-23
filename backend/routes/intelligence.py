@@ -2,7 +2,7 @@
 backend/routes/intelligence.py
 -------------------------------
 V12: Clustering, anomalies, peer benchmarking, dataset summary.
-V13: Claude AI insights, narrative, comparison, review suggestions.
+V13: NVIDIA AI insights, narrative, comparison, review suggestions.
 All in one file — intelligence layer.
 Maturity: Working Prototype
 """
@@ -85,7 +85,7 @@ def anomalies(z_threshold: float = Query(2.0, ge=1.0, le=4.0)):
 
 @router.get("/intelligence/ai/status")
 def ai_status():
-    """Check if Claude AI is available and configured."""
+    """Check if NVIDIA AI is available and configured."""
     from engines.ai_insights_engine import get_ai_status
     return get_ai_status()
 

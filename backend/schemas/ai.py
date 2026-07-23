@@ -1,7 +1,7 @@
 """
 backend/schemas/ai.py
 --------------------
-Pydantic models for structured AI outputs from Claude.
+Pydantic models for structured AI outputs from NVIDIA NIM.
 """
 
 from __future__ import annotations

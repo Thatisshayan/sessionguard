@@ -60,7 +60,7 @@ def calibrate(image_path: str):
     print("1. Look at the list above")
     print("2. Find the rows matching your BALANCE, BET, and WIN values")
     print("3. Note their ROI coordinates [x, y, width, height]")
-    print("4. Tell Claude those coordinates — I'll save them to your profile")
+    print("4. Tell the AI those coordinates — I'll save them to your profile")
     print("\nTip: Add padding around the number (e.g. add 20px to width/height)")
     print("     to make sure the full value is captured during live play.\n")
 
