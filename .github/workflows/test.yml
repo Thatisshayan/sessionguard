@@ -20,7 +20,7 @@ jobs:
           cache: "pip"
       
       - name: Install dependencies
-        run: pip install -e . pytest pytest-asyncio
+        run: pip install -r requirements.txt
       
       - name: Run backend tests
         run: python -m pytest tests/ -v --tb=short
@@ -56,7 +56,7 @@ jobs:
           python-version: "3.12"
       
       - name: Install deps
-        run: pip install -e . pytesseract pillow
+        run: pip install -r requirements.txt
       
       - name: Generate fixtures
         run: python tests/fixtures/generate_fixtures.py

@@ -16,15 +16,8 @@
       "window": { "all": true },
       "dialog": { "all": true },
       "notification": { "all": true },
+      "globalShortcut": { "all": true },
       "http": { "all": true, "scope": ["http://127.0.0.1:8000/**"] }
-    },
-    "externalBin": [
-      "bundled/tesseract",
-      "bundled/ffmpeg",
-      "bundled/python"
-    ],
-    "resources": {
-      "bundled/**/*": "bundled/"
     },
     "bundle": {
       "active":     true,
@@ -40,18 +33,9 @@
       "copyright":        "2025 SessionGuard",
       "category":         "Business",
       "shortDescription": "Session intelligence platform",
-      "signing": {
-        "windows": {
-          "identity": null,
-          "timestamp_url": "http://timestamp.digicert.com",
-          "digest_algorithm": "sha256"
-        },
-        "macOS": {
-          "identity": null,
-          "timestamp": "=timestamp",
-          "hardened_runtime": true,
-          "entitlements": null
-        }
+      "windows": {
+        "timestampUrl":    "http://timestamp.digicert.com",
+        "digestAlgorithm": "sha256"
       }
     },
     "security": { "csp": null },
