@@ -12,6 +12,7 @@ node_modules/
 venv/
 frontend/dist/
 desktop_shell/src-tauri/target/
+desktop_shell/src-tauri/bundled_app/
 storage/uploads/*
 storage/exports/*
 storage/recordings/*

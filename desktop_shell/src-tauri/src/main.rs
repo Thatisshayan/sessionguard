@@ -35,62 +35,79 @@ fn setup_sentry() {
 
 struct BackendProcess(Arc<Mutex<Option<Child>>>);
 
-fn find_python() -> String {
-    // Check bundled Python first (for distributed builds)
+fn log_line(msg: &str) {
+    println!("{msg}");
     if let Some(exe) = std::env::current_exe().ok() {
         if let Some(dir) = exe.parent() {
-            let bundled = dir.join("bundled").join("python").join("python.exe");
+            let log_path = dir.join("sessionguard.log");
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log_path) {
+                use std::io::Write;
+                let _ = writeln!(f, "{msg}");
+            }
+        }
+    }
+}
+
+fn show_fatal_error(app: &AppHandle, msg: &str) {
+    log_line(&format!("[Tauri] FATAL: {msg}"));
+    if let Some(w) = app.get_window("main") {
+        let escaped = msg.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', "\\n");
+        let _ = w.eval(&format!("alert('SessionGuard: {escaped}')"));
+    }
+}
+
+fn find_python() -> String {
+    // Check bundled Python first (for distributed builds that embed one)
+    if let Some(exe) = std::env::current_exe().ok() {
+        if let Some(dir) = exe.parent() {
+            let bundled = dir.join("resources").join("bundled_app").join("python").join("python.exe");
             if bundled.exists() {
                 return bundled.to_string_lossy().to_string();
             }
         }
     }
-
-    let candidates = vec![
-        r"C:\Users\Shaya\AppData\Local\Programs\Python\Python312\python.exe".to_string(),
-        r"C:\Users\Shaya\AppData\Local\Programs\Python\Python311\python.exe".to_string(),
-        r"C:\Python312\python.exe".to_string(),
-        r"C:\Python311\python.exe".to_string(),
-        r"C:\Python310\python.exe".to_string(),
-    ];
-    for path in &candidates {
-        if std::path::Path::new(path).exists() {
-            println!("[Tauri] Found Python at: {}", path);
-            return path.clone();
-        }
-    }
-    println!("[Tauri] Falling back to system python");
+    log_line("[Tauri] No bundled Python found — relying on system `python` from PATH");
     "python".to_string()
 }
 
-fn find_project_root() -> String {
-    // Check bundled location
-    if let Some(exe) = std::env::current_exe().ok() {
-        if let Some(dir) = exe.parent() {
-            let bundled = dir.join("bundled").join("sessionguard");
-            if bundled.exists() {
-                return bundled.to_string_lossy().to_string();
-            }
+/// Resolves the backend source directory. Checks, in order: the resources
+/// bundled into the installer (the normal path for an installed app), then
+/// SESSIONGUARD_ROOT (for pointing a dev build at a specific checkout).
+/// Returns None rather than guessing at a directory that might not actually
+/// contain the backend — silently running the wrong code is worse than
+/// failing loudly.
+fn find_project_root(app: &AppHandle) -> Option<String> {
+    if let Some(resource_path) = app.path_resolver().resolve_resource("bundled_app") {
+        if resource_path.join("backend").join("main.py").exists() {
+            return Some(resource_path.to_string_lossy().to_string());
         }
     }
 
-    let known = r"C:\Projects\SessionGuard\sessionguard";
-    if std::path::Path::new(known).exists() {
-        return known.to_string();
+    if let Ok(dev_root) = std::env::var("SESSIONGUARD_ROOT") {
+        if std::path::Path::new(&dev_root).join("backend").join("main.py").exists() {
+            log_line(&format!("[Tauri] Using SESSIONGUARD_ROOT override: {dev_root}"));
+            return Some(dev_root);
+        }
+        log_line(&format!("[Tauri] SESSIONGUARD_ROOT is set but doesn't contain backend/main.py: {dev_root}"));
     }
-    let exe = std::env::current_exe().unwrap_or_default();
-    exe.parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| ".".to_string())
+
+    None
 }
 
-fn start_backend() -> Option<Child> {
+fn start_backend(app: &AppHandle) -> Option<Child> {
     let python = find_python();
-    let root   = find_project_root();
+    let root = match find_project_root(app) {
+        Some(r) => r,
+        None => {
+            show_fatal_error(
+                app,
+                "Backend source files were not found in the install. Try reinstalling the app; for development, set the SESSIONGUARD_ROOT environment variable to your checkout path.",
+            );
+            return None;
+        }
+    };
 
-    println!("[Tauri] Starting backend from: {}", root);
+    log_line(&format!("[Tauri] Starting backend from: {}", root));
 
     #[cfg(windows)]
     let result = Command::new(&python)
@@ -120,23 +137,26 @@ fn start_backend() -> Option<Child> {
         .spawn();
 
     match result {
-        Ok(child)  => { println!("[Tauri] Backend PID {}", child.id()); Some(child) }
-        Err(e)     => { eprintln!("[Tauri] Backend failed to start: {}", e); None }
+        Ok(child) => { log_line(&format!("[Tauri] Backend PID {}", child.id())); Some(child) }
+        Err(e) => {
+            show_fatal_error(app, &format!("Backend failed to start: {e}. Is Python installed and on PATH?"));
+            None
+        }
     }
 }
 
-fn wait_for_backend(max_secs: u64) -> bool {
+fn wait_for_backend(app: &AppHandle, max_secs: u64) -> bool {
     for _ in 0..(max_secs * 2) {
         thread::sleep(Duration::from_millis(500));
         if reqwest::blocking::get("http://127.0.0.1:8000/health")
             .map(|r| r.status().is_success())
             .unwrap_or(false)
         {
-            println!("[Tauri] Backend ready.");
+            log_line("[Tauri] Backend ready.");
             return true;
         }
     }
-    eprintln!("[Tauri] Backend did not respond in {}s", max_secs);
+    show_fatal_error(app, &format!("Backend did not respond within {max_secs}s. Check sessionguard.log next to the app executable."));
     false
 }
 
@@ -146,12 +166,12 @@ fn get_app_version() -> String {
 }
 
 #[tauri::command]
-fn restart_backend(state: tauri::State<BackendProcess>) -> bool {
+fn restart_backend(app: AppHandle, state: tauri::State<BackendProcess>) -> bool {
     let mut guard = state.0.lock().unwrap();
     if let Some(ref mut child) = *guard {
         let _ = child.kill();
     }
-    *guard = start_backend();
+    *guard = start_backend(&app);
     guard.is_some()
 }
 
@@ -192,13 +212,14 @@ fn handle_tray(app: &AppHandle, event: SystemTrayEvent) {
                 );
             }
             "restart" => {
-                let state = app.state::<BackendProcess>();
-                let proc  = state.0.clone();
+                let state  = app.state::<BackendProcess>();
+                let proc   = state.0.clone();
+                let handle = app.clone();
                 thread::spawn(move || {
                     let mut g = proc.lock().unwrap();
                     if let Some(ref mut c) = *g { let _ = c.kill(); }
                     thread::sleep(Duration::from_secs(1));
-                    *g = start_backend();
+                    *g = start_backend(&handle);
                 });
             }
             "quit" => { app.exit(0); }
@@ -238,16 +259,16 @@ fn main() {
         .system_tray(build_tray())
         .on_system_tray_event(handle_tray)
         .setup(|app| {
+            let handle = app.handle();
             let state = app.state::<BackendProcess>();
             let mut guard = state.0.lock().unwrap();
-            *guard = start_backend();
+            *guard = start_backend(&handle);
             drop(guard);
 
             // Wait up to 12 seconds for backend
-            wait_for_backend(12);
+            wait_for_backend(&handle, 12);
 
             // Register global shortcuts
-            let handle = app.handle();
             let mut gs = handle.global_shortcut_manager();
             let _ = gs.register("Ctrl+Shift+S", move || {
                 if let Some(w) = handle.get_window("main") {
