@@ -92,7 +92,7 @@ jobs:
         run: rustup target add x86_64-apple-darwin
 
       - name: Import signing certificate
-        if: env.APPLE_SIGNING_IDENTITY != ''
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -106,7 +106,11 @@ jobs:
           security import $CERT_DIR/certificate.p12 -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $RUNNER_TEMP/app-signing.keychain-db
           security list-keychain -d user -s $RUNNER_TEMP/app-signing.keychain-db
 
-      - name: Build Tauri app
+      # Two variants because tauri-bundler treats the mere *presence* of
+      # APPLE_SIGNING_IDENTITY as "sign now" — an empty string from an unset
+      # secret still triggers `codesign` with a blank identity and fails.
+      - name: Build Tauri app (signed)
+        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -114,6 +118,19 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'SessionGuard v__VERSION__'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
+          args: --target x86_64-apple-darwin
+
+      - name: Build Tauri app (unsigned)
+        if: ${{ secrets.APPLE_CERTIFICATE == '' }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
           releaseName: 'SessionGuard v__VERSION__'
