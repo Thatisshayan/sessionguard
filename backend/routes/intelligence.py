@@ -18,7 +18,7 @@ router = APIRouter(tags=["intelligence"])
 
 # ── V12: Clustering ────────────────────────────────────────────────────────────
 
-@router.post("/intelligence/clusters/build")
+@router.post("/clusters/build")
 def build_clusters(
     threshold: float = Query(0.88, ge=0.5, le=1.0),
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -29,7 +29,7 @@ def build_clusters(
     return build_clusters(threshold)
 
 
-@router.get("/intelligence/clusters")
+@router.get("/clusters")
 async def get_clusters(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return existing cluster assignments from DB."""
     require_admin(authorization)
@@ -48,7 +48,7 @@ async def get_clusters(authorization: Optional[str] = Header(None, alias="Author
     return {"cluster_count": len(clusters), "clusters": clusters}
 
 
-@router.get("/intelligence/clusters/session/{session_id}")
+@router.get("/clusters/session/{session_id}")
 async def session_cluster(
     session_id: int,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -63,7 +63,7 @@ async def session_cluster(
     return c
 
 
-@router.get("/intelligence/benchmark/{session_id}")
+@router.get("/benchmark/{session_id}")
 async def peer_benchmark(
     session_id: int,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -77,7 +77,7 @@ async def peer_benchmark(
     return r
 
 
-@router.get("/intelligence/dataset-summary")
+@router.get("/dataset-summary")
 def dataset_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Aggregate risk summary across all sessions."""
     require_admin(authorization)
@@ -88,7 +88,7 @@ def dataset_summary(authorization: Optional[str] = Header(None, alias="Authoriza
     return r
 
 
-@router.get("/intelligence/anomalies")
+@router.get("/anomalies")
 def anomalies(
     z_threshold: float = Query(2.0, ge=1.0, le=4.0),
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -101,7 +101,7 @@ def anomalies(
 
 # ── V13: AI insights ───────────────────────────────────────────────────────────
 
-@router.get("/intelligence/ai/status")
+@router.get("/ai/status")
 def ai_status(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Check if NVIDIA AI is available and configured."""
     require_admin(authorization)
@@ -109,7 +109,7 @@ def ai_status(authorization: Optional[str] = Header(None, alias="Authorization")
     return get_ai_status()
 
 
-@router.get("/intelligence/ai/session/{session_id}")
+@router.get("/ai/session/{session_id}")
 async def ai_session_narrative(
     session_id:     int,
     force_refresh:  bool = Query(False),
@@ -131,7 +131,7 @@ class CompareRequest(BaseModel):
     session_ids: list[int]
 
 
-@router.post("/intelligence/ai/compare")
+@router.post("/ai/compare")
 def ai_compare(
     body: CompareRequest,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -144,7 +144,7 @@ def ai_compare(
     return generate_comparison_narrative(body.session_ids)
 
 
-@router.get("/intelligence/ai/review/{review_item_id}")
+@router.get("/ai/review/{review_item_id}")
 async def ai_review_suggestion(
     review_item_id: int,
     authorization: Optional[str] = Header(None, alias="Authorization"),
