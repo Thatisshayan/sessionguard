@@ -179,8 +179,10 @@ def build_evidence_package(session_id: int) -> dict:
                 try:
                     zf.write(str(frame_path), f"frames/{frame_path.name}")
                     frame_count += 1
-                except Exception:
-                    pass
+                except Exception as e:
+                    errors.append(f"Frame thumbnail {frame_path.name}: {e}")
+            elif frame_path.name:
+                errors.append(f"Frame thumbnail missing: {frame_path.name}")
         if frame_count:
             contents.append(f"frames/ ({frame_count} thumbnails)")
 
@@ -239,7 +241,7 @@ def build_evidence_package(session_id: int) -> dict:
         "filename":  filename,
         "contents":  contents,
         "errors":    errors,
-        "error":     None,
+        "error":     None if not errors else "Evidence package completed with partial issues.",
     }
 
 

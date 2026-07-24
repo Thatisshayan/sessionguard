@@ -2,8 +2,9 @@
 backend/routes/health.py — Basic + detailed health checks.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 from datetime import datetime, timezone
+from backend.auth.access import require_admin
 
 router = APIRouter(tags=["health"])
 
@@ -19,8 +20,9 @@ def health_check():
 
 
 @router.get("/health/detailed")
-async def health_detailed():
+async def health_detailed(authorization: str | None = Header(None, alias="Authorization")):
     """Full system health — DB, FFmpeg, Tesseract, all engines."""
+    require_admin(authorization)
     import shutil, subprocess
     from database.db import get_connection, async_fetch_one
 

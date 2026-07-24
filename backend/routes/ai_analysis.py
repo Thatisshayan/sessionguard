@@ -13,9 +13,10 @@ Maturity: Working Prototype
 
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from backend.auth.access import require_admin, require_current_user, require_session_access
 from engines.ai_insights_engine import (
     analyse_session_with_ai,
     get_ai_status,
@@ -29,8 +30,9 @@ router = APIRouter(tags=["ai"])
 
 
 @router.get("/ai/status")
-def ai_status():
+def ai_status(authorization: str | None = Header(None, alias="Authorization")):
     """Return AI configuration status — used by Settings and SessionDetail."""
+    require_current_user(authorization)
     return get_ai_status()
 
 
@@ -38,8 +40,9 @@ class ModelSwitch(BaseModel):
     model: str
 
 @router.post("/ai/model")
-def switch_model(body: ModelSwitch):
+def switch_model(body: ModelSwitch, authorization: str | None = Header(None, alias="Authorization")):
     """Switch the active NVIDIA AI model."""
+    require_admin(authorization)
     result = set_model(body.model)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -47,18 +50,20 @@ def switch_model(body: ModelSwitch):
 
 
 @router.get("/ai/models")
-def list_models():
+def list_models(authorization: str | None = Header(None, alias="Authorization")):
     """Return available NVIDIA models."""
+    require_current_user(authorization)
     return {"models": NVIDIA_MODELS, "current": get_ai_status()["model"]}
 
 
 @router.post("/sessions/{session_id}/ai")
-async def run_ai_analysis(session_id: int):
+async def run_ai_analysis(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """
     Run NVIDIA AI analysis on a session.
     Returns immediately with analysis result (synchronous for now).
     Falls back to rule-based if no API key configured.
     """
+    await require_session_access(session_id, authorization)
     s = await async_fetch_one("SELECT id FROM sessions WHERE id=?", (session_id,))
     if not s:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -66,12 +71,13 @@ async def run_ai_analysis(session_id: int):
 
 
 @router.get("/sessions/{session_id}/ai")
-async def get_ai_analysis(session_id: int):
+async def get_ai_analysis(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """
     Return the most recent AI insights for a session.
     If none exist yet, runs a fresh analysis.
     """
     from database.db import async_fetch_all
+    await require_session_access(session_id, authorization)
     session = await async_fetch_one("SELECT id FROM sessions WHERE id=?", (session_id,))
     cached = await async_fetch_all(
         "SELECT text, severity FROM insights WHERE session_id=? AND text LIKE '[AI]%' ORDER BY id DESC LIMIT 5",
@@ -94,11 +100,12 @@ async def get_ai_analysis(session_id: int):
 
 
 @router.get("/sessions/{session_id}/ai/stream")
-async def stream_ai_analysis(session_id: int):
+async def stream_ai_analysis(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """
     Stream AI analysis for a session via Server-Sent Events.
     Frontend consumes this for real-time AI response display.
     """
+    await require_session_access(session_id, authorization)
     session = await async_fetch_one("SELECT id FROM sessions WHERE id=?", (session_id,))
     
     if not session:

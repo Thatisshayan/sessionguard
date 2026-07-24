@@ -98,7 +98,12 @@ def _detect_format(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
-def parse_csv_file(file_path: str, upload_id: int, session_id: int | None = None) -> dict:
+def parse_csv_file(
+    file_path: str,
+    upload_id: int,
+    session_id: int | None = None,
+    owner_id: int | None = None,
+) -> dict:
     """
     Main entry point. Reads a CSV file, detects format, persists data.
 
@@ -155,9 +160,9 @@ def parse_csv_file(file_path: str, upload_id: int, session_id: int | None = None
         return result
 
     if fmt == "spin":
-        return _parse_spin_level(df, upload_id, result, session_id)
+        return _parse_spin_level(df, upload_id, result, session_id, owner_id)
     else:
-        return _parse_session_level(df, upload_id, result)
+        return _parse_session_level(df, upload_id, result, owner_id)
 
 
 # ── Spin-level parser ─────────────────────────────────────────────────────────
@@ -167,6 +172,7 @@ def _parse_spin_level(
     upload_id: int,
     result: dict,
     session_id: int | None,
+    owner_id: int | None,
 ) -> dict:
     """
     One row per spin. Groups into one session (or links to existing session_id).
@@ -212,11 +218,12 @@ def _parse_spin_level(
         result["warnings"].append(f"Events linked to existing session ID {session_id}.")
     else:
         cur = conn.execute(
-            "INSERT INTO sessions (name, game_name, platform, date, start_balance, "
+            "INSERT INTO sessions (owner_id, name, game_name, platform, date, start_balance, "
             "end_balance, total_bets, total_wins, net_result, rtp, spins, "
             "biggest_win, losing_streak, status, notes) VALUES "
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?)",
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?)",
             (
+                owner_id,
                 f"Imported — {game_name} ({date_val})",
                 game_name, platform, date_val, start_bal,
                 end_bal, total_bets, total_wins, net_result, rtp,
@@ -282,7 +289,12 @@ def _parse_spin_level(
 
 # ── Session-level parser ──────────────────────────────────────────────────────
 
-def _parse_session_level(df: pd.DataFrame, upload_id: int, result: dict) -> dict:
+def _parse_session_level(
+    df: pd.DataFrame,
+    upload_id: int,
+    result: dict,
+    owner_id: int | None,
+) -> dict:
     """One row per session. Creates multiple sessions from one CSV."""
     numeric_cols = [
         "start_balance", "end_balance", "total_bets", "total_wins",
@@ -311,11 +323,12 @@ def _parse_session_level(df: pd.DataFrame, upload_id: int, result: dict) -> dict
         notes         = str(row.get("notes", f"Imported from CSV upload #{upload_id}")).strip()
 
         cur = conn.execute(
-            "INSERT INTO sessions (name, game_name, platform, date, duration_minutes, "
+            "INSERT INTO sessions (owner_id, name, game_name, platform, date, duration_minutes, "
             "start_balance, end_balance, total_bets, total_wins, net_result, rtp, spins, "
             "biggest_win, losing_streak, status, notes) VALUES "
-            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?)",
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?)",
             (
+                owner_id,
                 f"Imported — {game_name} ({date_val})",
                 game_name, platform, date_val, duration,
                 start_bal, end_bal, total_bets, total_wins,

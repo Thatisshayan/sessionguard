@@ -7,7 +7,7 @@ import json, shutil, uuid, logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, Request
 from pydantic import BaseModel, Field
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from engines.csv_import_engine import import_csv, preview_csv
@@ -75,7 +75,7 @@ def _get_file(upload_id: str) -> Path:
     return fp
 
 
-def _create_session() -> str:
+def _create_session(owner_id: int | None = None) -> str:
     sid  = uuid.uuid4().hex
     now  = datetime.now(timezone.utc).isoformat()
     name = f"CSV Import {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -83,6 +83,7 @@ def _create_session() -> str:
     try:
         cols = {r[1]: r for r in conn.execute("PRAGMA table_info(sessions)").fetchall()}
         vals: Dict[str, Any] = {}
+        if "owner_id" in cols:   vals["owner_id"] = owner_id
         if "id" in cols:          vals["id"] = sid
         if "name" in cols:        vals["name"] = name
         if "status" in cols:      vals["status"] = "imported"
@@ -117,10 +118,12 @@ async def preview_import(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 
 @router.post("/confirm")
-async def confirm_import(payload: ConfirmImportRequest) -> Dict[str, Any]:
+async def confirm_import(payload: ConfirmImportRequest, request: Request) -> Dict[str, Any]:
     """Apply the column mapping, create a session, insert events, return counts."""
     fp         = _get_file(payload.upload_id)
-    session_id = await asyncio.to_thread(_create_session)
+    current_user = getattr(request.state, "current_user", None)
+    owner_id = current_user["user_id"] if current_user else None
+    session_id = await asyncio.to_thread(_create_session, owner_id)
     result     = await asyncio.to_thread(import_csv, fp, payload.column_mapping.model_dump(exclude_none=True), session_id)
     imported   = int(result.get("imported", 0))
     # Update event_count

@@ -135,6 +135,7 @@ async def async_execute_many(query: str, params_list: list[tuple]) -> int:
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
     name             TEXT    NOT NULL,
     game_name        TEXT    NOT NULL,
     platform         TEXT    NOT NULL,
@@ -373,6 +374,11 @@ def seed_demo_data(force: bool = False):
         """)
 
     random.seed(42)
+    demo_user = conn.execute(
+        "SELECT id FROM users WHERE email=?",
+        ("demo@sessionguard.local",)
+    ).fetchone()
+    demo_owner_id = demo_user["id"] if demo_user else None
 
     # Default profiles
     conn.executemany(
@@ -398,11 +404,12 @@ def seed_demo_data(force: bool = False):
 
     for i in range(12):
         s = _random_session(i)
+        s["owner_id"] = demo_owner_id
         cur = conn.execute(
-            "INSERT INTO sessions (name,game_name,platform,date,duration_minutes,"
+            "INSERT INTO sessions (owner_id,name,game_name,platform,date,duration_minutes,"
             "start_balance,end_balance,total_bets,total_wins,net_result,rtp,spins,"
             "biggest_win,biggest_loss,losing_streak,status,notes) VALUES "
-            "(:name,:game_name,:platform,:date,:duration_minutes,:start_balance,"
+            "(:owner_id,:name,:game_name,:platform,:date,:duration_minutes,:start_balance,"
             ":end_balance,:total_bets,:total_wins,:net_result,:rtp,:spins,"
             ":biggest_win,:biggest_loss,:losing_streak,:status,:notes)", s)
         sid = cur.lastrowid
@@ -602,7 +609,10 @@ def init_db_v3():
 
 
 def seed_demo_user():
-    """Create a demo user for local development."""
+    """Create a demo user for local development when explicitly configured."""
+    demo_password = os.getenv("SESSIONGUARD_DEMO_PASSWORD", "").strip()
+    if not demo_password:
+        return
     from backend.auth.service import hash_password
     conn = get_connection()
     existing = conn.execute("SELECT id FROM users WHERE email=?",
@@ -613,11 +623,11 @@ def seed_demo_user():
     conn.execute(
         "INSERT INTO users (email, username, hashed_password, role) VALUES (?,?,?,?)",
         ("demo@sessionguard.local", "demo",
-         hash_password("demo123"), "admin")
+         hash_password(demo_password), "admin")
     )
     conn.commit()
     conn.close()
-    print("[DB] Demo user created: demo@sessionguard.local / demo123")
+    print("[DB] Demo user created from SESSIONGUARD_DEMO_PASSWORD.")
 
 
 # ── Phase 5 schema additions ──────────────────────────────────────────────────
@@ -878,3 +888,32 @@ def init_db_v11():
         if "duplicate column name" not in str(e).lower():
             print(f"[DB] V11: {e}")
     conn.close()
+
+
+# ── Phase 6 (P0): session ownership metadata ──────────────────────────────────
+SCHEMA_V12_SQL = """
+ALTER TABLE sessions ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_owner_id ON sessions(owner_id);
+"""
+
+
+def init_db_v12():
+    """Add session ownership tracking for access control."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V12_SQL)
+        owner_row = conn.execute(
+            "SELECT id FROM users ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END, id LIMIT 1"
+        ).fetchone()
+        if owner_row:
+            conn.execute(
+                "UPDATE sessions SET owner_id=? WHERE owner_id IS NULL",
+                (owner_row["id"],)
+            )
+        conn.commit()
+        print("[DB] V12 session owner column added.")
+    except Exception as e:
+        if "duplicate column name" not in str(e).lower():
+            print(f"[DB] V12: {e}")
+    finally:
+        conn.close()

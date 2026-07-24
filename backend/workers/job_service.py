@@ -188,7 +188,12 @@ def _run_csv_parse(job_id: int, job: dict):
                    completed_at=datetime.now(timezone.utc).isoformat())
         return
     update_job(job_id, progress=10)
-    result = parse_csv_file(file_path, job["upload_id"], job["session_id"])
+    result = parse_csv_file(
+        file_path,
+        job["upload_id"],
+        job["session_id"],
+        owner_id=job.get("user_id"),
+    )
     update_job(job_id,
                status="complete" if result["success"] else "error",
                progress=100,
