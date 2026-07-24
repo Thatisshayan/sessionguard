@@ -25,8 +25,8 @@ the trust-track work recorded in the earlier audit.
 
 ## Verification
 
-`python -m pytest` from `_repo_clone`: **149 passed, 6 skipped**. Overall
-coverage measured 45%. Skips are the existing encryption/OCR dependency skips.
+`python -m pytest` from `_repo_clone`: **150 passed, 6 skipped**. Overall
+coverage measured 46%. Skips are the existing encryption/OCR dependency skips.
 
 ## Deferred or blocked
 
