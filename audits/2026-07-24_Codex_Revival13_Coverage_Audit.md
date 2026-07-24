@@ -18,7 +18,8 @@ the trust-track work recorded in the earlier audit.
   tampered, and missing manifest entries; `tests/test_export_service.py` covers
   missing-session failures for PDF and Excel. The Excel exporter now closes its
   DB connection on that early-return path. The module measured 25% coverage;
-  full export generation remains open.
+  full export generation remains open. A successful isolated evidence-package
+  assembly test now covers the core ZIP contents and export registration.
 - B4 advanced to partial: `tests/test_roi_calibrator.py` covers missing image,
   label recognition, and numeric OCR classification. The module measured 33%.
 
@@ -34,3 +35,7 @@ coverage measured 45%. Skips are the existing encryption/OCR dependency skips.
 - A1 CI validation and A2 artifact execution require GitHub runner execution.
 - C1 was not changed: converting synchronous engines to async requires a
   broader DB/transaction design pass than a safe route-signature edit.
+- D1 audit found only startup `print()` calls in backend code; no backend
+  failure path was found that relies solely on `print()`. Several broad
+  `except Exception` fallbacks remain intentionally silent and are tracked for
+  targeted observability work rather than changed indiscriminately.
