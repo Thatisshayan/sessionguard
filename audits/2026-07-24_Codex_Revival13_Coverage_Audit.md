@@ -15,8 +15,10 @@ the trust-track work recorded in the earlier audit.
   frame cadence, scene-change detection, and perceptual-hash helpers. The
   module measured 19% coverage in the full run.
 - B2 advanced to partial: `tests/test_evidence_package.py` covers valid,
-  tampered, and missing manifest entries. The evidence builder and PDF/Excel
-  export paths remain open.
+  tampered, and missing manifest entries; `tests/test_export_service.py` covers
+  missing-session failures for PDF and Excel. The Excel exporter now closes its
+  DB connection on that early-return path. The module measured 25% coverage;
+  full export generation remains open.
 - B4 advanced to partial: `tests/test_roi_calibrator.py` covers missing image,
   label recognition, and numeric OCR classification. The module measured 33%.
 
