@@ -21,10 +21,12 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
     Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]|[\\/]\.git[\\/]|[\\/]audits[\\/]private[\\/]' }
   if ($badFiles) { Err "secret-scan" "secret files present: $($badFiles.FullName -join ', ')" }
   # (b) content-based: code/config only, require an assigned value (not prose mentions)
+  #     Exclude *.env.example / *.env.sample (template files, no real secrets).
   $hits = Get-ChildItem -Path $RepoRoot -Recurse -File `
     -Include *.json,*.env*,*.ts,*.js,*.py,*.yml,*.yaml,*.toml,*.sh `
     -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]|[\\/]\.git[\\/]|[\\/]audits[\\/]private[\\/]' } |
+    Where-Object { $_.Name -notmatch '\.env\.(example|sample)$' } |
     Where-Object { Select-String -Path $_.FullName -Pattern '(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)\s*[=:]\s*["'']?[A-Za-z0-9/+_-]{8,}' -Quiet }
   if ($hits) { Err "secret-scan" "possible hardcoded secrets in: $($hits.FullName -join ', ')" }
 }
