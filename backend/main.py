@@ -25,9 +25,11 @@ if platform.system() == "Windows":
     except ImportError:
         pass
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, seed_demo_data, seed_demo_user
+from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, init_db_v12, seed_demo_data, seed_demo_user
+from backend.auth.service import get_current_user_from_token
 from engines.alert_presets import seed_presets
 from backend.middleware.logging import configure_logging, RequestLoggingMiddleware
 
@@ -54,10 +56,27 @@ app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True
                    allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(RequestLoggingMiddleware)
 
+@app.middleware("http")
+async def require_authenticated_api(request: Request, call_next):
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/v1/"):
+        return await call_next(request)
+    if path.startswith("/api/v1/auth") or path == "/api/v1/health":
+        return await call_next(request)
+
+    current_user = get_current_user_from_token(request.headers.get("authorization"))
+    if not current_user:
+        return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+
+    request.state.current_user = current_user
+    return await call_next(request)
+
 @app.on_event("startup")
 def on_startup():
     init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6(); init_db_v7(); init_db_v8()
-    seed_demo_data(); seed_demo_user(); seed_presets()
+    seed_demo_user()
+    init_db_v12()
+    seed_demo_data(); seed_presets()
 
     # Load API key from environment (secure method)
     api_key = os.getenv("NVIDIA_API_KEY", "").strip()
@@ -65,7 +84,6 @@ def on_startup():
         os.environ["NVIDIA_API_KEY"] = api_key
 
     print("[API] SessionGuard v1.2.0 ready -> http://127.0.0.1:8000")
-    print("[API] Login -> demo@sessionguard.local / demo123")
     print("[API] Coach -> /coach-status | Updater -> /updater/check")
 
 app.include_router(health.router)  # Unversioned

@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { sendNotification, isPermissionGranted, requestPermission } from '@tauri-apps/api/notification'
+import { useAuth } from '../context/AuthContext'
 
 interface Notification {
   id:        number
@@ -35,6 +36,7 @@ const SEV_COLOR: Record<string, string> = {
 }
 
 export function NotificationCenter() {
+  const { accessToken } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [open,          setOpen]          = useState(false)
   const [wsStatus,      setWsStatus]      = useState<'connecting'|'connected'|'disconnected'>('connecting')
@@ -46,9 +48,15 @@ export function NotificationCenter() {
 
   // ── WebSocket connection ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!accessToken) {
+      setWsStatus('disconnected')
+      return
+    }
     const connect = () => {
       try {
-        const ws = new WebSocket('ws://127.0.0.1:8000/ws/global')
+        const url = new URL('ws://127.0.0.1:8000/ws/global')
+        url.searchParams.set('token', accessToken)
+        const ws = new WebSocket(url.toString())
         ws.onopen = () => setWsStatus('connected')
         ws.onclose = () => {
           setWsStatus('disconnected')
@@ -80,7 +88,7 @@ export function NotificationCenter() {
     }
     connect()
     return () => wsRef.current?.close()
-  }, [])
+  }, [accessToken])
 
   // ── Native notification permission + firing ─────────────────────────────
   useEffect(() => {

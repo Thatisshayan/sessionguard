@@ -87,14 +87,14 @@ def _scan_file_with_clamav(file_path: Path) -> tuple[bool, str]:
 
 # ── Background tasks ──────────────────────────────────────────────────────────
 
-def _bg_parse_csv(file_path: str, upload_id: int, session_id: int | None):
+def _bg_parse_csv(file_path: str, upload_id: int, session_id: int | None, owner_id: int | None):
     """Run CSV parsing in the background after upload completes."""
     conn = get_connection()
     conn.execute("UPDATE uploads SET status='processing' WHERE id=?", (upload_id,))
     conn.commit()
     conn.close()
 
-    result = parse_csv_file(file_path, upload_id, session_id)
+    result = parse_csv_file(file_path, upload_id, session_id, owner_id=owner_id)
 
     conn2 = get_connection()
     if result["success"]:
@@ -149,6 +149,9 @@ async def upload_file(
     Video files → frame extraction triggered (background task).
     Returns immediately with upload_id and status=processing.
     """
+    current_user = getattr(request.state, "current_user", None)
+    owner_id = current_user["user_id"] if current_user else None
+
     limit_result = check_rate_limit(get_client_ip(request), "upload", max_calls=10, window_seconds=60)
     if not limit_result["allowed"]:
         raise HTTPException(
@@ -223,7 +226,7 @@ async def upload_file(
 
     # Trigger background processing
     if file_type == "csv":
-        background_tasks.add_task(_bg_parse_csv, str(dest_path), upload_id, session_id)
+        background_tasks.add_task(_bg_parse_csv, str(dest_path), upload_id, session_id, owner_id)
         processing_note = "CSV file queued for parsing — sessions and events will appear shortly."
     elif file_type == "video":
         background_tasks.add_task(_bg_extract_frames, str(dest_path), upload_id)

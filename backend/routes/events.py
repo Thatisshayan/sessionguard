@@ -5,9 +5,10 @@ Event timeline endpoints. Real data from DB.
 Maturity: Working Prototype
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all
+from backend.auth.access import require_session_access
 from engines.event_validator import validate_session_events
 
 router = APIRouter(tags=["events"])
@@ -15,6 +16,7 @@ router = APIRouter(tags=["events"])
 
 @router.get("")
 async def get_session_events(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
     session_id: int = Query(...),
     limit: int      = Query(500, le=2000),
     source: Optional[str] = Query(None),
@@ -23,6 +25,7 @@ async def get_session_events(
     Return all events for a session — full timeline for charts.
     Adds spin_number and cumulative balance column.
     """
+    await require_session_access(session_id, authorization)
     s = await async_fetch_one("SELECT id FROM sessions WHERE id=?", (session_id,))
     if not s:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -46,8 +49,12 @@ async def get_session_events(
 
 
 @router.get("/summary")
-async def get_events_summary(session_id: int = Query(...)):
+async def get_events_summary(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    session_id: int = Query(...),
+):
     """Aggregated event statistics — used by session detail KPIs."""
+    await require_session_access(session_id, authorization)
     row = await async_fetch_one("""
         SELECT
             COUNT(*)                                    AS total_events,
@@ -67,8 +74,12 @@ async def get_events_summary(session_id: int = Query(...)):
 
 
 @router.get("/validate/{session_id}")
-async def validate_events(session_id: int):
+async def validate_events(
+    session_id: int,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Validate all events for a session and return flagged issues."""
+    await require_session_access(session_id, authorization)
     rows = await async_fetch_all(
         "SELECT id, session_id, timestamp, event_type, bet_amount, win_amount, balance_after, confidence_score "
         "FROM events WHERE session_id=? ORDER BY timestamp",

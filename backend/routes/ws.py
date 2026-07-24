@@ -108,6 +108,8 @@ manager = ConnectionManager()
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 if _HAS_FASTAPI:
+    from backend.auth.service import get_current_user_from_token
+    from backend.auth.access import require_session_access
 
     @router.websocket("/ws/{scope}")
     async def websocket_endpoint(websocket: WebSocket, scope: str):
@@ -120,6 +122,19 @@ if _HAS_FASTAPI:
         Message format (server → client):
             {"type": "alert|insight|job|live_event|ping", "data": {...}}
         """
+        token = websocket.query_params.get("token") or websocket.headers.get("authorization")
+        current_user = get_current_user_from_token(token if token and token.startswith("Bearer ") else f"Bearer {token}" if token else None)
+        if not current_user:
+            await websocket.close(code=4401)
+            return
+
+        if scope != "global":
+            try:
+                await require_session_access(int(scope), f"Bearer {token}" if token and not token.startswith("Bearer ") else token)
+            except Exception:
+                await websocket.close(code=4403)
+                return
+
         await manager.connect(websocket, scope)
         try:
             # Send connection confirmation

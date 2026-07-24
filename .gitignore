@@ -33,3 +33,4 @@ config/sessionguard.db-shm
 # Test artifacts
 test-results/
 .codebase-memory/
+hygiene/

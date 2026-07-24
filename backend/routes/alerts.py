@@ -4,7 +4,7 @@ backend/routes/alerts.py
 Alert retrieval, acknowledgement, and summary endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from typing import Optional
 from engines.alerts_engine import (
     get_alerts,
@@ -12,6 +12,7 @@ from engines.alerts_engine import (
     generate_and_persist_alerts,
     get_alert_summary,
 )
+from backend.auth.access import require_admin, require_session_access
 
 router = APIRouter(tags=["alerts"])
 
@@ -20,20 +21,27 @@ router = APIRouter(tags=["alerts"])
 def list_alerts(
     session_id:          Optional[int]  = Query(None),
     unacknowledged_only: bool           = Query(False),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Return alerts. Critical first. Optionally filter by session or status."""
+    if session_id is not None:
+        require_session_access(session_id, authorization)
+    else:
+        require_admin(authorization)
     return get_alerts(session_id=session_id, unacknowledged_only=unacknowledged_only)
 
 
 @router.get("/summary")
-def alert_summary():
+def alert_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return counts by severity for dashboard badges."""
+    require_admin(authorization)
     return get_alert_summary()
 
 
 @router.patch("/{alert_id}/acknowledge")
-def acknowledge(alert_id: int):
+def acknowledge(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Mark an alert as acknowledged."""
+    require_admin(authorization)
     success = acknowledge_alert(alert_id)
     if not success:
         raise HTTPException(status_code=404, detail="Alert not found.")
@@ -41,8 +49,9 @@ def acknowledge(alert_id: int):
 
 
 @router.post("/{session_id}/regenerate")
-def regenerate_alerts(session_id: int):
+def regenerate_alerts(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Re-run alert rules for a session. Replaces existing alerts."""
+    require_session_access(session_id, authorization)
     results = generate_and_persist_alerts(session_id)
     if results is None:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -50,7 +59,7 @@ def regenerate_alerts(session_id: int):
 
 
 @router.get("/{alert_id}/explain")
-def explain_alert(alert_id: int):
+def explain_alert(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Return AI-generated root cause explanation for an alert.
     Calls NVIDIA AI or Ollama with session context; falls back to rule-based.
@@ -65,6 +74,7 @@ def explain_alert(alert_id: int):
         raise HTTPException(status_code=404, detail="Alert not found.")
 
     session_id = alert["session_id"]
+    require_session_access(session_id, authorization)
     summary = _build_session_summary(session_id)
 
     explain_prompt = f"""You are a session analyst explaining why an alert fired.
