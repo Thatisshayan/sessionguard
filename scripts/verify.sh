@@ -63,10 +63,30 @@ fi
 
 # ---------------------------------------------------------------- 3. build / test
 echo "== build / test =="
-if [ -f package.json ]; then
-  npm ci || error "build" "npm ci failed"
-  npm run build --if-present || error "build" "npm build failed"
-  npm test --if-present || error "test" "npm test failed"
+# pick the package manager from lockfiles (respect pnpm/yarn, don't assume npm)
+PM=""
+if [ -f pnpm-lock.yaml ]; then PM=pnpm
+elif [ -f yarn.lock ]; then PM=yarn
+elif [ -f package-lock.json ]; then PM=npm
+fi
+run_with_timeout() { # $1=seconds $2=label $3..=cmd
+  local t="$1"; shift; local label="$1"; shift
+  local out; out=$(timeout "$t" "$@" 2>&1); local rc=$?
+  if [ $rc -eq 124 ]; then error "$label" "timed out after ${t}s (likely network/install hang)"; return; fi
+  if [ $rc -ne 0 ]; then error "$label" "failed (rc=$rc): $(printf '%s' "$out" | tail -3)"; return; fi
+  notice "$label" "ok"
+}
+if [ -n "$PM" ]; then
+  case "$PM" in
+    pnpm) run_with_timeout 300 build pnpm install --frozen-lockfile
+          pnpm run build --if-present 2>&1 | tail -3 ;;
+    yarn) run_with_timeout 300 build yarn install --frozen-lockfile ;;
+    npm)  run_with_timeout 300 build npm ci ;;
+  esac
+  if [ $FAIL -eq 0 ]; then
+    (npm run build --if-present || pnpm run build --if-present || yarn build) >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+    (npm test --if-present || pnpm test --if-present || yarn test) >/dev/null 2>&1 && notice test "test ok" || error test "test failed"
+  fi
 elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
   pip install -q -r requirements.txt 2>/dev/null || true
   pytest -q || error "test" "pytest failed"

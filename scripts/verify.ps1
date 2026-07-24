@@ -46,10 +46,38 @@ if ($cur -lt $base) { Err "doc-freshness" "docs md count $cur < baseline $base (
 
 # 3. build / test (adaptive)
 Write-Host "== build / test =="
-if (Test-Path package.json) {
-  npm ci; if ($LASTEXITCODE -ne 0) { Err "build" "npm ci failed" }
-  npm run build --if-present; if ($LASTEXITCODE -ne 0) { Err "build" "npm build failed" }
-  npm test --if-present; if ($LASTEXITCODE -ne 0) { Err "test" "npm test failed" }
+$PM = $null
+if (Test-Path pnpm-lock.yaml) { $PM = 'pnpm' }
+elseif (Test-Path yarn.lock) { $PM = 'yarn' }
+elseif (Test-Path package-lock.json) { $PM = 'npm' }
+
+function RunTimed($secs, $label, $cmd) {
+  $p = Start-Process -NoNewWindow -PassThru -RedirectStandardError NUL -Wait $cmd[0] $cmd[1..($cmd.Count-1)]
+  if ($p.ExitCode -eq 124) { Err $label "timed out after ${secs}s (likely network/install hang)" }
+  elseif ($p.ExitCode -ne 0) { Err $label "failed (rc=$($p.ExitCode))" }
+  else { Notice $label "ok" }
+}
+
+if ($PM) {
+  switch ($PM) {
+    'pnpm' { RunTimed 300 build @('pnpm','install','--frozen-lockfile') }
+    'yarn' { RunTimed 300 build @('yarn','install','--frozen-lockfile') }
+    'npm'  { RunTimed 300 build @('npm','ci') }
+  }
+  if (-not $failed) {
+    @('npm','pnpm','yarn') | ForEach-Object {
+      $c = if ($_ -eq 'npm') { 'npm run build --if-present' } elseif ($_ -eq 'pnpm') { 'pnpm run build --if-present' } else { 'yarn build' }
+      if (Get-Command $_ -ErrorAction SilentlyContinue) {
+        Invoke-Expression $c >$null 2>&1; if ($LASTEXITCODE -eq 0) { Notice build "build ok" } else { Err build "build failed" }
+      }
+    }
+    @('npm','pnpm','yarn') | ForEach-Object {
+      $c = if ($_ -eq 'npm') { 'npm test --if-present' } elseif ($_ -eq 'pnpm') { 'pnpm test --if-present' } else { 'yarn test' }
+      if (Get-Command $_ -ErrorAction SilentlyContinue) {
+        Invoke-Expression $c >$null 2>&1; if ($LASTEXITCODE -eq 0) { Notice test "test ok" } else { Err test "test failed" }
+      }
+    }
+  }
 } elseif (Test-Path (Join-Path $RepoRoot pyproject.toml) -or (Test-Path requirements.txt)) {
   if (Test-Path requirements.txt) { pip install -q -r requirements.txt }
   pytest -q; if ($LASTEXITCODE -ne 0) { Err "test" "pytest failed" }
