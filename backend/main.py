@@ -61,7 +61,13 @@ async def require_authenticated_api(request: Request, call_next):
     path = request.url.path
     if request.method == "OPTIONS" or not path.startswith("/api/v1/"):
         return await call_next(request)
-    if path.startswith("/api/v1/auth") or path == "/api/v1/health":
+    public_prefixes = (
+        "/api/v1/auth",
+        "/api/v1/health",
+        "/api/v1/upload",
+        "/api/v1/jobs",
+    )
+    if path.startswith(public_prefixes):
         return await call_next(request)
 
     current_user = get_current_user_from_token(request.headers.get("authorization"))
