@@ -33,3 +33,19 @@ config/sessionguard.db-shm
 # Test artifacts
 test-results/
 .codebase-memory/
+
+# --- Repo Governance additions (merged into .gitignore by apply script) ---
+.aider*
+.env.*
+!.env.example
+*.p8
+*.p12
+*_credential*
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+.vs/
+desktop.ini
+audits/private/
