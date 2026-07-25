@@ -128,7 +128,14 @@ if _HAS_FASTAPI:
             await websocket.close(code=4401)
             return
 
-        if scope != "global":
+        if scope == "global":
+            from backend.auth.access import require_admin
+            try:
+                require_admin(f"Bearer {token}" if token and not token.startswith("Bearer ") else token)
+            except Exception:
+                await websocket.close(code=4403)
+                return
+        else:
             try:
                 await require_session_access(int(scope), f"Bearer {token}" if token and not token.startswith("Bearer ") else token)
             except Exception:

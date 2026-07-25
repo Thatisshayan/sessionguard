@@ -1,0 +1,61 @@
+name: Bundled Backend Smoke
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundled-backend-smoke:
+    name: Bundled backend /health smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install Python deps
+        run: python -m pip install -r requirements.txt
+
+      - name: Stage bundled backend
+        run: node desktop_shell/stage-backend.js
+
+      - name: Start bundled backend
+        shell: bash
+        run: |
+          cd desktop_shell/src-tauri/bundled_app
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8010 --no-access-log > "$RUNNER_TEMP/sessionguard-smoke.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/sessionguard-smoke.pid"
+
+      - name: Wait for /health
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8010/health >/tmp/sessionguard-health.json; then
+              cat /tmp/sessionguard-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Bundled backend did not respond to /health"
+          cat "$RUNNER_TEMP/sessionguard-smoke.log"
+          exit 1
+
+      - name: Stop bundled backend
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/sessionguard-smoke.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/sessionguard-smoke.pid")" || true
+          fi

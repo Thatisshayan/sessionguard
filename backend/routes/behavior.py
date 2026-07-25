@@ -5,6 +5,7 @@ Behavior pattern analysis endpoints.
 Maturity: Working Prototype
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Header
 from typing import Optional
 from backend.auth.access import require_admin, require_session_access
@@ -17,7 +18,7 @@ router = APIRouter(tags=["behavior"])
 async def session_behavior(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Run all behavior detectors for a single session."""
     await require_session_access(session_id, authorization)
-    result = analyze_behavior(session_id)
+    result = await asyncio.to_thread(analyze_behavior, session_id)
     if result.get("status") == "insufficient_data":
         raise HTTPException(status_code=422, detail=result["message"])
     return result

@@ -18,14 +18,14 @@ router = APIRouter(tags=["alerts"])
 
 
 @router.get("")
-def list_alerts(
+async def list_alerts(
     session_id:          Optional[int]  = Query(None),
     unacknowledged_only: bool           = Query(False),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Return alerts. Critical first. Optionally filter by session or status."""
     if session_id is not None:
-        require_session_access(session_id, authorization)
+        await require_session_access(session_id, authorization)
     else:
         require_admin(authorization)
     return get_alerts(session_id=session_id, unacknowledged_only=unacknowledged_only)
@@ -49,9 +49,9 @@ def acknowledge(alert_id: int, authorization: Optional[str] = Header(None, alias
 
 
 @router.post("/{session_id}/regenerate")
-def regenerate_alerts(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
+async def regenerate_alerts(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Re-run alert rules for a session. Replaces existing alerts."""
-    require_session_access(session_id, authorization)
+    await require_session_access(session_id, authorization)
     results = generate_and_persist_alerts(session_id)
     if results is None:
         raise HTTPException(status_code=404, detail="Session not found.")
@@ -59,7 +59,7 @@ def regenerate_alerts(session_id: int, authorization: Optional[str] = Header(Non
 
 
 @router.get("/{alert_id}/explain")
-def explain_alert(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
+async def explain_alert(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Return AI-generated root cause explanation for an alert.
     Calls NVIDIA AI or Ollama with session context; falls back to rule-based.
@@ -74,7 +74,7 @@ def explain_alert(alert_id: int, authorization: Optional[str] = Header(None, ali
         raise HTTPException(status_code=404, detail="Alert not found.")
 
     session_id = alert["session_id"]
-    require_session_access(session_id, authorization)
+    await require_session_access(session_id, authorization)
     summary = _build_session_summary(session_id)
 
     explain_prompt = f"""You are a session analyst explaining why an alert fired.

@@ -49,17 +49,19 @@ function useWsStatus() {
       setOk(false)
       return
     }
+    let cancelled = false
     const connect = () => {
       try {
         const url = new URL('ws://127.0.0.1:8000/ws/global')
         url.searchParams.set('token', accessToken)
         const ws = new WebSocket(url.toString())
-        ws.onopen  = () => setOk(true)
-        ws.onclose = () => { setOk(false); setTimeout(connect, 5000) }
-        ws.onerror = () => ws.close()
-      } catch { setOk(false); setTimeout(connect, 5000) }
+        ws.onopen  = () => { if (!cancelled) setOk(true) }
+        ws.onclose = () => { if (!cancelled) { setOk(false); setTimeout(connect, 5000) } }
+        ws.onerror = () => { if (!cancelled) ws.close() }
+      } catch { if (!cancelled) { setOk(false); setTimeout(connect, 5000) } }
     }
     connect()
+    return () => { cancelled = true }
   }, [accessToken])
   return ok
 }

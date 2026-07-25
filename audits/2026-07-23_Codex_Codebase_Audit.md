@@ -111,4 +111,4 @@ hardening pass:
 - Root-level archival artifacts and nested runtime logs were moved into
   ignored `hygiene/` folders instead of being left in the repo root.
 
-Remaining follow-up items were recorded in `docs/governance/DEFERRED_WORK.md`.
+Known remaining follow-up items were recorded in `docs/governance/DEFERRED_WORK.md`. Items that were materially reduced during the hardening pass (authorization, ownership, evidence failures) are described above and do not appear in the deferred register.

@@ -891,17 +891,16 @@ def init_db_v11():
 
 
 # ── Phase 6 (P0): session ownership metadata ──────────────────────────────────
-SCHEMA_V12_SQL = """
-ALTER TABLE sessions ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_sessions_owner_id ON sessions(owner_id);
-"""
 
 
 def init_db_v12():
     """Add session ownership tracking for access control."""
     conn = get_connection()
     try:
-        conn.executescript(SCHEMA_V12_SQL)
+        cols = conn.execute("PRAGMA table_info(sessions)").fetchall()
+        if not any(c[1] == 'owner_id' for c in cols):
+            conn.execute("ALTER TABLE sessions ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_owner_id ON sessions(owner_id)")
         owner_row = conn.execute(
             "SELECT id FROM users ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END, id LIMIT 1"
         ).fetchone()
@@ -913,7 +912,6 @@ def init_db_v12():
         conn.commit()
         print("[DB] V12 session owner column added.")
     except Exception as e:
-        if "duplicate column name" not in str(e).lower():
-            print(f"[DB] V12: {e}")
+        print(f"[DB] V12: {e}")
     finally:
         conn.close()

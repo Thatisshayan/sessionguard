@@ -54,6 +54,7 @@ export function useJobWebSocket(
 
     ws.onopen = () => setConnected(true)
     ws.onclose = () => {
+      if (wsRef.current !== ws) return
       setConnected(false)
       reconnectTimer.current = setTimeout(connect, 5000)
     }
@@ -75,7 +76,9 @@ export function useJobWebSocket(
     connect()
     return () => {
       clearTimeout(reconnectTimer.current)
-      wsRef.current?.close()
+      const ws = wsRef.current
+      wsRef.current = null
+      ws?.close()
     }
   }, [connect])
 

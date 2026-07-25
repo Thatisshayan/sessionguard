@@ -239,7 +239,7 @@ export const getDatasetSummary = () => client.get('/intelligence/dataset-summary
 export const getAnomalies      = () => client.get('/intelligence/anomalies').then(r => r.data)
 
 // ── V13 AI ────────────────────────────────────────────────────────────────────
-export const getAiStatus           = () => client.get('/intelligence/ai/status').then(r => r.data)
+export const getAiStatus           = () => client.get('/ai/status').then(r => r.data)
 export const getAiNarrative        = (id: number, force = false) => client.get(`/intelligence/ai/session/${id}`, { params: { force_refresh: force } }).then(r => r.data)
 export const runAiAnalysis         = (id: number, force = false) => client.get(`/intelligence/ai/session/${id}`, { params: { force_refresh: force } }).then(r => r.data)
 export const getCachedAiAnalysis   = (id: number) => client.get(`/intelligence/ai/session/${id}`).then(r => r.data)

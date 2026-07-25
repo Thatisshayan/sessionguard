@@ -28,6 +28,7 @@ if platform.system() == "Windows":
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from backend.version import APP_VERSION
 from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, init_db_v12, seed_demo_data, seed_demo_user
 from backend.auth.service import get_current_user_from_token
 from engines.alert_presets import seed_presets
@@ -45,7 +46,7 @@ from backend.routes import (
     dashboard, video_jobs, prompts, dataset_quality, ai_analysis,
 )
 
-app = FastAPI(title="SessionGuard API", version="1.2.0", docs_url="/docs")
+app = FastAPI(title="SessionGuard API", version=APP_VERSION, docs_url="/docs")
 
 ORIGINS = ["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000",
            "http://127.0.0.1:3000","http://localhost:1420","http://127.0.0.1:1420"]
@@ -89,7 +90,7 @@ def on_startup():
     if api_key:
         os.environ["NVIDIA_API_KEY"] = api_key
 
-    print("[API] SessionGuard v1.2.0 ready -> http://127.0.0.1:8000")
+    print(f"[API] SessionGuard v{APP_VERSION} ready -> http://127.0.0.1:8000")
     print("[API] Coach -> /coach-status | Updater -> /updater/check")
 
 app.include_router(health.router)  # Unversioned
