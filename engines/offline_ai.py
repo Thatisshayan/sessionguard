@@ -133,3 +133,13 @@ async def async_call_ollama_json(prompt: str, model: str | None = None, system_p
         return json.loads(text)
     except json.JSONDecodeError:
         return {"error": "Could not parse Ollama response as JSON", "raw": raw[:500]}
+
+
+async def async_is_ollama_available() -> bool:
+    """Async version of is_ollama_available using httpx.AsyncClient."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            return response.status_code == 200
+    except Exception:
+        return False

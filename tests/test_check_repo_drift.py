@@ -20,7 +20,9 @@ SCRIPT = ROOT / "scripts" / "check_repo_drift.py"
 
 def _git(repo: Path, *args: str) -> str:
     env = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@e",
-           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e"}
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@e",
+           "GIT_AUTHOR_DATE": "2026-07-25T00:00:00",
+           "GIT_COMMITTER_DATE": "2026-07-25T00:00:00"}
     r = subprocess.run(["git", "-C", str(repo), *args],
                        capture_output=True, text=True, env=env, check=True)
     return r.stdout.strip()

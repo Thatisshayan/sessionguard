@@ -73,7 +73,7 @@ async def explain_alert(alert_id: int, authorization: Optional[str] = Header(Non
     """
     from engines.alerts_engine import get_alerts as _get_alerts
     from engines.ai_insights_engine import _build_session_summary, async_call_nvidia, _get_api_key, SYSTEM_PROMPT
-    from engines.offline_ai import is_ollama_available as _ollama_available, async_call_ollama_json as _ollama_call
+    from engines.offline_ai import async_is_ollama_available, async_call_ollama_json as _ollama_call
 
     alerts = await asyncio.to_thread(_get_alerts)
     alert = next((a for a in alerts if a["id"] == alert_id), None)
@@ -114,7 +114,7 @@ Output JSON only:
         except Exception:
             pass
 
-    if _ollama_available():
+    if await async_is_ollama_available():
         try:
             result = await _ollama_call(explain_prompt)
             if result and "error" not in result:
