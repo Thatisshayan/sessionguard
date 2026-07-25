@@ -40,7 +40,7 @@ if ! command -v markdown-link-check >/dev/null 2>&1; then
 else
   find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*' \
     -not -path './audits/private/*' -print0 2>/dev/null \
-    | xargs -0 -r -n1 markdown-link-check || error "doc-freshness" "broken doc links"
+    | xargs -0 -r -n1 markdown-link-check -c .markdown-link-check.json || error "doc-freshness" "broken doc links"
 fi
 # audit age (≤ 30 days, from ISO date in filename, not mtime)
 newest_audit=$(find audits -name '????-??-??_*.md' -not -path '*/private/*' 2>/dev/null \

@@ -42,7 +42,7 @@ if (-not (Get-Command markdown-link-check -ErrorAction SilentlyContinue)) {
 } else {
   Get-ChildItem -Path $RepoRoot -Recurse -Filter *.md -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|audits[\\/]private)[\\/]' } |
-    ForEach-Object { markdown-link-check $_.FullName >>$null 2>&1 }
+    ForEach-Object { markdown-link-check -c .markdown-link-check.json $_.FullName >>$null 2>&1 }
   if ($LASTEXITCODE -ne 0) { Err "doc-freshness" "broken doc links" }
 }
 # audit age (≤ 30 days, from ISO date in filename, not mtime)
