@@ -18,6 +18,7 @@ from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
+from backend.auth.access import require_session_access
 from backend.middleware.rate_limit import check_rate_limit, rate_limit_headers, get_client_ip
 
 logger = structlog.get_logger(__name__)
@@ -151,6 +152,9 @@ async def upload_file(
     """
     current_user = getattr(request.state, "current_user", None)
     owner_id = current_user["user_id"] if current_user else None
+
+    if session_id is not None:
+        await require_session_access(session_id, request.headers.get("authorization"))
 
     limit_result = check_rate_limit(get_client_ip(request), "upload", max_calls=10, window_seconds=60)
     if not limit_result["allowed"]:

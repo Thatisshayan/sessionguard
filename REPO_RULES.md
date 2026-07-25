@@ -158,7 +158,7 @@ Example: `agent/hermes-doc-freshness-gate`.
 `main` and long-lived branches are locked against force push. Force push only to your own ephemeral branch with an explicit need.
 
 **R30 — CI Gate Must Be Green to Merge**
-The required status checks — `secret-scan`, `build`, `test`, `doc-freshness`, `deploy-dry` — must all pass. Required checks are defined in `.github/workflows/gate.yml` and in `docs/governance/BRANCH_POLICY.md`.
+The `gate` workflow job (`secret-scan`, `build`, `test`, `doc-freshness`, `deploy-dry`) must pass. Required checks are defined in `.github/workflows/gate.yml` and in `docs/governance/BRANCH_POLICY.md`.
 
 **R32 — Repo-Adaptive Verification**
 Verification matches the repo. Repos with no production deploy run a smoke build / dry-run instead of a real deploy; the gate still requires that smoke to pass. Detection logic lives in `scripts/verify.sh` / `scripts/verify.ps1`.
@@ -246,7 +246,7 @@ All checks must be green to merge. See `scripts/verify.sh` / `scripts/verify.ps1
 
 - Baseline captured on first apply into `docs/_baseline.json` (`{"md_count": N}`).
 - Any drop below baseline without an approved deletion (Rule 14) fails CI.
-- Audit age computed from file mtime of the newest `audits/*.md` (excluding `audits/private/`).
+- Audit age computed from the ISO date prefix (`YYYY-MM-DD`) in the newest non-private audit filename, compared against today's UTC date. This is more reliable than file mtime, which can change on checkout.
 
 ## Appendix D — Apply Script Usage
 

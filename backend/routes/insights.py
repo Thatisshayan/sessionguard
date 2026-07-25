@@ -13,23 +13,23 @@ router = APIRouter(tags=["insights"])
 
 
 @router.get("")
-def list_insights(
+async def list_insights(
     session_id: Optional[int] = Query(None),
     limit:      int           = Query(50, le=200),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Return insights, optionally filtered by session. Critical first."""
     if session_id is not None:
-        require_session_access(session_id, authorization)
+        await require_session_access(session_id, authorization)
     else:
         require_admin(authorization)
     return get_insights(session_id=session_id, limit=limit)
 
 
 @router.post("/{session_id}/regenerate")
-def regenerate_insights(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
+async def regenerate_insights(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Re-run insight rules for a session. Replaces existing insights."""
-    require_session_access(session_id, authorization)
+    await require_session_access(session_id, authorization)
     results = generate_and_persist_insights(session_id)
     if results is None:
         raise HTTPException(status_code=404, detail="Session not found.")

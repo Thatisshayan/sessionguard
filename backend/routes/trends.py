@@ -44,9 +44,9 @@ def pattern_memory(last_n: int = Query(20, ge=6, le=100), authorization: str | N
 
 
 @router.get("/sessions/{session_id}/health")
-def session_health(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
+async def session_health(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """Composite health score (0-100) for a session."""
-    require_session_access(session_id, authorization)
+    await require_session_access(session_id, authorization)
     r = get_session_health(session_id)
     if "error" in r:
         raise HTTPException(status_code=404, detail=r["error"])
@@ -54,7 +54,7 @@ def session_health(session_id: int, authorization: str | None = Header(None, ali
 
 
 @router.get("/sessions/{session_id}/drift")
-def session_drift(
+async def session_drift(
     session_id: int,
     project_n: int = Query(20, ge=5, le=100),
     authorization: str | None = Header(None, alias="Authorization"),
@@ -63,7 +63,7 @@ def session_drift(
     Balance trajectory projection for a session.
     Based on observed trend — not an outcome prediction.
     """
-    require_session_access(session_id, authorization)
+    await require_session_access(session_id, authorization)
     r = project_session_drift(session_id, project_n)
     if r.get("status") == "insufficient_data":
         raise HTTPException(
@@ -74,7 +74,7 @@ def session_drift(
 
 
 @router.get("/sessions/{session_id}/warnings")
-def early_warnings(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
+async def early_warnings(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """Early warning heuristics — fires before formal alerts."""
-    require_session_access(session_id, authorization)
+    await require_session_access(session_id, authorization)
     return get_early_warnings(session_id)

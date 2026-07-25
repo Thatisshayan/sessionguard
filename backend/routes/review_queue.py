@@ -5,10 +5,11 @@ Review queue retrieval and resolution endpoints.
 Uncertain-first ordering per roadmap spec.
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional
-from database.db import get_connection
+from database.db import get_connection, async_fetch_one
 from backend.auth.access import require_admin, require_session_access
 from engines.review_queue_engine import (
     get_review_queue,
@@ -35,7 +36,7 @@ async def list_review_items(
         await require_session_access(session_id, authorization)
     else:
         require_admin(authorization)
-    return get_review_queue(session_id=session_id, status=status)
+    return await asyncio.to_thread(lambda: get_review_queue(session_id=session_id, status=status))
 
 
 @router.get("/summary")
@@ -52,15 +53,14 @@ async def resolve_item(
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Accept, reject, or mark a review item as corrected."""
-    conn = get_connection()
-    row = conn.execute("SELECT session_id FROM review_items WHERE id=?", (item_id,)).fetchone()
-    conn.close()
+    row = await async_fetch_one("SELECT session_id FROM review_items WHERE id=?", (item_id,))
     if not row:
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found.")
 
     await require_session_access(row["session_id"], authorization)
 
-    success = resolve_review_item(
+    success = await asyncio.to_thread(
+        resolve_review_item,
         item_id=item_id,
         action=body.action,
         corrected_value=body.corrected_value or "",

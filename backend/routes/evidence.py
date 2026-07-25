@@ -5,6 +5,7 @@ Evidence package generation endpoint.
 Maturity: Working Prototype
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import FileResponse
 import zipfile
@@ -22,7 +23,7 @@ async def create_evidence_package(session_id: int, authorization: str | None = H
     Contains: PDF report + events CSV + insights + alerts + OCR results + frame thumbnails.
     """
     await require_session_access(session_id, authorization)
-    result = build_evidence_package(session_id)
+    result = await asyncio.to_thread(build_evidence_package, session_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["error"])
     return result

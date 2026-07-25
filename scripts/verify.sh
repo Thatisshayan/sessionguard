@@ -17,49 +17,45 @@ if command -v gitleaks >/dev/null 2>&1; then
   gitleaks detect --no-banner --redact || error "secret-scan" "gitleaks found secrets"
 else
   # (a) filename-based: private key / credential files must not be committed.
-  #     Exclude dependency / generated dirs (.venv, node_modules, dist, build,
-  #     _repo_clone, .cache, coverage) — library files there are not first-party.
-  bad_files=$(find . -type f \( -name '*.p8' -o -name '*.p12' -o -name '*credential*' \
-    -o -name '*.pem' -o -name '*.key' \) \
-    -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/audits/private/*' \
-    -not -path '*/.venv/*' -not -path '*/_repo_clone/*' -not -path '*/dist/*' \
-    -not -path '*/build/*' -not -path '*/.cache/*' -not -path '*/coverage/*' 2>/dev/null || true)
+  #     Use git-tracked files only — directory-name exclusions cannot hide committed source.
+  tracked=$(git ls-files 2>/dev/null || find . -type f -not -path '*/.git/*')
+  bad_files=$(echo "$tracked" \
+    | grep -E '(\.p8$|\.p12$|credential|\.pem$|\.key$)' \
+    | grep -v '^audits/private/' || true)
   if [ -n "$bad_files" ]; then error "secret-scan" "secret files present: $bad_files"; fi
-  # (b) content-based: only scan first-party code/config, require an ASSIGNED VALUE.
-  #     Exclude dependency / generated dirs so library files don't false-positive.
-  hits=$(grep -rIlE "(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)[[:space:]]*[=:][[:space:]]*[\"']?[A-Za-z0-9/+_-]{8,}" \
-    --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=audits/private \
-    --exclude-dir=.venv --exclude-dir=_repo_clone --exclude-dir=dist --exclude-dir=build \
-    --exclude-dir=.cache --exclude-dir=coverage \
-    --include='*.json' --include='*.env' --include='*.ts' --include='*.js' --include='*.py' \
-    --include='*.yml' --include='*.yaml' --include='*.toml' --include='*.sh' . 2>/dev/null || true)
+  # (b) content-based: scan only git-tracked code/config, require an ASSIGNED VALUE.
+  hits=$(echo "$tracked" \
+    | grep -E '\.(json|env|ts|js|py|yml|yaml|toml|sh)$' \
+    | xargs grep -lE "(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)[[:space:]]*[=:][[:space:]]*[\"']?[A-Za-z0-9/+_-]{8,}" \
+    2>/dev/null || true)
   if [ -n "$hits" ]; then error "secret-scan" "possible hardcoded secrets in: $hits"; fi
 fi
 
 # ---------------------------------------------------------------- 2. doc-freshness
 echo "== doc-freshness =="
 [ -f README.md ] || error "doc-freshness" "README.md missing"
-# link integrity (best-effort if tool present)
-if command -v markdown-link-check >/dev/null 2>&1; then
+# link integrity (mandatory — fail if tool is unavailable)
+if ! command -v markdown-link-check >/dev/null 2>&1; then
+  error "doc-freshness" "markdown-link-check not installed (required for doc-link validation)"
+else
   find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*' \
     -not -path './audits/private/*' -print0 2>/dev/null \
     | xargs -0 -r -n1 markdown-link-check || error "doc-freshness" "broken doc links"
 fi
-# audit age (≤ 30 days)
-newest=$(find audits -name '*.md' -not -path '*/private/*' -printf '%T@ %p\n' 2>/dev/null \
-  | sort -n | tail -1 | cut -d' ' -f1)
-if [ -z "$newest" ]; then
+# audit age (≤ 30 days, from ISO date in filename, not mtime)
+newest_audit=$(find audits -name '????-??-??_*.md' -not -path '*/private/*' 2>/dev/null \
+  | sed 's|.*/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)_.*|\1|' \
+  | sort -r | head -1)
+if [ -z "$newest_audit" ]; then
   error "doc-freshness" "no audit found under audits/"
 else
-  now=$(date +%s)
-  age=$(( (now - ${newest%.*}) / 86400 ))
-  if [ "$age" -gt 30 ]; then error "doc-freshness" "newest audit is $age days old (>30)"; fi
+  audit_epoch=$(date -d "$newest_audit" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$newest_audit" +%s)
+  age=$(( ($(date +%s) - audit_epoch) / 86400 ))
+  if [ "$age" -gt 30 ]; then error "doc-freshness" "newest audit ($newest_audit) is $age days old (>30)"; fi
 fi
-# doc baseline
+# doc baseline (must exist — bootstrap creates it; verification only validates)
 if [ ! -f docs/_baseline.json ]; then
-  cnt=$(find docs -name '*.md' 2>/dev/null | wc -l)
-  printf '{"md_count": %s}\n' "$cnt" > docs/_baseline.json
-  notice "doc-freshness" "captured docs baseline md_count=$cnt"
+  error "doc-freshness" "docs/_baseline.json missing — run bootstrap (apply script) first"
 fi
 base=$(grep -o '"md_count": *[0-9]*' docs/_baseline.json | grep -o '[0-9]*$')
 cur=$(find docs -name '*.md' 2>/dev/null | wc -l)
