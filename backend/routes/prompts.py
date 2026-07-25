@@ -4,6 +4,7 @@ backend/routes/prompts.py
 Prompt versioning and A/B comparison endpoints.
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -40,7 +41,7 @@ async def list_prompt_versions(
 ):
     """List all versions of a prompt template."""
     await require_admin(authorization)
-    return list_versions(name)
+    return await asyncio.to_thread(list_versions, name)
 
 
 @router.get("/active")
@@ -50,7 +51,7 @@ async def get_active(
 ):
     """Get the currently active prompt version."""
     await require_admin(authorization)
-    prompt = get_active_prompt(name)
+    prompt = await asyncio.to_thread(get_active_prompt, name)
     if not prompt:
         raise HTTPException(status_code=404, detail="No active prompt found.")
     return prompt
@@ -63,7 +64,8 @@ async def create_version(
 ):
     """Create a new prompt version."""
     await require_admin(authorization)
-    return create_prompt_version(
+    return await asyncio.to_thread(
+        create_prompt_version,
         name=body.name,
         system_prompt=body.system_prompt,
         model=body.model,
@@ -77,7 +79,7 @@ async def create_version(
 async def activate(prompt_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Activate a specific prompt version."""
     await require_admin(authorization)
-    success = activate_version(prompt_id)
+    success = await asyncio.to_thread(activate_version, prompt_id)
     if not success:
         raise HTTPException(status_code=404, detail="Prompt version not found.")
     return {"id": prompt_id, "activated": True}
@@ -90,7 +92,8 @@ async def create_ab_result(
 ):
     """Record an A/B comparison result."""
     await require_admin(authorization)
-    return record_ab_result(
+    return await asyncio.to_thread(
+        record_ab_result,
         session_id=body.session_id,
         prompt_a_id=body.prompt_a_id,
         prompt_b_id=body.prompt_b_id,
@@ -107,4 +110,4 @@ async def get_ab_results(
 ):
     """List A/B comparison results."""
     await require_admin(authorization)
-    return list_ab_results(session_id=session_id, limit=limit)
+    return await asyncio.to_thread(list_ab_results, session_id=session_id, limit=limit)

@@ -1,4 +1,5 @@
 """backend/routes/coach.py - Live coaching endpoint."""
+import asyncio
 from fastapi import APIRouter, Query, Header, HTTPException
 from typing import Optional
 from engines.live_coach_engine import get_coaching_message, reset_coach
@@ -46,12 +47,12 @@ async def get_coach_message(
         (run_id,)
     )
     events = list(reversed([dict(r) for r in rows]))
-    msg    = get_coaching_message(events, style=style, force=force)
+    msg    = await asyncio.to_thread(get_coaching_message, events, style=style, force=force)
     return {"message": msg, "run_id": run_id, "event_count": len(events)}
 
 
 @router.post("/coach/{run_id}/reset")
 async def reset_coach_state(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     await require_admin(authorization)
-    reset_coach()
+    await asyncio.to_thread(reset_coach)
     return {"reset": True, "run_id": run_id}

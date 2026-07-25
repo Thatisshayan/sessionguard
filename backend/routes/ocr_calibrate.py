@@ -8,6 +8,7 @@ POST /ocr-calibrate/test-roi   -- test specific ROI coordinates on an image
 POST /ocr-calibrate/auto       -- auto-detect ROI regions from screenshot
 """
 
+import asyncio
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Header
 from pathlib import Path
 from typing import Optional
@@ -34,7 +35,7 @@ async def scan_full(
 
     try:
         from engines.ocr_engine import scan_image
-        result = scan_image(tmp_path)
+        result = await asyncio.to_thread(scan_image, tmp_path)
 
         # Group nearby words into lines for easier reading
         words = result.get('words', [])
@@ -165,7 +166,7 @@ async def auto_calibrate(
 
     try:
         from engines.roi_calibrator import auto_calibrate_roi
-        result = auto_calibrate_roi(tmp_path)
+        result = await asyncio.to_thread(auto_calibrate_roi, tmp_path)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

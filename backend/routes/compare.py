@@ -4,6 +4,7 @@ backend/routes/compare.py
 Session comparison endpoint.
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -28,4 +29,4 @@ async def run_comparison(
     require_current_user(authorization)
     for session_id in body.session_ids:
         await require_session_access(session_id, authorization)
-    return compare_sessions(body.session_ids)
+    return await asyncio.to_thread(compare_sessions, body.session_ids)

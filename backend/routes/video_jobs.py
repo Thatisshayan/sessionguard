@@ -4,6 +4,7 @@ backend/routes/video_jobs.py
 Video job debug endpoints — annotated frame export.
 """
 
+import asyncio
 import io
 from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
@@ -21,7 +22,7 @@ async def get_job(job_id: int, authorization: Optional[str] = Header(None, alias
     """
     Return video job details including chunking progress fields.
     """
-    job = get_video_job(job_id)
+    job = await asyncio.to_thread(get_video_job, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Video job not found.")
     await require_session_access(job.get("session_id"), authorization)
@@ -89,7 +90,7 @@ async def get_annotated_frames(
     if not frames_data:
         raise HTTPException(status_code=404, detail="No frames found for this job.")
 
-    zip_bytes = create_annotated_zip(frames_data)
+    zip_bytes = await asyncio.to_thread(create_annotated_zip, frames_data)
     return StreamingResponse(
         io.BytesIO(zip_bytes),
         media_type="application/zip",

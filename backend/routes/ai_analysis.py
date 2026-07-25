@@ -43,7 +43,7 @@ class ModelSwitch(BaseModel):
 async def switch_model(body: ModelSwitch, authorization: str | None = Header(None, alias="Authorization")):
     """Switch the active NVIDIA AI model."""
     await require_admin(authorization)
-    result = set_model(body.model)
+    result = await asyncio.to_thread(set_model, body.model)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result

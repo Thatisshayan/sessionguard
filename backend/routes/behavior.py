@@ -28,4 +28,4 @@ async def session_behavior(session_id: int, authorization: Optional[str] = Heade
 async def global_behavior(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Cross-session behavior summary — top risk sessions."""
     await require_admin(authorization)
-    return analyze_behavior_global()
+    return await asyncio.to_thread(analyze_behavior_global)

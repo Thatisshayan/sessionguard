@@ -8,6 +8,7 @@ early warnings, pattern memory.
 Maturity: Working Prototype
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from engines.trend_engine import (
     get_rolling_trends,
@@ -26,28 +27,28 @@ router = APIRouter(tags=["trends"])
 async def rolling_trends(last_n: int = Query(10, ge=3, le=50), authorization: str | None = Header(None, alias="Authorization")):
     """Rolling RTP + net trends across last N sessions."""
     await require_admin(authorization)
-    return get_rolling_trends(last_n)
+    return await asyncio.to_thread(get_rolling_trends, last_n)
 
 
 @router.get("/trends/streaks")
 async def session_streaks(authorization: str | None = Header(None, alias="Authorization")):
     """Winning/losing session streak analysis."""
     await require_admin(authorization)
-    return get_session_streaks()
+    return await asyncio.to_thread(get_session_streaks)
 
 
 @router.get("/trends/pattern-memory")
 async def pattern_memory(last_n: int = Query(20, ge=6, le=100), authorization: str | None = Header(None, alias="Authorization")):
     """Cross-session behaviour change tracking — early vs recent sessions."""
     await require_admin(authorization)
-    return get_pattern_memory(last_n)
+    return await asyncio.to_thread(get_pattern_memory, last_n)
 
 
 @router.get("/sessions/{session_id}/health")
 async def session_health(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """Composite health score (0-100) for a session."""
     await require_session_access(session_id, authorization)
-    r = get_session_health(session_id)
+    r = await asyncio.to_thread(get_session_health, session_id)
     if "error" in r:
         raise HTTPException(status_code=404, detail=r["error"])
     return r
@@ -64,7 +65,7 @@ async def session_drift(
     Based on observed trend — not an outcome prediction.
     """
     await require_session_access(session_id, authorization)
-    r = project_session_drift(session_id, project_n)
+    r = await asyncio.to_thread(project_session_drift, session_id, project_n)
     if r.get("status") == "insufficient_data":
         raise HTTPException(
             status_code=422,
@@ -77,4 +78,4 @@ async def session_drift(
 async def early_warnings(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """Early warning heuristics — fires before formal alerts."""
     await require_session_access(session_id, authorization)
-    return get_early_warnings(session_id)
+    return await asyncio.to_thread(get_early_warnings, session_id)

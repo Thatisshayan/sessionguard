@@ -43,7 +43,7 @@ async def list_review_items(
 async def queue_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return pending/total counts for dashboard badge."""
     await require_admin(authorization)
-    return get_queue_summary()
+    return await asyncio.to_thread(get_queue_summary)
 
 
 @router.patch("/{item_id}/resolve")

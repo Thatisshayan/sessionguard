@@ -2,6 +2,7 @@
 backend/routes/video_status.py — FFmpeg pipeline readiness check.
 """
 
+import asyncio
 from fastapi import APIRouter, Header
 from typing import Optional
 from backend.auth.access import require_admin
@@ -13,4 +14,4 @@ router = APIRouter(tags=["video"])
 async def video_status(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Check FFmpeg availability and version."""
     await require_admin(authorization)
-    return check_ffmpeg()
+    return await asyncio.to_thread(check_ffmpeg)

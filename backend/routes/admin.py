@@ -7,6 +7,7 @@ Maturity: Working Prototype
 Future:   Add system metrics dashboard, quota management, org controls (V14).
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -46,8 +47,8 @@ async def system_health(authorization: Optional[str] = Header(None)):
 
     from engines.video_pipeline import check_ffmpeg
     from engines.ocr_engine import check_ocr_status
-    ffmpeg = check_ffmpeg()
-    ocr    = check_ocr_status()
+    ffmpeg = await asyncio.to_thread(check_ffmpeg)
+    ocr    = await asyncio.to_thread(check_ocr_status)
 
     return {
         "status":      "ok",
