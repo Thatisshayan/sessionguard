@@ -265,6 +265,54 @@ class TestAnalyseSessionWithAiContract:
         assert "ai_error" in result
         assert "503" in result["ai_error"]
 
+    @patch("engines.ai_insights_engine.urllib.request.urlopen")
+    def test_pipeline_failure_emits_observability_warning(self, mock_urlopen, _fake_ai_env,
+                                                          seeded_session, caplog):
+        """Revival 1.3, D1: the broad-except fallback must now WARN so an
+        operator sees the swallowed error type -- the B3 persistence bug was
+        hidden exactly because no warning was emitted."""
+        mock_urlopen.side_effect = RuntimeError("NVIDIA API error 503")
+        with caplog.at_level("WARNING", logger="sessionguard.ai"):
+            ai.analyse_session_with_ai(seeded_session)
+        assert any("ai_pipeline_fell_back_to_rule_based" in r.getMessage()
+                   for r in caplog.records)
+
+    @patch("engines.ai_insights_engine.urllib.request.urlopen")
+    def test_cost_log_failure_emits_observability_warning(self, mock_urlopen, monkeypatch,
+                                                          _fake_ai_env, seeded_session, caplog):
+        """If the cost-log DB write fails (e.g. a schema regression like the
+        B3 NOT NULL bug), a warning must surface instead of silently swallowing
+        the error -- that swallowing is what hid the B3 bug for the whole
+        feature lifetime."""
+        import database.db as db
+        real_get_connection = db.get_connection
+
+        class _BadConnection:
+            """Wraps the real connection but raises on ai_cost_log inserts,
+            breaking only the cost-log path so the analysis still completes."""
+            def __init__(self):
+                self._real = real_get_connection()
+            def execute(self, query, *args, **kwargs):
+                if "ai_cost_log" in query and "INSERT" in query:
+                    raise RuntimeError("ai_cost_log insert failed")
+                return self._real.execute(query, *args, **kwargs)
+            def commit(self):
+                return self._real.commit()
+            def close(self):
+                return self._real.close()
+            def __getattr__(self, name):
+                return getattr(self._real, name)
+
+        # _log_ai_cost imports get_connection at call site from db module,
+        # but it references the engine module's view; patch BOTH views.
+        monkeypatch.setattr(db, "get_connection", lambda: _BadConnection())
+        monkeypatch.setattr(ai, "get_connection", lambda: _BadConnection())
+        mock_urlopen.return_value = _FakeResponse(_openai_body(VALID_AI_JSON))
+        with caplog.at_level("WARNING", logger="sessionguard.ai"):
+            result = ai.analyse_session_with_ai(seeded_session)
+        assert result["source"] == "nvidia_ai"
+        assert any("ai_cost_log_failed" in r.getMessage() for r in caplog.records)
+
 
 class TestRuleBasedFallbackContract:
     def test_no_api_key_falls_back_to_rule_based(self, monkeypatch, test_db, seeded_session):
