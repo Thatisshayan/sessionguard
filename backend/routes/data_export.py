@@ -20,7 +20,7 @@ router = APIRouter(tags=["data-export"])
 SKIP_TABLES = {"refresh_tokens", "audit_log"}  # sensitive / noisy
 
 
-def _require_admin(authorization):
+async def _require_admin(authorization):
     user = get_current_user_from_token(authorization)
     if not user or user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
@@ -30,7 +30,7 @@ def _require_admin(authorization):
 @router.get("/data-export/dump")
 async def dump_all(authorization: Optional[str] = Header(None)):
     """Export all session/event/insight data as JSON. Excludes auth tokens."""
-    _require_admin(authorization)
+    await _require_admin(authorization)
     tables_row = await async_fetch_all(
         "SELECT name FROM sqlite_master WHERE type='table'"
     )
@@ -45,9 +45,9 @@ async def dump_all(authorization: Optional[str] = Header(None)):
 
 
 @router.get("/data-export/backup")
-def download_backup(authorization: Optional[str] = Header(None)):
+async def download_backup(authorization: Optional[str] = Header(None)):
     """Download the raw SQLite .db file."""
-    _require_admin(authorization)
+    await _require_admin(authorization)
     try:
         db_path = get_db_path()
     except Exception:

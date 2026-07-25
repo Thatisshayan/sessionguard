@@ -13,7 +13,7 @@ router = APIRouter(tags=["dataset-quality"])
 
 
 @router.get("")
-def dataset_quality(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def dataset_quality(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return dataset quality metrics for compliance/self-audit."""
-    require_admin(authorization)
+    await require_admin(authorization)
     return get_dataset_quality()

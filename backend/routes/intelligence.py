@@ -19,12 +19,12 @@ router = APIRouter(tags=["intelligence"])
 # ── V12: Clustering ────────────────────────────────────────────────────────────
 
 @router.post("/clusters/build")
-def build_clusters(
+async def build_clusters(
     threshold: float = Query(0.88, ge=0.5, le=1.0),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Build session clusters. Run after importing new sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.cluster_engine import build_clusters
     return build_clusters(threshold)
 
@@ -32,7 +32,7 @@ def build_clusters(
 @router.get("/clusters")
 async def get_clusters(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return existing cluster assignments from DB."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from database.db import async_fetch_all
     rows = await async_fetch_all("""
         SELECT sc.cluster_label, sc.session_id, sc.similarity_score,
@@ -78,9 +78,9 @@ async def peer_benchmark(
 
 
 @router.get("/dataset-summary")
-def dataset_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def dataset_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Aggregate risk summary across all sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.cluster_engine import get_dataset_summary
     r = get_dataset_summary()
     if r.get("status") == "no_data":
@@ -89,12 +89,12 @@ def dataset_summary(authorization: Optional[str] = Header(None, alias="Authoriza
 
 
 @router.get("/anomalies")
-def anomalies(
+async def anomalies(
     z_threshold: float = Query(2.0, ge=1.0, le=4.0),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Flag statistically anomalous sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.cluster_engine import detect_anomalies
     return detect_anomalies(z_threshold)
 
@@ -102,9 +102,9 @@ def anomalies(
 # ── V13: AI insights ───────────────────────────────────────────────────────────
 
 @router.get("/ai/status")
-def ai_status(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def ai_status(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Check if NVIDIA AI is available and configured."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.ai_insights_engine import get_ai_status
     return get_ai_status()
 
@@ -132,14 +132,14 @@ class CompareRequest(BaseModel):
 
 
 @router.post("/ai/compare")
-def ai_compare(
+async def ai_compare(
     body: CompareRequest,
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Generate AI comparison narrative across multiple sessions."""
     if len(body.session_ids) < 2:
         raise HTTPException(status_code=400, detail="Need at least 2 session IDs.")
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.ai_insights_engine import generate_comparison_narrative
     return generate_comparison_narrative(body.session_ids)
 

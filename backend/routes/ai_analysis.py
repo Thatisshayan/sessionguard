@@ -40,9 +40,9 @@ class ModelSwitch(BaseModel):
     model: str
 
 @router.post("/ai/model")
-def switch_model(body: ModelSwitch, authorization: str | None = Header(None, alias="Authorization")):
+async def switch_model(body: ModelSwitch, authorization: str | None = Header(None, alias="Authorization")):
     """Switch the active NVIDIA AI model."""
-    require_admin(authorization)
+    await require_admin(authorization)
     result = set_model(body.model)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])

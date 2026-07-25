@@ -51,7 +51,7 @@ async def get_coach_message(
 
 
 @router.post("/coach/{run_id}/reset")
-def reset_coach_state(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
-    require_admin(authorization)
+async def reset_coach_state(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
+    await require_admin(authorization)
     reset_coach()
     return {"reset": True, "run_id": run_id}

@@ -25,7 +25,7 @@ async def session_behavior(session_id: int, authorization: Optional[str] = Heade
 
 
 @router.get("/global")
-def global_behavior(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def global_behavior(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Cross-session behavior summary — top risk sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     return analyze_behavior_global()

@@ -21,12 +21,12 @@ router = APIRouter(tags=["dashboard"])
 
 
 @router.get("/summary")
-def dashboard_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def dashboard_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Single aggregated response for the Dashboard page.
     Returns all KPIs, charts, insights, alerts, queue, and behavior data.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     return {
         "metrics":         get_global_metrics(),
         "net_over_time":   get_net_result_over_time(),

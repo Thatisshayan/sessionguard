@@ -26,6 +26,7 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 import structlog
 
 from database.db import get_connection
@@ -275,6 +276,38 @@ def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, mo
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
         raise RuntimeError(f"NVIDIA API error {e.code}: {error_body}")
+
+
+async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None) -> tuple[str, dict]:
+    """Async HTTP version of _call_nvidia using httpx.AsyncClient."""
+    messages = []
+    if system_prompt or SYSTEM_PROMPT:
+        messages.append({"role": "system", "content": system_prompt or SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model":       model or MODEL,
+        "max_tokens":  MAX_TOKENS,
+        "temperature": 0.7,
+        "messages":    messages,
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            API_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Accept":        "application/json",
+            },
+        )
+        if response.status_code >= 400:
+            raise RuntimeError(f"NVIDIA API error {response.status_code}: {response.text}")
+
+        body = response.json()
+        text = body["choices"][0]["message"]["content"]
+        usage = body.get("usage", {})
+        return text, usage
 
 
 def _stream_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None):

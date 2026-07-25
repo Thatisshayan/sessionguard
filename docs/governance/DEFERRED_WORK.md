@@ -34,3 +34,13 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   component work + a DB snapshot endpoint — resume hint: add
   `GET /api/v1/admin/backup` streaming a SQLite `VACUUM INTO`, plus a Settings
   panel with download/restore buttons and a confirm-restore modal — open
+- [2026-07-25] C1 full async engine conversion: routes in `alerts.py` and
+  `insights.py` now wrap sync calls with `asyncio.to_thread()`, but engine
+  functions (alerts_engine, insights_engine, base db module) remain sync —
+  proper fix would convert all 6 engine files to natively async with aiosqlite
+  or similar — resume hint: replace `sqlite3.connect()` with `aiosqlite.connect()`
+  across all engine files, then remove `asyncio.to_thread()` wrappers — open
+- [2026-07-25] test_check_repo_drift flaky test: `test_in_sync_repos_exit_zero`
+  fails intermittently (~40%) in full-suite runs due to git repo setup race in
+  parallel temp directories — resume hint: use unique temp dirs per test or
+  serialize repo-creation tests — open

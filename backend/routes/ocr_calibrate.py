@@ -26,7 +26,7 @@ async def scan_full(
     Scan a full screenshot and return ALL detected text with pixel positions.
     Use this to find the correct ROI coordinates for balance/bet/win fields.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     suffix = Path(file.filename or 'img.png').suffix or '.png'
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -94,7 +94,7 @@ async def test_roi(
     Crop to exact ROI and OCR just that region.
     Use to verify your ROI coordinates hit the right number.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     suffix = Path(file.filename or 'img.png').suffix or '.png'
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -157,7 +157,7 @@ async def auto_calibrate(
     Uses contour detection + OCR label matching to find balance/bet/win fields.
     Returns a ready-to-use roi_config dict.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     suffix = Path(file.filename or 'img.png').suffix or '.png'
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)

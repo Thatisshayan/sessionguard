@@ -35,14 +35,14 @@ async def list_review_items(
     if session_id is not None:
         await require_session_access(session_id, authorization)
     else:
-        require_admin(authorization)
+        await require_admin(authorization)
     return await asyncio.to_thread(lambda: get_review_queue(session_id=session_id, status=status))
 
 
 @router.get("/summary")
-def queue_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def queue_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return pending/total counts for dashboard badge."""
-    require_admin(authorization)
+    await require_admin(authorization)
     return get_queue_summary()
 
 

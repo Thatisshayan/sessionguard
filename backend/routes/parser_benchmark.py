@@ -25,7 +25,7 @@ class BenchmarkRequest(BaseModel):
 
 
 @router.post("")
-def run_parser_benchmark(
+async def run_parser_benchmark(
     body: BenchmarkRequest,
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
@@ -33,7 +33,7 @@ def run_parser_benchmark(
     Run OCR accuracy benchmark over a set of frames.
     Can use inline roi_config or load from a stored profile.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     if not body.frame_paths:
         raise HTTPException(status_code=400, detail="Provide at least one frame_path.")
 
@@ -59,7 +59,7 @@ async def benchmark_uploaded_frame(
     Upload a single frame image and run OCR benchmark on it.
     Returns field extraction results with confidence scores.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     import json
     try:
         roi = json.loads(roi_config)

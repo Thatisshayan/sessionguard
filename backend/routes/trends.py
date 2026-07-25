@@ -23,23 +23,23 @@ router = APIRouter(tags=["trends"])
 
 
 @router.get("/trends/rolling")
-def rolling_trends(last_n: int = Query(10, ge=3, le=50), authorization: str | None = Header(None, alias="Authorization")):
+async def rolling_trends(last_n: int = Query(10, ge=3, le=50), authorization: str | None = Header(None, alias="Authorization")):
     """Rolling RTP + net trends across last N sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     return get_rolling_trends(last_n)
 
 
 @router.get("/trends/streaks")
-def session_streaks(authorization: str | None = Header(None, alias="Authorization")):
+async def session_streaks(authorization: str | None = Header(None, alias="Authorization")):
     """Winning/losing session streak analysis."""
-    require_admin(authorization)
+    await require_admin(authorization)
     return get_session_streaks()
 
 
 @router.get("/trends/pattern-memory")
-def pattern_memory(last_n: int = Query(20, ge=6, le=100), authorization: str | None = Header(None, alias="Authorization")):
+async def pattern_memory(last_n: int = Query(20, ge=6, le=100), authorization: str | None = Header(None, alias="Authorization")):
     """Cross-session behaviour change tracking — early vs recent sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     return get_pattern_memory(last_n)
 
 

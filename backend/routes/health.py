@@ -23,7 +23,7 @@ def health_check():
 @router.get("/health/detailed")
 async def health_detailed(authorization: str | None = Header(None, alias="Authorization")):
     """Full system health — DB, FFmpeg, Tesseract, all engines."""
-    require_admin(authorization)
+    await require_admin(authorization)
     import shutil, subprocess
     from database.db import get_connection, async_fetch_one
 

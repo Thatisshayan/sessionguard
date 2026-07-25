@@ -10,6 +10,8 @@ import json
 import urllib.request
 import urllib.error
 
+import httpx
+
 OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.2:latest"
 
@@ -86,6 +88,45 @@ def call_ollama_json(prompt: str, model: str | None = None, system_prompt: str |
         lines = text.split("\n")
         # Remove first and last lines (``` markers)
         lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"error": "Could not parse Ollama response as JSON", "raw": raw[:500]}
+
+
+async def async_call_ollama(prompt: str, model: str | None = None, system_prompt: str | None = None) -> str:
+    """Async HTTP version of call_ollama using httpx.AsyncClient."""
+    model = model or DEFAULT_MODEL
+
+    payload = {
+        "model":   model,
+        "prompt":  prompt,
+        "stream":  False,
+        "options": {"temperature": 0.7, "num_predict": 1024},
+    }
+    if system_prompt:
+        payload["system"] = system_prompt
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json=payload,
+        )
+        if response.status_code >= 400:
+            raise RuntimeError(f"Ollama error {response.status_code}: {response.text}")
+        body = response.json()
+        return body.get("response", "")
+
+
+async def async_call_ollama_json(prompt: str, model: str | None = None, system_prompt: str | None = None) -> dict:
+    """Async HTTP version of call_ollama_json using httpx.AsyncClient."""
+    raw = await async_call_ollama(prompt, model=model, system_prompt=system_prompt)
+
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = [l for l in text.split("\n") if not l.strip().startswith("```")]
         text = "\n".join(lines)
 
     try:
