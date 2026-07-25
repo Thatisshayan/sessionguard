@@ -549,9 +549,14 @@ def _persist_ai_insights(session_id: int, analysis: dict):
         (session_id,)
     )
     for ins in analysis.get("insights", [])[:5]:
+        # ``category`` is NOT NULL on the insights table; default to "behaviour"
+        # when the AI response omits or empties it so persistence never fails
+        # (which would otherwise silently drop the whole analysis back to the
+        # rule_based fallback path — the exact stale-feature failure mode).
+        category = (ins.get("category") or "behaviour").strip() or "behaviour"
         conn.execute(
-            "INSERT INTO insights (session_id, severity, text) VALUES (?,?,?)",
-            (session_id, ins.get("severity", "info"),
+            "INSERT INTO insights (session_id, category, severity, text) VALUES (?,?,?,?)",
+            (session_id, category, ins.get("severity", "info"),
              f"[AI] {ins.get('text', '')}")
         )
     conn.commit()

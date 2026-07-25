@@ -16,3 +16,15 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   `database/db.py`, `engines/ai_insights_engine.py`,
   `frontend/src/services/api.ts`, `tests/test_auth.py`) — review scan rules and
   decide whether these are true positives or exclusions — open
+- [2026-07-24] B3 live NVIDIA NIM verification: mocked contract tests pin the
+  transport/persistence/fallback contract locally, but no real `NVIDIA_API_KEY`
+  call against `https://integrate.api.nvidia.com` has been made — requires an
+  approved real key (REPO_RULES R24) and external network —
+  resume hint: run `analyse_session_with_ai` against a seeded session with
+  `NVIDIA_API_KEY` set, assert `source == "nvidia_ai"`, check tokens logged in
+  `ai_cost_log` — open
+- [2026-07-24] A1/A2 GitHub runner execution: the bundled-backend-smoke workflow
+  and packaging-resource tests are structurally complete and locally verified
+  (`tests/test_bundled_backend_smoke.py`), but no GitHub Actions run has been
+  observed for this branch — resume by watching the workflow on a PR to main —
+  open
