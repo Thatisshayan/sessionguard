@@ -26,11 +26,11 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
-import httpx
 import structlog
 
 from database.db import get_connection
 from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
+from engines.offline_ai import _async_http_post
 
 # Targeted observability for AI-layer failure paths (Revival 1.3, D1). The
 # earlier broad `except: pass` blocks silently swallowed real bugs -- the
@@ -280,7 +280,7 @@ def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, mo
 
 # @approver-required(shayan) — paid NVIDIA NIM API (pay-per-token)
 async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None) -> tuple[str, dict]:
-    """Async HTTP version of _call_nvidia using httpx.AsyncClient."""
+    """Async HTTP version of _call_nvidia using shared httpx helpers."""
     messages = []
     if system_prompt or SYSTEM_PROMPT:
         messages.append({"role": "system", "content": system_prompt or SYSTEM_PROMPT})
@@ -293,22 +293,15 @@ async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None
         "messages":    messages,
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(
-            API_URL,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Accept":        "application/json",
-            },
-        )
-        if response.status_code >= 400:
-            raise RuntimeError(f"NVIDIA API error {response.status_code}: {response.text}")
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept":        "application/json",
+    }
 
-        body = response.json()
-        text = body["choices"][0]["message"]["content"]
-        usage = body.get("usage", {})
-        return text, usage
+    body = await _async_http_post(API_URL, payload, headers=headers, timeout=60.0)
+    text = body["choices"][0]["message"]["content"]
+    usage = body.get("usage", {})
+    return text, usage
 
 
 def _stream_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None):

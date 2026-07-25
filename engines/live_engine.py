@@ -224,6 +224,7 @@ def start_live_run(
     Returns run metadata.
     """
     conn = get_connection()
+    conn.execute("BEGIN IMMEDIATE")
 
     # Fetch session meta for mock event generator
     s = conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()

@@ -3,7 +3,7 @@ engines/live_coach_engine.py - Professional Live Coach v2.0
 Fires every 3 spins. 8 pattern detectors. NVIDIA AI + Ollama fallback + rule fallback.
 """
 from __future__ import annotations
-import json, os, time
+import json, os, threading, time
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -176,17 +176,24 @@ def _nvidia_coach(stats, style):
         print(f'[Coach] {e}'); return None
 
 
-_last_n=0; _log=[]
-FIRE_EVERY=3
+_lock = threading.Lock()
+_last_n = 0
+_log: list[dict] = []
+FIRE_EVERY = 3
 
 
 def get_coaching_message(events, style='balanced', force=False):
     global _last_n, _log
-    if not events: return None
-    new_n=len(events)-_last_n
-    if not force and new_n<FIRE_EVERY: return None
-    stats=_analyse_events(events)
-    _last_n=len(events)
+    if not events:
+        return None
+
+    with _lock:
+        new_n = len(events) - _last_n
+        if not force and new_n < FIRE_EVERY:
+            return None
+        _last_n = len(events)
+
+    stats = _analyse_events(events)
     has_issue=(stats['consecutive_neg']>=5 or
                stats['late_avg_bet']>stats['early_avg_bet']*1.3 or
                stats['cumulative_net']<=-50 or
@@ -195,14 +202,19 @@ def get_coaching_message(events, style='balanced', force=False):
     if has_issue: msg=_nvidia_coach(stats,style)
     if not msg:   msg=_detect_patterns(stats,style)
     if msg:
-        d=msg.to_dict(); _log.append(d); return d
+        d=msg.to_dict()
+        with _lock:
+            _log.append(d)
+        return d
     return None
 
 
 def reset_coach():
     global _last_n, _log
-    _last_n=0; _log=[]
+    with _lock:
+        _last_n=0; _log=[]
 
 
 def get_session_coaching_log():
-    return _log.copy()
+    with _lock:
+        return _log.copy()
