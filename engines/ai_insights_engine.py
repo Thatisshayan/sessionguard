@@ -30,7 +30,7 @@ import structlog
 
 from database.db import get_connection
 from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
-from engines.offline_ai import _async_http_post
+from engines.offline_ai import async_http_post
 
 # Targeted observability for AI-layer failure paths (Revival 1.3, D1). The
 # earlier broad `except: pass` blocks silently swallowed real bugs -- the
@@ -298,7 +298,7 @@ async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None
         "Accept":        "application/json",
     }
 
-    body = await _async_http_post(API_URL, payload, headers=headers, timeout=60.0)
+    body = await async_http_post(API_URL, payload, headers=headers, timeout=60.0, service_name="NVIDIA")
     text = body["choices"][0]["message"]["content"]
     usage = body.get("usage", {})
     return text, usage

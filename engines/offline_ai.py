@@ -17,19 +17,22 @@ OLLAMA_BASE_URL = "http://localhost:11434"
 
 # ── Shared async HTTP helpers ─────────────────────────────────────────────────
 
-async def _async_http_post(url: str, json_data: dict, headers: dict | None = None, timeout: float = 60.0) -> dict:
+async def async_http_post(url: str, json_data: dict, headers: dict | None = None, timeout: float = 60.0, service_name: str = "HTTP") -> dict:
     """Shared async HTTP POST returning parsed JSON. Wraps httpx errors in RuntimeError."""
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(url, json=json_data, headers=headers or {})
             if response.status_code >= 400:
-                raise RuntimeError(f"HTTP error {response.status_code}: {response.text}")
-            return response.json()
+                raise RuntimeError(f"{service_name} error {response.status_code}: {response.text}")
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                raise RuntimeError(f"{service_name}: invalid JSON response (status {response.status_code})")
     except httpx.HTTPError as e:
-        raise RuntimeError(f"HTTP request failed: {e}")
+        raise RuntimeError(f"{service_name} request failed: {e}")
 
 
-async def _async_http_get(url: str, timeout: float = 3.0) -> int | None:
+async def async_http_get(url: str, timeout: float = 3.0) -> int | None:
     """Shared async HTTP GET returning status code, or None on failure."""
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -133,13 +136,8 @@ async def async_call_ollama(prompt: str, model: str | None = None, system_prompt
     if system_prompt:
         payload["system"] = system_prompt
 
-    try:
-        body = await _async_http_post(f"{OLLAMA_BASE_URL}/api/generate", payload, timeout=120.0)
-        return body.get("response", "")
-    except RuntimeError:
-        raise
-    except Exception as e:
-        raise RuntimeError(f"Ollama error: {e}")
+    body = await async_http_post(f"{OLLAMA_BASE_URL}/api/generate", payload, timeout=120.0, service_name="Ollama")
+    return body.get("response", "")
 
 
 async def async_call_ollama_json(prompt: str, model: str | None = None, system_prompt: str | None = None) -> dict:
@@ -159,5 +157,5 @@ async def async_call_ollama_json(prompt: str, model: str | None = None, system_p
 
 async def async_is_ollama_available() -> bool:
     """Async version of is_ollama_available using shared httpx helpers."""
-    status = await _async_http_get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+    status = await async_http_get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
     return status == 200
