@@ -4,7 +4,9 @@ backend/routes/dashboard.py
 Aggregated dashboard endpoint — single call replaces 9 parallel fetches.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
+from typing import Optional
+from backend.auth.access import require_admin
 from engines.analysis_engine import (
     get_global_metrics,
     get_rtp_distribution,
@@ -19,11 +21,12 @@ router = APIRouter(tags=["dashboard"])
 
 
 @router.get("/summary")
-def dashboard_summary():
+def dashboard_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Single aggregated response for the Dashboard page.
     Returns all KPIs, charts, insights, alerts, queue, and behavior data.
     """
+    require_admin(authorization)
     return {
         "metrics":         get_global_metrics(),
         "net_over_time":   get_net_result_over_time(),

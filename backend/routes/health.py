@@ -2,8 +2,10 @@
 backend/routes/health.py — Basic + detailed health checks.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header, HTTPException
 from datetime import datetime, timezone
+from backend.auth.access import require_admin
+from backend.version import APP_VERSION
 
 router = APIRouter(tags=["health"])
 
@@ -13,20 +15,21 @@ def health_check():
     return {
         "status":    "ok",
         "service":   "SessionGuard API",
-        "version":   "0.6.0",
+        "version":   APP_VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 @router.get("/health/detailed")
-async def health_detailed():
+async def health_detailed(authorization: str | None = Header(None, alias="Authorization")):
     """Full system health — DB, FFmpeg, Tesseract, all engines."""
+    require_admin(authorization)
     import shutil, subprocess
     from database.db import get_connection, async_fetch_one
 
     result = {
         "status":    "ok",
-        "version":   "0.6.0",
+        "version":   APP_VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks":    {},
     }

@@ -26,8 +26,18 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
+import structlog
+
 from database.db import get_connection
 from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
+
+# Targeted observability for AI-layer failure paths (Revival 1.3, D1). The
+# earlier broad `except: pass` blocks silently swallowed real bugs -- the
+# ``_persist_ai_insights`` category bug found in B3 was hidden exactly because
+# ``_log_ai_cost`` swallowed its IntegrityError. These warnings are not user-
+# facing; they surface to stdout (structlog) so an operator running the API can
+# see why AI costs/insights silently stopped being recorded.
+_log = structlog.get_logger("sessionguard.ai")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
@@ -432,6 +442,7 @@ def analyse_session_with_ai(session_id: int) -> dict:
         return analysis
 
     except json.JSONDecodeError as e:
+        _log.warning("ai_parse_failed", session_id=session_id, error=str(e))
         return {
             "source":    "nvidia_ai",
             "ai_available": True,
@@ -440,7 +451,12 @@ def analyse_session_with_ai(session_id: int) -> dict:
             "raw":       raw_text[:500] if 'raw_text' in dir() else "",
         }
     except Exception as e:
-        # Fall back to rule-based on any error
+        # Fall back to rule-based on any error. Log the swallowed error so an
+        # operator can tell the difference between "no API key" (the normal
+        # fallback) and "the AI pipeline blew up silently" (the bug case found
+        # in B3, where a NOT NULL constraint error was being swallowed here).
+        _log.warning("ai_pipeline_fell_back_to_rule_based",
+                     session_id=session_id, error=str(e), error_type=type(e).__name__)
         result = _fallback_analysis(session_id, summary)
         result["session_id"]  = session_id
         result["ai_error"]    = str(e)
@@ -493,8 +509,12 @@ def _log_ai_cost(session_id: int, model: str, usage: dict):
         )
         conn.commit()
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:
+        # Silently swallowing this hid a real schema bug for the entire AI
+        # feature lifetime (the NOT NULL category case fixed in B3). Log a
+        # targeted warning so cost-tracking regressions surface to operators.
+        _log.warning("ai_cost_log_failed", session_id=session_id, model=model,
+                     cost_usd=cost, error=str(exc))
 
 
 def _get_config_budget() -> str:
@@ -549,9 +569,14 @@ def _persist_ai_insights(session_id: int, analysis: dict):
         (session_id,)
     )
     for ins in analysis.get("insights", [])[:5]:
+        # ``category`` is NOT NULL on the insights table; default to "behaviour"
+        # when the AI response omits or empties it so persistence never fails
+        # (which would otherwise silently drop the whole analysis back to the
+        # rule_based fallback path — the exact stale-feature failure mode).
+        category = (ins.get("category") or "behaviour").strip() or "behaviour"
         conn.execute(
-            "INSERT INTO insights (session_id, severity, text) VALUES (?,?,?)",
-            (session_id, ins.get("severity", "info"),
+            "INSERT INTO insights (session_id, category, severity, text) VALUES (?,?,?,?)",
+            (session_id, category, ins.get("severity", "info"),
              f"[AI] {ins.get('text', '')}")
         )
     conn.commit()

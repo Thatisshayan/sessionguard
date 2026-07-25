@@ -1,0 +1,61 @@
+name: repo-drift-check
+
+# Revival 1.3, A3: canonical-checkout drift alarm. When finding #13 hit,
+# _repo_clone and C:\Projects\SessionGuard\sessionguard were six phases
+# apart while every doc claimed they were "in sync". This workflow automates
+# the check so a predicted Risk-Register failure mode becomes a caught one.
+#
+# It is deliberately OPT-IN: it only runs when the repository owner has
+# configured the `DRIFT_CANONICAL_REPO` secret with a second checkout path
+# (or URL) to diff against. On forks / sandboxes without that secret the
+# job is skipped, so it never red-breaks an environment that has no second
+# checkout to compare.
+#
+# The runner must have the canonical checkout available at the path in
+# DRIFT_CANONICAL_REPO. For the mono-repo self-hosted runner Shayan uses this
+# is a local path; other setups may clone elsewhere and point the secret there.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift-check:
+    name: canonical-repo drift check
+    runs-on: ubuntu-latest
+    if: ${{ vars.DRIFT_CANONICAL_REPO != '' || secrets.DRIFT_CANONICAL_REPO != '' }}
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve canonical repo reference
+        id: canon
+        run: |
+          # Prefer secret over var so a non-secret path can also be used.
+          CANON="${{ secrets.DRIFT_CANONICAL_REPO }}"
+          if [ -z "$CANON" ]; then CANON="${{ vars.DRIFT_CANONICAL_REPO }}"; fi
+          echo "canonical=$CANON" >> "$GITHUB_OUTPUT"
+
+      - name: Check repo drift
+        env:
+          CANONICAL: ${{ steps.canon.outputs.canonical }}
+        run: |
+          if [ ! -d "$CANONICAL" ]; then
+            # If the canonical reference isn't a local dir, treat it as a git URL
+            # and clone it into a temp dir so the HEAD comparison still works.
+            mkdir -p "$RUNNER_TEMP/canonical"
+            git clone --depth 1 "$CANONICAL" "$RUNNER_TEMP/canonical"
+            CANONICAL="$RUNNER_TEMP/canonical"
+          fi
+          python scripts/check_repo_drift.py "$PWD" "$CANONICAL"

@@ -40,9 +40,9 @@ export default function Login() {
   const navigate    = useNavigate()
   const { login, signup } = useAuth()
   const [mode,     setMode]     = useState<Mode>('login')
-  const [email,    setEmail]    = useState('demo@sessionguard.local')
+  const [email,    setEmail]    = useState('')
   const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('demo123')
+  const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
@@ -140,18 +140,10 @@ export default function Login() {
             </button>
           </div>
 
-          {/* Demo credentials hint */}
-          {mode === 'login' && (
-            <div style={{ marginTop: 20, padding: '10px 14px', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-              <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Demo credentials</div>
-              <div>Email: <code style={{ color: 'var(--accent-blue)' }}>demo@sessionguard.local</code></div>
-              <div>Password: <code style={{ color: 'var(--accent-blue)' }}>demo123</code></div>
-            </div>
-          )}
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--text-muted)' }}>
-          Local-first build · Auth is optional in local mode
+          Local-first build · Demo account may exist in seeded data
         </div>
       </div>
     </div>

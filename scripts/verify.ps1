@@ -16,40 +16,50 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
   if ($LASTEXITCODE -ne 0) { Err "secret-scan" "gitleaks found secrets" }
 } else {
   # (a) filename-based: private key / credential files must not be committed.
-  #     Exclude dependency / generated dirs (node_modules, .venv, _repo_clone,
-  #     dist, build, .cache, coverage) — library files there are not first-party.
-  $excludeDirs = '[\\/](node_modules|\.git|audits[\\/]private|\.venv|_repo_clone|dist|build|\.cache|coverage)[\\/]'
-  $badFiles = Get-ChildItem -Path $RepoRoot -Recurse -File -Include *.p8,*.p12,*credential*,*.pem,*.key `
-    -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch $excludeDirs }
-  if ($badFiles) { Err "secret-scan" "secret files present: $($badFiles.FullName -join ', ')" }
-  # (b) content-based: first-party code/config only, require an assigned value.
-  #     Exclude dependency / generated dirs + *.env.example / *.env.sample templates.
-  $hits = Get-ChildItem -Path $RepoRoot -Recurse -File `
-    -Include *.json,*.env,*.ts,*.js,*.py,*.yml,*.yaml,*.toml,*.sh `
-    -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch $excludeDirs } |
-    Where-Object { $_.Name -notmatch '\.env\.(example|sample)$' } |
-    Where-Object { Select-String -Path $_.FullName -Pattern '(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)\s*[=:]\s*["'']?[A-Za-z0-9/+_-]{8,}' -Quiet }
-  if ($hits) { Err "secret-scan" "possible hardcoded secrets in: $($hits.FullName -join ', ')" }
+  #     Use git-tracked files only — directory-name exclusions cannot hide committed source.
+  $tracked = &{ git ls-files 2>$null } | ForEach-Object { $_ }
+  $badFiles = $tracked | Where-Object { $_ -match '\.(p8|p12|pem|key)$' -or $_ -match 'credential' } |
+    Where-Object { $_ -notmatch '^audits/private/' }
+  if ($badFiles) { Err "secret-scan" "secret files present: $($badFiles -join ', ')" }
+  # (b) content-based: scan only git-tracked code/config, require an assigned value.
+  $trackedFiles = $tracked | Where-Object { $_ -match '\.(json|env|ts|js|py|yml|yaml|toml|sh)$' }
+  $hits = $trackedFiles | ForEach-Object {
+    $f = Join-Path $RepoRoot $_
+    if (Test-Path $f) {
+      $m = Select-String -Path $f -Pattern '(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)\s*[=:]\s*["'']?[A-Za-z0-9/+_-]{8,}' -Quiet
+      if ($m) { $f }
+    }
+  }
+  if ($hits) { Err "secret-scan" "possible hardcoded secrets in: $($hits -join ', ')" }
 }
 
 # ---------------------------------------------------------------- 2. doc-freshness
 Write-Host "== doc-freshness =="
 if (-not (Test-Path (Join-Path $RepoRoot 'README.md'))) { Err "doc-freshness" "README.md missing" }
-$newest = Get-ChildItem -Path (Join-Path $RepoRoot 'audits') -Recurse -Filter *.md -ErrorAction SilentlyContinue |
-  Where-Object { $_.FullName -notmatch '[\\/]audits[\\/]private[\\/]' } |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $newest) { Err "doc-freshness" "no audit found under audits/" }
-else {
-  $age = ([datetime]::Now - $newest.LastWriteTime).Days
-  if ($age -gt 30) { Err "doc-freshness" "newest audit is $age days old (>30)" }
+# link integrity (mandatory — fail if tool is unavailable)
+if (-not (Get-Command markdown-link-check -ErrorAction SilentlyContinue)) {
+  Err "doc-freshness" "markdown-link-check not installed (required for doc-link validation)"
+} else {
+  Get-ChildItem -Path $RepoRoot -Recurse -Filter *.md -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|audits[\\/]private)[\\/]' } |
+    ForEach-Object { markdown-link-check -c .markdown-link-check.json $_.FullName >>$null 2>&1 }
+  if ($LASTEXITCODE -ne 0) { Err "doc-freshness" "broken doc links" }
 }
+# audit age (≤ 30 days, from ISO date in filename, not mtime)
+$newestAudit = Get-ChildItem -Path (Join-Path $RepoRoot 'audits') -Recurse -Filter '????-??-??_*.md' -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -notmatch '[\\/]audits[\\/]private[\\/]' } |
+  Sort-Object Name -Descending | Select-Object -First 1
+if (-not $newestAudit) { Err "doc-freshness" "no audit found under audits/" }
+else {
+  $dateStr = $newestAudit.Name.Substring(0, 10)
+  $auditDate = [datetime]::ParseExact($dateStr, 'yyyy-MM-dd', $null)
+  $age = ([datetime]::UtcNow.Date - $auditDate).Days
+  if ($age -gt 30) { Err "doc-freshness" "newest audit ($dateStr) is $age days old (>30)" }
+}
+# doc baseline (must exist — bootstrap creates it; verification only validates)
 $baselinePath = Join-Path $RepoRoot 'docs/_baseline.json'
 if (-not (Test-Path $baselinePath)) {
-  $cnt = (Get-ChildItem -Path (Join-Path $RepoRoot 'docs') -Recurse -Filter *.md -ErrorAction SilentlyContinue).Count
-  "{ `"md_count`": $cnt }" | Out-File $baselinePath -Encoding utf8
-  Notice "doc-freshness" "captured docs baseline md_count=$cnt"
+  Err "doc-freshness" "docs/_baseline.json missing — run bootstrap (apply script) first"
 }
 $base = 0
 if (Test-Path $baselinePath) {
@@ -67,10 +77,16 @@ elseif (Test-Path (Join-Path $RepoRoot 'yarn.lock')) { $PM = 'yarn' }
 elseif (Test-Path (Join-Path $RepoRoot 'package-lock.json')) { $PM = 'npm' }
 
 function RunTimed($secs, $label, $cmd) {
-  $p = Start-Process -NoNewWindow -PassThru -Wait $cmd[0] $cmd[1..($cmd.Count-1)]
-  if ($p.ExitCode -eq 124) { Err $label "timed out after ${secs}s (likely network/install hang)" }
-  elseif ($p.ExitCode -ne 0) { Err $label "failed (rc=$($p.ExitCode))" }
-  else { Notice $label "ok" }
+  $p = Start-Process -NoNewWindow -PassThru $cmd[0] $cmd[1..($cmd.Count-1)]
+  $exited = $p.WaitForExit($secs * 1000)
+  if (-not $exited) {
+    $p.Kill()
+    Err $label "timed out after ${secs}s (likely network/install hang)"
+  } elseif ($p.ExitCode -ne 0) {
+    Err $label "failed (rc=$($p.ExitCode))"
+  } else {
+    Notice $label "ok"
+  }
 }
 
 if ($PM) {

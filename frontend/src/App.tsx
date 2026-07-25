@@ -42,18 +42,27 @@ function PageFallback() {
 
 // â”€â”€ WebSocket status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useWsStatus() {
+  const { accessToken } = useAuth()
   const [ok, setOk] = useState(false)
   useEffect(() => {
+    if (!accessToken) {
+      setOk(false)
+      return
+    }
+    let cancelled = false
     const connect = () => {
       try {
-        const ws = new WebSocket('ws://127.0.0.1:8000/ws/global')
-        ws.onopen  = () => setOk(true)
-        ws.onclose = () => { setOk(false); setTimeout(connect, 5000) }
-        ws.onerror = () => ws.close()
-      } catch { setOk(false); setTimeout(connect, 5000) }
+        const url = new URL('ws://127.0.0.1:8000/ws/global')
+        url.searchParams.set('token', accessToken)
+        const ws = new WebSocket(url.toString())
+        ws.onopen  = () => { if (!cancelled) setOk(true) }
+        ws.onclose = () => { if (!cancelled) { setOk(false); setTimeout(connect, 5000) } }
+        ws.onerror = () => { if (!cancelled) ws.close() }
+      } catch { if (!cancelled) { setOk(false); setTimeout(connect, 5000) } }
     }
     connect()
-  }, [])
+    return () => { cancelled = true }
+  }, [accessToken])
   return ok
 }
 

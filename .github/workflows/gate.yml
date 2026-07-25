@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         if: ${{ hashFiles('package.json') != '' }}
@@ -29,6 +31,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install doc-link checker
+        run: npm install -g markdown-link-check
 
       - name: Run governance verification
         run: bash scripts/verify.sh

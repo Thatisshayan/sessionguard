@@ -11,13 +11,15 @@ from pathlib import Path
 class TestUploadEndpoints:
     """Test file upload endpoints."""
     
-    def test_upload_csv_success(self, client: TestClient, sample_csv_file: Path):
+    def test_upload_csv_success(self, client: TestClient, sample_csv_file: Path, auth_headers: dict, sample_session_data: dict):
         """Test successful CSV file upload."""
+        session_id = sample_session_data["id"]
         with open(sample_csv_file, "rb") as f:
             response = client.post(
                 "/api/v1/upload",
                 files={"file": ("test_spins.csv", f, "text/csv")},
-                data={"session_id": "1"}
+                data={"session_id": str(session_id)},
+                headers={"Authorization": auth_headers["Authorization"]}
             )
         
         assert response.status_code == 200

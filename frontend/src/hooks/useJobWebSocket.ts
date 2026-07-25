@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 interface JobProgressData {
   job_id: number
@@ -29,6 +30,7 @@ export function useJobWebSocket(
   onProgress?: (data: JobProgressData) => void,
   onComplete?: (data: JobCompleteData) => void
 ) {
+  const { accessToken } = useAuth()
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>()
   const [connected, setConnected] = useState(false)
@@ -39,14 +41,20 @@ export function useJobWebSocket(
   useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
 
   const connect = useCallback(() => {
+    if (!accessToken) {
+      setConnected(false)
+      return
+    }
     const base = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
-    const wsUrl = base.replace(/^http/, 'ws') + '/ws/global'
+    const url = new URL(base.replace(/^http/, 'ws') + '/ws/global')
+    url.searchParams.set('token', accessToken)
 
-    const ws = new WebSocket(wsUrl)
+    const ws = new WebSocket(url.toString())
     wsRef.current = ws
 
     ws.onopen = () => setConnected(true)
     ws.onclose = () => {
+      if (wsRef.current !== ws) return
       setConnected(false)
       reconnectTimer.current = setTimeout(connect, 5000)
     }
@@ -62,13 +70,15 @@ export function useJobWebSocket(
         }
       } catch { /* ignore non-JSON */ }
     }
-  }, [])
+  }, [accessToken])
 
   useEffect(() => {
     connect()
     return () => {
       clearTimeout(reconnectTimer.current)
-      wsRef.current?.close()
+      const ws = wsRef.current
+      wsRef.current = null
+      ws?.close()
     }
   }, [connect])
 

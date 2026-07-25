@@ -7,25 +7,29 @@ Useful for keeping the frontend api.ts in sync with backend changes.
 Maturity: Working Prototype
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from fastapi.responses import PlainTextResponse, JSONResponse
+
+from backend.auth.access import require_admin
 
 router = APIRouter(tags=["openapi"])
 
 
 @router.get("/openapi/schema")
-def get_schema():
+def get_schema(authorization: str | None = Header(None, alias="Authorization")):
     """Return the raw OpenAPI JSON schema."""
+    require_admin(authorization)
     from backend.main import app
     return JSONResponse(app.openapi())
 
 
 @router.get("/openapi/ts-client", response_class=PlainTextResponse)
-def get_ts_client():
+def get_ts_client(authorization: str | None = Header(None, alias="Authorization")):
     """
     Generate a basic TypeScript API client stub from the OpenAPI schema.
     Copy-paste into your project or use as a reference.
     """
+    require_admin(authorization)
     from backend.main import app
     schema = app.openapi()
     paths  = schema.get("paths", {})

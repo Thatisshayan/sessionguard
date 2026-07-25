@@ -4,9 +4,10 @@ backend/routes/prompts.py
 Prompt versioning and A/B comparison endpoints.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional
+from backend.auth.access import require_admin
 from engines.prompt_manager import (
     create_prompt_version, get_active_prompt, list_versions,
     activate_version, record_ab_result, list_ab_results,
@@ -33,14 +34,22 @@ class AbResultRequest(BaseModel):
 
 
 @router.get("")
-def list_prompt_versions(name: str = Query("session_analysis")):
+def list_prompt_versions(
+    name: str = Query("session_analysis"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """List all versions of a prompt template."""
+    require_admin(authorization)
     return list_versions(name)
 
 
 @router.get("/active")
-def get_active(name: str = Query("session_analysis")):
+def get_active(
+    name: str = Query("session_analysis"),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Get the currently active prompt version."""
+    require_admin(authorization)
     prompt = get_active_prompt(name)
     if not prompt:
         raise HTTPException(status_code=404, detail="No active prompt found.")
@@ -48,8 +57,12 @@ def get_active(name: str = Query("session_analysis")):
 
 
 @router.post("")
-def create_version(body: PromptVersionRequest):
+def create_version(
+    body: PromptVersionRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Create a new prompt version."""
+    require_admin(authorization)
     return create_prompt_version(
         name=body.name,
         system_prompt=body.system_prompt,
@@ -61,8 +74,9 @@ def create_version(body: PromptVersionRequest):
 
 
 @router.post("/{prompt_id}/activate")
-def activate(prompt_id: int):
+def activate(prompt_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Activate a specific prompt version."""
+    require_admin(authorization)
     success = activate_version(prompt_id)
     if not success:
         raise HTTPException(status_code=404, detail="Prompt version not found.")
@@ -70,8 +84,12 @@ def activate(prompt_id: int):
 
 
 @router.post("/ab")
-def create_ab_result(body: AbResultRequest):
+def create_ab_result(
+    body: AbResultRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """Record an A/B comparison result."""
+    require_admin(authorization)
     return record_ab_result(
         session_id=body.session_id,
         prompt_a_id=body.prompt_a_id,
@@ -82,6 +100,11 @@ def create_ab_result(body: AbResultRequest):
 
 
 @router.get("/ab")
-def get_ab_results(session_id: Optional[int] = Query(None), limit: int = Query(50, le=200)):
+def get_ab_results(
+    session_id: Optional[int] = Query(None),
+    limit: int = Query(50, le=200),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """List A/B comparison results."""
+    require_admin(authorization)
     return list_ab_results(session_id=session_id, limit=limit)
