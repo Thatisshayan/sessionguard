@@ -28,3 +28,9 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   (`tests/test_bundled_backend_smoke.py`), but no GitHub Actions run has been
   observed for this branch — resume by watching the workflow on a PR to main —
   open
+- [2026-07-24] C5 DB backup/restore UI (D2 in 1.2): the request-dedup middleware
+  half of C5 is implemented and tested (`backend/middleware/request_dedup.py`);
+  the backup/restore UI half remains — it is a frontend (React) feature needing
+  component work + a DB snapshot endpoint — resume hint: add
+  `GET /api/v1/admin/backup` streaming a SQLite `VACUUM INTO`, plus a Settings
+  panel with download/restore buttons and a confirm-restore modal — open
