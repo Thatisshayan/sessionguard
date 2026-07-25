@@ -109,15 +109,18 @@ async def async_call_ollama(prompt: str, model: str | None = None, system_prompt
     if system_prompt:
         payload["system"] = system_prompt
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json=payload,
-        )
-        if response.status_code >= 400:
-            raise RuntimeError(f"Ollama error {response.status_code}: {response.text}")
-        body = response.json()
-        return body.get("response", "")
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json=payload,
+            )
+            if response.status_code >= 400:
+                raise RuntimeError(f"Ollama error {response.status_code}: {response.text}")
+            body = response.json()
+            return body.get("response", "")
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"Ollama unreachable: {e}")
 
 
 async def async_call_ollama_json(prompt: str, model: str | None = None, system_prompt: str | None = None) -> dict:

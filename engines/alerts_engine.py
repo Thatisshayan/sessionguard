@@ -22,9 +22,9 @@ THRESHOLDS = {
 }
 
 
-def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False) -> list:
+def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False, alert_id: int | None = None) -> list:
     """
-    Return alerts from DB. Optionally filter by session or acknowledged state.
+    Return alerts from DB. Optionally filter by session, acknowledged state, or alert id.
     Critical alerts first.
     """
     conn = get_connection()
@@ -33,6 +33,9 @@ def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False)
     filters  = []
     params   = []
 
+    if alert_id:
+        filters.append("a.id = ?")
+        params.append(alert_id)
     if session_id:
         filters.append("a.session_id = ?")
         params.append(session_id)

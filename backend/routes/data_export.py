@@ -13,18 +13,11 @@ from typing import Optional
 import json
 from pathlib import Path
 from database.db import get_connection, get_db_path, async_fetch_all
-from backend.auth.service import get_current_user_from_token
+from backend.auth.access import require_admin as _require_admin
 
 router = APIRouter(tags=["data-export"])
 
 SKIP_TABLES = {"refresh_tokens", "audit_log"}  # sensitive / noisy
-
-
-async def _require_admin(authorization):
-    user = get_current_user_from_token(authorization)
-    if not user or user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    return user
 
 
 @router.get("/data-export/dump")

@@ -9,8 +9,11 @@ so that SQLite I/O does not block the event loop.
 import asyncio
 import json as _json
 
+import structlog
 from fastapi import APIRouter, HTTPException, Query, Header
 from typing import Optional
+
+_log = structlog.get_logger("sessionguard.alerts")
 from engines.alerts_engine import (
     get_alerts,
     acknowledge_alert,
@@ -75,8 +78,8 @@ async def explain_alert(alert_id: int, authorization: Optional[str] = Header(Non
     from engines.ai_insights_engine import _build_session_summary, async_call_nvidia, _get_api_key, SYSTEM_PROMPT
     from engines.offline_ai import async_is_ollama_available, async_call_ollama_json as _ollama_call
 
-    alerts = await asyncio.to_thread(_get_alerts)
-    alert = next((a for a in alerts if a["id"] == alert_id), None)
+    alerts = await asyncio.to_thread(_get_alerts, alert_id=alert_id)
+    alert = alerts[0] if alerts else None
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found.")
 
@@ -111,16 +114,16 @@ Output JSON only:
             )
             data = _json.loads(raw_text)
             return {"alert_id": alert_id, "source": "nvidia_ai", "explanation": data}
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("nvidia_explain_alert_failed", alert_id=alert_id, error=str(exc))
 
     if await async_is_ollama_available():
         try:
             result = await _ollama_call(explain_prompt)
             if result and "error" not in result:
                 return {"alert_id": alert_id, "source": "ollama", "explanation": result}
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("ollama_explain_alert_failed", alert_id=alert_id, error=str(exc))
 
     return {
         "alert_id": alert_id,

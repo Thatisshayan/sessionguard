@@ -72,10 +72,11 @@ def create_encrypted_connection(db_path: str, password: str | None = None):
     """
     if not SQLCIPHER_AVAILABLE or password is None:
         import sqlite3
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=5)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
     # Use pysqlcipher3 for encrypted connection
@@ -94,6 +95,7 @@ def create_encrypted_connection(db_path: str, password: str | None = None):
         _save_salt(db_path, salt)
 
     apply_sqlcipher_pragmas(conn, key)
+    conn.execute("PRAGMA busy_timeout = 5000")
 
     # Verify the connection works
     try:

@@ -13,17 +13,9 @@ from pydantic import BaseModel
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.auth.service import get_current_user_from_token, hash_password
+from backend.auth.access import require_admin as _require_admin
 
 router = APIRouter(tags=["admin"])
-
-
-async def _require_admin(authorization: str | None) -> dict:
-    user = get_current_user_from_token(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    return user
 
 
 # ── System health ─────────────────────────────────────────────────────────────

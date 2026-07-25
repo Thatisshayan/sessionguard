@@ -278,6 +278,7 @@ def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, mo
         raise RuntimeError(f"NVIDIA API error {e.code}: {error_body}")
 
 
+# @approver-required(shayan) — paid NVIDIA NIM API (pay-per-token)
 async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None) -> tuple[str, dict]:
     """Async HTTP version of _call_nvidia using httpx.AsyncClient."""
     messages = []

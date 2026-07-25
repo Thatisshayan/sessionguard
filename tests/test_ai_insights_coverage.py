@@ -51,16 +51,12 @@ class TestGetModelKeyConfigFallbacks:
         monkeypatch.setenv("NVIDIA_MODEL", "nvidia/mistral-large-2-instruct")
         assert ai._get_model() == "nvidia/mistral-large-2-instruct"
 
-    def test_get_model_falls_back_to_config(self, monkeypatch):
+    def test_get_model_falls_back_to_config(self, monkeypatch, tmp_path):
         monkeypatch.delenv("NVIDIA_MODEL", raising=False)
-        cfg_path = ai._CONFIG_PATH
-        original = cfg_path.read_text() if cfg_path.exists() else "{}"
-        try:
-            cfg_path.parent.mkdir(parents=True, exist_ok=True)
-            cfg_path.write_text(json.dumps({"ai": {"nvidia_model": "nvidia/mistral-large-2-instruct"}}))
-            assert ai._get_model() == "nvidia/mistral-large-2-instruct"
-        finally:
-            cfg_path.write_text(original)
+        cfg_file = tmp_path / "config.json"
+        cfg_file.write_text(json.dumps({"ai": {"nvidia_model": "nvidia/mistral-large-2-instruct"}}))
+        monkeypatch.setattr(ai, "_CONFIG_PATH", cfg_file)
+        assert ai._get_model() == "nvidia/mistral-large-2-instruct"
 
     def test_get_model_returns_default_on_config_error(self, monkeypatch):
         monkeypatch.delenv("NVIDIA_MODEL", raising=False)
@@ -71,16 +67,12 @@ class TestGetModelKeyConfigFallbacks:
         monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-env-key")
         assert ai._get_api_key() == "nvapi-env-key"
 
-    def test_get_api_key_falls_back_to_config(self, monkeypatch):
+    def test_get_api_key_falls_back_to_config(self, monkeypatch, tmp_path):
         monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
-        cfg_path = ai._CONFIG_PATH
-        original = cfg_path.read_text() if cfg_path.exists() else "{}"
-        try:
-            cfg_path.parent.mkdir(parents=True, exist_ok=True)
-            cfg_path.write_text(json.dumps({"ai": {"nvidia_api_key": "nvapi-config-key"}}))
-            assert ai._get_api_key() == "nvapi-config-key"
-        finally:
-            cfg_path.write_text(original)
+        cfg_file = tmp_path / "config.json"
+        cfg_file.write_text(json.dumps({"ai": {"nvidia_api_key": "nvapi-config-key"}}))
+        monkeypatch.setattr(ai, "_CONFIG_PATH", cfg_file)
+        assert ai._get_api_key() == "nvapi-config-key"
 
     def test_get_api_key_returns_none_on_config_error(self, monkeypatch):
         monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
