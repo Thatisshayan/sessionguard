@@ -41,7 +41,7 @@ def get_connection():
             return create_encrypted_connection(db_path_str, password)
 
     # Fallback: plain SQLite
-    conn = sqlite3.connect(db_path_str, check_same_thread=False)
+    conn = sqlite3.connect(db_path_str, check_same_thread=False, timeout=5)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -913,5 +913,24 @@ def init_db_v12():
         print("[DB] V12 session owner column added.")
     except Exception as e:
         print(f"[DB] V12: {e}")
+    finally:
+        conn.close()
+
+
+# ── Phase 6b (V13): live_runs atomicity guard ──────────────────────────────────
+
+
+def init_db_v13():
+    """Add partial unique index to prevent duplicate active live runs per session."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_live_runs_active
+            ON live_runs(session_id) WHERE status IN ('running','paused')
+        """)
+        conn.commit()
+        print("[DB] V13 live_runs active-run index added.")
+    except Exception as e:
+        print(f"[DB] V13: {e}")
     finally:
         conn.close()

@@ -109,7 +109,7 @@ async def preview_import(file: UploadFile = File(...)) -> Dict[str, Any]:
     try:
         with fp.open("wb") as dst: shutil.copyfileobj(file.file, dst)
     finally: await file.close()
-    try: preview = preview_csv(fp)
+    try: preview = await asyncio.to_thread(preview_csv, fp)
     except Exception as e:
         fp.unlink(missing_ok=True)
         raise HTTPException(400, f"CSV preview failed: {e}")

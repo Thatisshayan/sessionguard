@@ -7,22 +7,15 @@ Maturity: Working Prototype
 Future:   Add system metrics dashboard, quota management, org controls (V14).
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.auth.service import get_current_user_from_token, hash_password
+from backend.auth.access import require_admin as _require_admin
 
 router = APIRouter(tags=["admin"])
-
-
-def _require_admin(authorization: str | None) -> dict:
-    user = get_current_user_from_token(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    return user
 
 
 # ── System health ─────────────────────────────────────────────────────────────
@@ -30,7 +23,7 @@ def _require_admin(authorization: str | None) -> dict:
 @router.get("/health")
 async def system_health(authorization: Optional[str] = Header(None)):
     """Full system health — DB stats, table counts, engine status."""
-    _require_admin(authorization)
+    await _require_admin(authorization)
     tables_row = await async_fetch_all(
         "SELECT name FROM sqlite_master WHERE type='table'"
     )
@@ -46,8 +39,8 @@ async def system_health(authorization: Optional[str] = Header(None)):
 
     from engines.video_pipeline import check_ffmpeg
     from engines.ocr_engine import check_ocr_status
-    ffmpeg = check_ffmpeg()
-    ocr    = check_ocr_status()
+    ffmpeg = await asyncio.to_thread(check_ffmpeg)
+    ocr    = await asyncio.to_thread(check_ocr_status)
 
     return {
         "status":      "ok",
@@ -63,7 +56,7 @@ async def system_health(authorization: Optional[str] = Header(None)):
 @router.get("/stats")
 async def system_stats(authorization: Optional[str] = Header(None)):
     """Platform-wide statistics."""
-    _require_admin(authorization)
+    await _require_admin(authorization)
     r = await async_fetch_one("""
         SELECT
             (SELECT COUNT(*) FROM sessions)      AS sessions,
@@ -85,7 +78,7 @@ async def list_all_users(
     authorization: Optional[str] = Header(None),
     limit: int = Query(100, le=500),
 ):
-    _require_admin(authorization)
+    await _require_admin(authorization)
     rows = await async_fetch_all(
         "SELECT id, email, username, role, is_active, created_at, last_login "
         "FROM users ORDER BY created_at DESC LIMIT ?", (limit,)
@@ -101,7 +94,7 @@ class UserRoleUpdate(BaseModel):
 @router.patch("/users/{user_id}")
 async def update_user(user_id: int, body: UserRoleUpdate,
                 authorization: Optional[str] = Header(None)):
-    admin = _require_admin(authorization)
+    admin = await _require_admin(authorization)
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if not updates:
         return {"message": "Nothing to update."}
@@ -115,7 +108,7 @@ async def update_user(user_id: int, body: UserRoleUpdate,
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: int, authorization: Optional[str] = Header(None)):
-    admin = _require_admin(authorization)
+    admin = await _require_admin(authorization)
     if admin["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account.")
     rowcount = await async_execute("DELETE FROM users WHERE id=?", (user_id,))
@@ -132,7 +125,7 @@ async def audit_log(
     action:  Optional[str] = Query(None),
     limit:   int           = Query(100, le=500),
 ):
-    _require_admin(authorization)
+    await _require_admin(authorization)
     filters = []
     params  : list = []
     if user_id: filters.append("a.user_id=?"); params.append(user_id)

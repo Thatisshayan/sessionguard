@@ -30,6 +30,7 @@ import structlog
 
 from database.db import get_connection
 from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
+from engines.offline_ai import async_http_post
 
 # Targeted observability for AI-layer failure paths (Revival 1.3, D1). The
 # earlier broad `except: pass` blocks silently swallowed real bugs -- the
@@ -275,6 +276,32 @@ def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, mo
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
         raise RuntimeError(f"NVIDIA API error {e.code}: {error_body}")
+
+
+# @approver-required(shayan) — paid NVIDIA NIM API (pay-per-token)
+async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None) -> tuple[str, dict]:
+    """Async HTTP version of _call_nvidia using shared httpx helpers."""
+    messages = []
+    if system_prompt or SYSTEM_PROMPT:
+        messages.append({"role": "system", "content": system_prompt or SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model":       model or MODEL,
+        "max_tokens":  MAX_TOKENS,
+        "temperature": 0.7,
+        "messages":    messages,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept":        "application/json",
+    }
+
+    body = await async_http_post(API_URL, payload, headers=headers, timeout=60.0, service_name="NVIDIA")
+    text = body["choices"][0]["message"]["content"]
+    usage = body.get("usage", {})
+    return text, usage
 
 
 def _stream_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None):

@@ -13,7 +13,7 @@ def require_current_user(authorization: str | None) -> dict:
     return user
 
 
-def require_admin(authorization: str | None) -> dict:
+async def require_admin(authorization: str | None) -> dict:
     user = require_current_user(authorization)
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")

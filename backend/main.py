@@ -29,7 +29,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.version import APP_VERSION
-from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, init_db_v12, seed_demo_data, seed_demo_user
+from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, init_db_v9, init_db_v10, init_db_v11, init_db_v12, init_db_v13, seed_demo_data, seed_demo_user
 from backend.auth.service import get_current_user_from_token
 from engines.alert_presets import seed_presets
 from backend.middleware.logging import configure_logging, RequestLoggingMiddleware
@@ -81,8 +81,9 @@ async def require_authenticated_api(request: Request, call_next):
 @app.on_event("startup")
 def on_startup():
     init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6(); init_db_v7(); init_db_v8()
+    init_db_v9(); init_db_v10(); init_db_v11()
     seed_demo_user()
-    init_db_v12()
+    init_db_v12(); init_db_v13()
     seed_demo_data(); seed_presets()
 
     # Load API key from environment (secure method)

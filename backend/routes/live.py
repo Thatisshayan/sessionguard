@@ -5,6 +5,7 @@ Live session monitoring endpoints.
 Maturity: Working Prototype — mock mode fully working, screen mode wired.
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -33,7 +34,8 @@ async def start_run(
 ):
     """Start a live monitoring run for a session."""
     await require_session_access(body.session_id, authorization)
-    result = start_live_run(
+    result = await asyncio.to_thread(
+        start_live_run,
         session_id=body.session_id,
         mode=body.mode,
         tick_interval=body.tick_interval,
@@ -47,11 +49,11 @@ async def start_run(
 
 @router.post("/{run_id}/pause")
 async def pause_run(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
-    run = get_live_run(run_id)
+    run = await asyncio.to_thread(get_live_run, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
     await require_session_access(run["session_id"], authorization)
-    result = pause_live_run(run_id)
+    result = await asyncio.to_thread(pause_live_run, run_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
@@ -59,11 +61,11 @@ async def pause_run(run_id: int, authorization: Optional[str] = Header(None, ali
 
 @router.post("/{run_id}/resume")
 async def resume_run(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
-    run = get_live_run(run_id)
+    run = await asyncio.to_thread(get_live_run, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
     await require_session_access(run["session_id"], authorization)
-    result = resume_live_run(run_id)
+    result = await asyncio.to_thread(resume_live_run, run_id)
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
@@ -71,16 +73,16 @@ async def resume_run(run_id: int, authorization: Optional[str] = Header(None, al
 
 @router.post("/{run_id}/stop")
 async def stop_run(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
-    run = get_live_run(run_id)
+    run = await asyncio.to_thread(get_live_run, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
     await require_session_access(run["session_id"], authorization)
-    return stop_live_run(run_id)
+    return await asyncio.to_thread(stop_live_run, run_id)
 
 
 @router.get("/{run_id}")
 async def get_run(run_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
-    run = get_live_run(run_id)
+    run = await asyncio.to_thread(get_live_run, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
     await require_session_access(run["session_id"], authorization)
@@ -95,15 +97,15 @@ async def get_run_events(
     limit:    int = Query(50, le=200),
 ):
     """Poll for new events since a given event ID. Used for live feed UI."""
-    run = get_live_run(run_id)
+    run = await asyncio.to_thread(get_live_run, run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found.")
     await require_session_access(run["session_id"], authorization)
-    return get_live_events(run_id=run_id, since_id=since_id, limit=limit)
+    return await asyncio.to_thread(get_live_events, run_id=run_id, since_id=since_id, limit=limit)
 
 
 @router.get("/session/{session_id}/runs")
 async def session_runs(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return all live runs for a session."""
     await require_session_access(session_id, authorization)
-    return get_session_live_runs(session_id)
+    return await asyncio.to_thread(get_session_live_runs, session_id)

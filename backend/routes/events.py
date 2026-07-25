@@ -5,6 +5,7 @@ Event timeline endpoints. Real data from DB.
 Maturity: Working Prototype
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all
@@ -87,7 +88,7 @@ async def validate_events(
     )
 
     events = [dict(r) for r in rows]
-    result = validate_session_events(events)
+    result = await asyncio.to_thread(validate_session_events, events)
     return {
         "session_id": session_id,
         "total_events": result.total_events,

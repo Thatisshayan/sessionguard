@@ -4,6 +4,7 @@ backend/routes/prompts.py
 Prompt versioning and A/B comparison endpoints.
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -34,36 +35,37 @@ class AbResultRequest(BaseModel):
 
 
 @router.get("")
-def list_prompt_versions(
+async def list_prompt_versions(
     name: str = Query("session_analysis"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """List all versions of a prompt template."""
-    require_admin(authorization)
-    return list_versions(name)
+    await require_admin(authorization)
+    return await asyncio.to_thread(list_versions, name)
 
 
 @router.get("/active")
-def get_active(
+async def get_active(
     name: str = Query("session_analysis"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Get the currently active prompt version."""
-    require_admin(authorization)
-    prompt = get_active_prompt(name)
+    await require_admin(authorization)
+    prompt = await asyncio.to_thread(get_active_prompt, name)
     if not prompt:
         raise HTTPException(status_code=404, detail="No active prompt found.")
     return prompt
 
 
 @router.post("")
-def create_version(
+async def create_version(
     body: PromptVersionRequest,
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Create a new prompt version."""
-    require_admin(authorization)
-    return create_prompt_version(
+    await require_admin(authorization)
+    return await asyncio.to_thread(
+        create_prompt_version,
         name=body.name,
         system_prompt=body.system_prompt,
         model=body.model,
@@ -74,23 +76,24 @@ def create_version(
 
 
 @router.post("/{prompt_id}/activate")
-def activate(prompt_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
+async def activate(prompt_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Activate a specific prompt version."""
-    require_admin(authorization)
-    success = activate_version(prompt_id)
+    await require_admin(authorization)
+    success = await asyncio.to_thread(activate_version, prompt_id)
     if not success:
         raise HTTPException(status_code=404, detail="Prompt version not found.")
     return {"id": prompt_id, "activated": True}
 
 
 @router.post("/ab")
-def create_ab_result(
+async def create_ab_result(
     body: AbResultRequest,
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Record an A/B comparison result."""
-    require_admin(authorization)
-    return record_ab_result(
+    await require_admin(authorization)
+    return await asyncio.to_thread(
+        record_ab_result,
         session_id=body.session_id,
         prompt_a_id=body.prompt_a_id,
         prompt_b_id=body.prompt_b_id,
@@ -100,11 +103,11 @@ def create_ab_result(
 
 
 @router.get("/ab")
-def get_ab_results(
+async def get_ab_results(
     session_id: Optional[int] = Query(None),
     limit: int = Query(50, le=200),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """List A/B comparison results."""
-    require_admin(authorization)
-    return list_ab_results(session_id=session_id, limit=limit)
+    await require_admin(authorization)
+    return await asyncio.to_thread(list_ab_results, session_id=session_id, limit=limit)

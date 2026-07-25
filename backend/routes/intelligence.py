@@ -7,6 +7,7 @@ All in one file — intelligence layer.
 Maturity: Working Prototype
 """
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Header
 from pydantic import BaseModel
 from typing import Optional
@@ -19,20 +20,20 @@ router = APIRouter(tags=["intelligence"])
 # ── V12: Clustering ────────────────────────────────────────────────────────────
 
 @router.post("/clusters/build")
-def build_clusters(
+async def build_clusters(
     threshold: float = Query(0.88, ge=0.5, le=1.0),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Build session clusters. Run after importing new sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.cluster_engine import build_clusters
-    return build_clusters(threshold)
+    return await asyncio.to_thread(build_clusters, threshold)
 
 
 @router.get("/clusters")
 async def get_clusters(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return existing cluster assignments from DB."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from database.db import async_fetch_all
     rows = await async_fetch_all("""
         SELECT sc.cluster_label, sc.session_id, sc.similarity_score,
@@ -56,7 +57,7 @@ async def session_cluster(
     """Which cluster does this session belong to?"""
     await require_session_access(session_id, authorization)
     from engines.cluster_engine import get_session_cluster
-    c = get_session_cluster(session_id)
+    c = await asyncio.to_thread(get_session_cluster, session_id)
     if not c:
         raise HTTPException(status_code=404,
                             detail="Session not clustered yet. Run /intelligence/clusters/build first.")
@@ -71,42 +72,42 @@ async def peer_benchmark(
     """Compare session against its cluster peers."""
     await require_session_access(session_id, authorization)
     from engines.cluster_engine import peer_benchmark
-    r = peer_benchmark(session_id)
+    r = await asyncio.to_thread(peer_benchmark, session_id)
     if r.get("status") == "no_peers":
         raise HTTPException(status_code=422, detail="No peers found. Build clusters first.")
     return r
 
 
 @router.get("/dataset-summary")
-def dataset_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def dataset_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Aggregate risk summary across all sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.cluster_engine import get_dataset_summary
-    r = get_dataset_summary()
+    r = await asyncio.to_thread(get_dataset_summary)
     if r.get("status") == "no_data":
         raise HTTPException(status_code=404, detail="No sessions found.")
     return r
 
 
 @router.get("/anomalies")
-def anomalies(
+async def anomalies(
     z_threshold: float = Query(2.0, ge=1.0, le=4.0),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Flag statistically anomalous sessions."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.cluster_engine import detect_anomalies
-    return detect_anomalies(z_threshold)
+    return await asyncio.to_thread(detect_anomalies, z_threshold)
 
 
 # ── V13: AI insights ───────────────────────────────────────────────────────────
 
 @router.get("/ai/status")
-def ai_status(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def ai_status(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Check if NVIDIA AI is available and configured."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.ai_insights_engine import get_ai_status
-    return get_ai_status()
+    return await asyncio.to_thread(get_ai_status)
 
 
 @router.get("/ai/session/{session_id}")
@@ -121,7 +122,7 @@ async def ai_session_narrative(
     """
     await require_session_access(session_id, authorization)
     from engines.ai_insights_engine import generate_session_narrative
-    result = generate_session_narrative(session_id, force_refresh)
+    result = await asyncio.to_thread(generate_session_narrative, session_id, force_refresh)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
@@ -132,16 +133,16 @@ class CompareRequest(BaseModel):
 
 
 @router.post("/ai/compare")
-def ai_compare(
+async def ai_compare(
     body: CompareRequest,
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Generate AI comparison narrative across multiple sessions."""
     if len(body.session_ids) < 2:
         raise HTTPException(status_code=400, detail="Need at least 2 session IDs.")
-    require_admin(authorization)
+    await require_admin(authorization)
     from engines.ai_insights_engine import generate_comparison_narrative
-    return generate_comparison_narrative(body.session_ids)
+    return await asyncio.to_thread(generate_comparison_narrative, body.session_ids)
 
 
 @router.get("/ai/review/{review_item_id}")
@@ -155,7 +156,7 @@ async def ai_review_suggestion(
         raise HTTPException(status_code=404, detail="Review item not found.")
     await require_session_access(row["session_id"], authorization)
     from engines.ai_insights_engine import suggest_review_resolution
-    result = suggest_review_resolution(review_item_id)
+    result = await asyncio.to_thread(suggest_review_resolution, review_item_id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result

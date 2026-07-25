@@ -4,6 +4,7 @@ backend/routes/dataset_quality.py
 Dataset quality report endpoint.
 """
 
+import asyncio
 from fastapi import APIRouter, Header
 from typing import Optional
 from backend.auth.access import require_admin
@@ -13,7 +14,7 @@ router = APIRouter(tags=["dataset-quality"])
 
 
 @router.get("")
-def dataset_quality(authorization: Optional[str] = Header(None, alias="Authorization")):
+async def dataset_quality(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return dataset quality metrics for compliance/self-audit."""
-    require_admin(authorization)
-    return get_dataset_quality()
+    await require_admin(authorization)
+    return await asyncio.to_thread(get_dataset_quality)

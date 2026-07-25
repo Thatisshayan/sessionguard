@@ -16,20 +16,20 @@ router = APIRouter(tags=["openapi"])
 
 
 @router.get("/openapi/schema")
-def get_schema(authorization: str | None = Header(None, alias="Authorization")):
+async def get_schema(authorization: str | None = Header(None, alias="Authorization")):
     """Return the raw OpenAPI JSON schema."""
-    require_admin(authorization)
+    await require_admin(authorization)
     from backend.main import app
     return JSONResponse(app.openapi())
 
 
 @router.get("/openapi/ts-client", response_class=PlainTextResponse)
-def get_ts_client(authorization: str | None = Header(None, alias="Authorization")):
+async def get_ts_client(authorization: str | None = Header(None, alias="Authorization")):
     """
     Generate a basic TypeScript API client stub from the OpenAPI schema.
     Copy-paste into your project or use as a reference.
     """
-    require_admin(authorization)
+    await require_admin(authorization)
     from backend.main import app
     schema = app.openapi()
     paths  = schema.get("paths", {})
