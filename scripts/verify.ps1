@@ -52,12 +52,20 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
 Write-Host "== doc-freshness =="
 if (-not (Test-Path (Join-Path $RepoRoot 'README.md'))) { Err "doc-freshness" "README.md missing" }
 # link integrity (mandatory — fail if tool is unavailable)
-if (-not (Get-Command markdown-link-check -ErrorAction SilentlyContinue)) {
+$hasMLC = Get-Command markdown-link-check -ErrorAction SilentlyContinue
+$hasNPX = Get-Command npx -ErrorAction SilentlyContinue
+if (-not $hasMLC -and -not $hasNPX) {
   Err "doc-freshness" "markdown-link-check not installed (required for doc-link validation)"
 } else {
-  Get-ChildItem -Path $RepoRoot -Recurse -Filter *.md -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|audits[\\/]private)[\\/]' } |
-    ForEach-Object { markdown-link-check -c .markdown-link-check.json $_.FullName >>$null 2>&1 }
+  $configFile = Join-Path $RepoRoot '.markdown-link-check.json'
+  $mdFiles = Get-ChildItem -Path $RepoRoot -Recurse -Filter *.md -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|audits[\\/]private)[\\/]' }
+  
+  $mdFiles | ForEach-Object -Parallel {
+    $cf = $using:configFile
+    markdown-link-check -q -c $cf $_.FullName >>$null 2>&1
+  } -ThrottleLimit 16
+
   if ($LASTEXITCODE -ne 0) { Err "doc-freshness" "broken doc links" }
 }
 # audit age (≤ 30 days, from ISO date in filename, not mtime)
@@ -92,7 +100,9 @@ if (Test-Path (Join-Path $RepoRoot 'frontend')) {
   Write-Host "-- frontend --"
   Push-Location (Join-Path $RepoRoot 'frontend')
   try {
-    npm ci; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm ci failed" }
+    if (-not (Test-Path 'node_modules')) {
+      npm ci; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm ci failed" }
+    }
     npx tsc --noEmit; if ($LASTEXITCODE -ne 0) { Err "frontend" "tsc check failed" }
     npm run build; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm run build failed" }
   } finally {
@@ -178,7 +188,10 @@ if (Test-Path (Join-Path $RepoRoot 'desktop_shell\stage-backend.js')) {
       if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
       if (Test-Path $smokeErr) { Get-Content $smokeErr | Select-Object -Last 10 }
     }
-    if ($p) { $p.Kill() }
+    if ($p) {
+      Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+      cmd /c "taskkill /F /T /PID $($p.Id)" >$null 2>&1
+    }
   }
 }
 

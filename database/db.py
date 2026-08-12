@@ -41,9 +41,12 @@ def get_connection():
             return create_encrypted_connection(db_path_str, password)
 
     # Fallback: plain SQLite
-    conn = sqlite3.connect(db_path_str, check_same_thread=False, timeout=5)
+    conn = sqlite3.connect(db_path_str, check_same_thread=False, timeout=15)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.OperationalError:
+        pass
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 

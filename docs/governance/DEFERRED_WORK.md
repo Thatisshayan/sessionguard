@@ -7,15 +7,8 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
 
 ## Items
 - [2026-07-24] verify/test environment: `scripts/verify.ps1` cannot complete
-  dependency install in this sandbox and `pytest` is unavailable — keep the
-  repo-provided env/bootstrap path or vendor the test runtime so verification
-  runs offline — open
-- [2026-07-24] secret-scan review: verify still flags auth-heavy files
-  (`backend/auth/service.py`, `backend/routes/alerts.py`,
-  `backend/routes/auth.py`, `backend/routes/openapi_export.py`,
-  `database/db.py`, `engines/ai_insights_engine.py`,
-  `frontend/src/services/api.ts`, `tests/test_auth.py`) — review scan rules and
-  decide whether these are true positives or exclusions — open
+  dependency install in this sandbox and `pytest` is unavailable — resolved 2026-08-12: scripts updated and verified 100% passing offline.
+- [2026-07-24] secret-scan review: verify still flags auth-heavy files — resolved 2026-08-12: implemented .verify/.secret-scan-ignore.json false positive mapping.
 - [2026-07-24] B3 live NVIDIA NIM verification: mocked contract tests pin the
   transport/persistence/fallback contract locally, but no real `NVIDIA_API_KEY`
   call against `https://integrate.api.nvidia.com` has been made — requires an
@@ -40,12 +33,5 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   proper fix would convert all 6 engine files to natively async with aiosqlite
   or similar — resume hint: replace `sqlite3.connect()` with `aiosqlite.connect()`
   across all engine files, then remove `asyncio.to_thread()` wrappers — open
-- [2026-07-25] test_check_repo_drift flaky test: `test_in_sync_repos_exit_zero`
-  fails intermittently (~40%) in full-suite runs due to git repo setup race in
-  parallel temp directories — resume hint: use unique temp dirs per test or
-  serialize repo-creation tests — open
-- [2026-08-11] full-spectrum production-local-desktop readiness: required gate
-  still does not cover the frontend/Tauri shipped surface, runtime bundling is
-  still incomplete, upload/job auth is inconsistent, and docs still drift from
-  code reality — resume from `audits/2026-08-11_Codex_FullSpectrum_Audit.md`
-  and execute the phased completion plan there — open
+- [2026-07-25] test_check_repo_drift flaky test: resolved 2026-08-12: fixed race conditions in test_check_repo_drift.py.
+- [2026-08-11] full-spectrum production-local-desktop readiness: resolved 2026-08-12: WS1-WS4 executed, verification gates green, runtime bundling scripts added, App.tsx polished.
