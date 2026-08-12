@@ -76,8 +76,17 @@ for (const runtime of ["python_win", "tesseract_win", "ffmpeg_win"]) {
   const checkFile = RUNTIME_CHECKS[runtime];
 
   if (fs.existsSync(srcDir) && fs.readdirSync(srcDir).length > 0) {
-    if (checkFile && fs.existsSync(path.join(dstDir, checkFile))) {
-      console.log(`[stage-backend] runtime ${runtime} already staged in ${dstDir}, skipping full re-copy.`);
+    const srcCheck = checkFile ? path.join(srcDir, checkFile) : null;
+    const dstCheck = checkFile ? path.join(dstDir, checkFile) : null;
+
+    if (
+      srcCheck &&
+      dstCheck &&
+      fs.existsSync(dstCheck) &&
+      fs.existsSync(srcCheck) &&
+      fs.statSync(srcCheck).mtimeMs <= fs.statSync(dstCheck).mtimeMs
+    ) {
+      console.log(`[stage-backend] runtime ${runtime} is up-to-date in ${dstDir}, skipping full re-copy.`);
       continue;
     }
     console.log(`[stage-backend] staging runtime: ${runtime}`);

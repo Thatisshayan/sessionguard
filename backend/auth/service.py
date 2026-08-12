@@ -302,12 +302,12 @@ def get_current_user_from_token(authorization: str | None) -> dict | None:
     if not authorization:
         return None
     
-    # Handle Bearer prefix (case-insensitive)
-    token = authorization
-    if authorization.lower().startswith("bearer "):
-        token = authorization[7:].strip()
+    # Require Bearer prefix (case-insensitive)
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
     
-    payload = decode_access_token(token)
+    payload = decode_access_token(token.strip())
     if not payload:
         return None
     return {

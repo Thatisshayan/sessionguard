@@ -135,14 +135,10 @@ if ($PM) {
     'npm'  { RunTimed 300 build @('npm','ci') }
   }
   if (-not $failed) {
-    foreach ($m in @('npm','pnpm','yarn')) {
-      if (Get-Command $m -ErrorAction SilentlyContinue) {
-        $c = if ($m -eq 'npm') { 'npm run build --if-present' } elseif ($m -eq 'pnpm') { 'pnpm run build --if-present' } else { 'yarn build' }
-        Invoke-Expression $c >$null 2>&1; if ($LASTEXITCODE -eq 0) { Notice build "build ok" } else { Err build "build failed" }
-        $c = if ($m -eq 'npm') { 'npm test --if-present' } elseif ($m -eq 'pnpm') { 'pnpm test --if-present' } else { 'yarn test' }
-        Invoke-Expression $c >$null 2>&1; if ($LASTEXITCODE -eq 0) { Notice test "test ok" } else { Err test "test failed" }
-      }
-    }
+    $buildCmd = if ($PM -eq 'npm') { 'npm run build --if-present' } elseif ($PM -eq 'pnpm') { 'pnpm run build --if-present' } else { 'yarn build' }
+    Invoke-Expression $buildCmd >$null 2>&1; if ($LASTEXITCODE -eq 0) { Notice build "build ok" } else { Err build "build failed" }
+    $testCmd = if ($PM -eq 'npm') { 'npm test --if-present' } elseif ($PM -eq 'pnpm') { 'pnpm test --if-present' } else { 'yarn test' }
+    Invoke-Expression $testCmd >$null 2>&1; if ($LASTEXITCODE -eq 0) { Notice test "test ok" } else { Err test "test failed" }
   }
 } elseif ((Test-Path (Join-Path $RepoRoot 'pyproject.toml')) -or (Test-Path (Join-Path $RepoRoot 'requirements.txt'))) {
   if (Test-Path (Join-Path $RepoRoot 'requirements.txt')) { pip install -q -r (Join-Path $RepoRoot 'requirements.txt') }
@@ -172,7 +168,7 @@ if (Test-Path (Join-Path $RepoRoot 'desktop_shell\stage-backend.js')) {
     Write-Host "-- backend smoke --"
     $smokeLog = Join-Path $env:TEMP "sg-smoke.log"
     $smokeErr = Join-Path $env:TEMP "sg-smoke-err.log"
-    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port 8012 --no-access-log" -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeErr -Environment @{SESSIONGUARD_DEV_MODE='true'}
+    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port 8012 --no-access-log" -WorkingDirectory $dest -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeErr -Environment @{SESSIONGUARD_DEV_MODE='true'}
     Start-Sleep -Seconds 3
     try {
       $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8012/health" -UseBasicParsing -ErrorAction Stop

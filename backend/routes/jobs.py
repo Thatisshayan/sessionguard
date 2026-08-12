@@ -47,11 +47,19 @@ def submit_job(body: JobRequest, authorization: str = Header(...)):
 
 
 @router.get("/{job_id}")
-def poll_job(job_id: int):
+def poll_job(job_id: int, authorization: Optional[str] = Header(None)):
     """Poll job status and progress. Call repeatedly until status=complete."""
+    user = get_current_user_from_token(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
+    
+    if user["role"] != "admin" and job.get("user_id") is not None and job.get("user_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied to job.")
+        
     return job
 
 
@@ -61,6 +69,13 @@ def cancel(job_id: int, authorization: str = Header(...)):
     user = get_current_user_from_token(authorization)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
+    
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    if user["role"] != "admin" and job.get("user_id") is not None and job.get("user_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Access denied to job.")
     
     success = cancel_job(job_id)
     if not success:
@@ -76,8 +91,11 @@ def list_jobs_endpoint(
     authorization: Optional[str] = Header(None),
 ):
     """List jobs — filter by status or session."""
-    user    = get_current_user_from_token(authorization)
-    user_id = user["user_id"] if user else None
+    user = get_current_user_from_token(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    
+    user_id = None if user["role"] == "admin" else user["user_id"]
     return list_jobs(status=status, session_id=session_id, user_id=user_id, limit=limit)
 
 

@@ -46,7 +46,8 @@ def get_connection():
     try:
         conn.execute("PRAGMA journal_mode=WAL")
     except sqlite3.OperationalError:
-        pass
+        print("[DB] Warning: WAL mode unavailable; using default rollback journal.")
+    conn.execute("PRAGMA busy_timeout = 15000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 

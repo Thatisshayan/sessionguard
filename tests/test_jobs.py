@@ -78,10 +78,9 @@ class TestJobEndpoints:
         assert "max_workers" in data
         assert "pending_jobs" in data
     
-    def test_job_list_requires_auth(self, client: TestClient, auth_headers: dict):
-        """Test that listing jobs requires auth."""
+    def test_job_list_succeeds_with_auth(self, client: TestClient, auth_headers: dict):
+        """Test that listing jobs succeeds with valid auth."""
         response = client.get("/api/v1/jobs", headers=auth_headers)
-        
         assert response.status_code == 200
         
     def test_job_list_fails_without_auth(self, client: TestClient):

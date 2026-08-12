@@ -114,8 +114,14 @@ if [ -n "$PM" ]; then
     npm)  run_with_timeout 300 build npm ci ;;
   esac
   if [ $FAIL -eq 0 ]; then
-    (npm run build --if-present || pnpm run build --if-present || yarn build) >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
-    (npm test --if-present || pnpm test --if-present || yarn test) >/dev/null 2>&1 && notice test "test ok" || error test "test failed"
+    case "$PM" in
+      npm)  npm run build --if-present >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+            npm test --if-present >/dev/null 2>&1 && notice test "test ok" || error test "test failed" ;;
+      pnpm) pnpm run build --if-present >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+            pnpm test --if-present >/dev/null 2>&1 && notice test "test ok" || error test "test failed" ;;
+      yarn) yarn build >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+            yarn test >/dev/null 2>&1 && notice test "test ok" || error test "test failed" ;;
+    esac
   fi
 elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
   pip install -q -r requirements.txt 2>/dev/null || true
@@ -141,14 +147,16 @@ if [ -f desktop_shell/stage-backend.js ]; then
     fi
     # minimal startup smoke
     echo "-- backend smoke --"
-    SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > /tmp/sg-smoke.log 2>&1 &
+    SMOKE_LOG=$(mktemp)
+    trap "rm -f $SMOKE_LOG" EXIT
+    (cd desktop_shell/src-tauri/bundled_app && SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > "$SMOKE_LOG" 2>&1 &)
     PID=$!
     sleep 3
     if curl -fsS http://127.0.0.1:8011/health >/dev/null 2>&1; then
       notice "bundle" "bundled backend smoke ok"
     else
-      error "bundle" "bundled backend smoke failed (check /tmp/sg-smoke.log)"
-      tail -20 /tmp/sg-smoke.log
+      error "bundle" "bundled backend smoke failed (check $SMOKE_LOG)"
+      tail -20 "$SMOKE_LOG"
     fi
     kill $PID || true
   fi

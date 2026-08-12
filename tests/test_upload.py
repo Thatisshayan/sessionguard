@@ -38,10 +38,7 @@ class TestUploadEndpoints:
             headers={"Authorization": auth_headers["Authorization"]}
         )
         
-        if response.status_code == 422:
-            print(f"DEBUG: 422 Error Detail: {response.json()}")
-        
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
         data = response.json()
         assert data["file_type"] == "image"
         assert data["status"] == "complete"

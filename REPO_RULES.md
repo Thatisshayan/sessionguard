@@ -14,7 +14,7 @@ Purpose: Preserve project truth, prevent stale documentation, keep work recovera
 2. `main` is sacred. Nothing reaches it without a branch, a review, green checks, and Shayan's approval.
 3. Documentation is part of the change, not a later cleanup.
 4. If it wasn't run, it wasn't verified. If it wasn't verified, say so.
-5. Recovererability beats heroics. Commit often, branch always, defer explicitly.
+5. Recoverability beats heroics. Commit often, branch always, defer explicitly.
 
 ## 1. Documentation Truth
 

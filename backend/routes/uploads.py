@@ -156,12 +156,6 @@ async def upload_file(
     auth_header = request.headers.get("authorization")
     current_user = get_current_user_from_token(auth_header)
     if not current_user:
-        # Fallback for TestClient which might put it in lowercase
-        if not auth_header:
-            auth_header = request.headers.get("Authorization")
-            current_user = get_current_user_from_token(auth_header)
-            
-    if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required.")
     
     owner_id = current_user["user_id"]
@@ -169,11 +163,10 @@ async def upload_file(
     # 2. SESSION ACCESS CHECK
     if session_id is not None:
         try:
-            # Explicitly cast to int to handle strings coming from Form
             sid_int = int(session_id)
-            await require_session_access(sid_int, auth_header)
         except (ValueError, TypeError):
-            pass
+            raise HTTPException(status_code=400, detail="Invalid session_id format.")
+        await require_session_access(sid_int, auth_header)
 
     # 3. RATE LIMIT
     limit_result = check_rate_limit(get_client_ip(request), "upload", max_calls=10, window_seconds=60)
