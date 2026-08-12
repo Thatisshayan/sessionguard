@@ -161,7 +161,8 @@ if (Test-Path (Join-Path $RepoRoot 'desktop_shell\stage-backend.js')) {
     # minimal startup smoke
     Write-Host "-- backend smoke --"
     $smokeLog = Join-Path $env:TEMP "sg-smoke.log"
-    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port 8012 --no-access-log" -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeLog
+    $smokeErr = Join-Path $env:TEMP "sg-smoke-err.log"
+    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port 8012 --no-access-log" -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeErr -Environment @{SESSIONGUARD_DEV_MODE='true'}
     Start-Sleep -Seconds 3
     try {
       $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8012/health" -UseBasicParsing -ErrorAction Stop
@@ -170,12 +171,14 @@ if (Test-Path (Join-Path $RepoRoot 'desktop_shell\stage-backend.js')) {
       } else {
         Err "bundle" "bundled backend smoke failed"
         if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
+        if (Test-Path $smokeErr) { Get-Content $smokeErr | Select-Object -Last 10 }
       }
     } catch {
       Err "bundle" "bundled backend smoke failed: $($_.Exception.Message)"
       if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
+      if (Test-Path $smokeErr) { Get-Content $smokeErr | Select-Object -Last 10 }
     }
-    $p.Kill()
+    if ($p) { $p.Kill() }
   }
 }
 

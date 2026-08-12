@@ -25,10 +25,12 @@ class JobRequest(BaseModel):
 
 
 @router.post("", status_code=202)
-def submit_job(body: JobRequest, authorization: Optional[str] = Header(None)):
+def submit_job(body: JobRequest, authorization: str = Header(...)):
     """Submit a background job. Returns immediately with job_id."""
     user    = get_current_user_from_token(authorization)
-    user_id = user["user_id"] if user else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    user_id = user["user_id"]
 
     valid_types = {"video_pipeline", "csv_parse", "export_pdf", "export_excel", "regenerate"}
     if body.job_type not in valid_types:
@@ -54,8 +56,12 @@ def poll_job(job_id: int):
 
 
 @router.post("/{job_id}/cancel")
-def cancel(job_id: int, authorization: Optional[str] = Header(None)):
+def cancel(job_id: int, authorization: str = Header(...)):
     """Cancel a pending or running job."""
+    user = get_current_user_from_token(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    
     success = cancel_job(job_id)
     if not success:
         raise HTTPException(status_code=409, detail="Job cannot be cancelled (running or already done).")

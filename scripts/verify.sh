@@ -133,7 +133,7 @@ if [ -f desktop_shell/stage-backend.js ]; then
     fi
     # minimal startup smoke
     echo "-- backend smoke --"
-    python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > /tmp/sg-smoke.log 2>&1 &
+    SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > /tmp/sg-smoke.log 2>&1 &
     PID=$!
     sleep 3
     if curl -fsS http://127.0.0.1:8011/health >/dev/null 2>&1; then

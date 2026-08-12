@@ -68,9 +68,9 @@ class TestJobEndpoints:
         
         assert response.status_code in [200, 409]
     
-    def test_worker_health_endpoint(self, client: TestClient):
+    def test_worker_health_endpoint(self, client: TestClient, auth_headers: dict):
         """Test the worker health check endpoint."""
-        response = client.get("/api/v1/jobs/worker/health")
+        response = client.get("/api/v1/jobs/worker/health", headers=auth_headers)
         
         assert response.status_code == 200
         data = response.json()
@@ -78,11 +78,16 @@ class TestJobEndpoints:
         assert "max_workers" in data
         assert "pending_jobs" in data
     
-    def test_job_list_requires_auth(self, client: TestClient):
-        """Test that listing jobs without auth still works (optional auth)."""
-        response = client.get("/api/v1/jobs")
+    def test_job_list_requires_auth(self, client: TestClient, auth_headers: dict):
+        """Test that listing jobs requires auth."""
+        response = client.get("/api/v1/jobs", headers=auth_headers)
         
         assert response.status_code == 200
+        
+    def test_job_list_fails_without_auth(self, client: TestClient):
+        """Test that listing jobs without auth fails."""
+        response = client.get("/api/v1/jobs")
+        assert response.status_code == 401
     
     def test_invalid_job_type(self, client: TestClient, auth_headers: dict):
         """Test that invalid job types are rejected."""
