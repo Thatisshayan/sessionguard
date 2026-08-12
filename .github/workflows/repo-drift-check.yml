@@ -45,9 +45,16 @@ jobs:
           # Prefer secret over var so a non-secret path can also be used.
           CANON="${{ secrets.DRIFT_CANONICAL_REPO }}"
           if [ -z "$CANON" ]; then CANON="${{ vars.DRIFT_CANONICAL_REPO }}"; fi
-          echo "canonical=$CANON" >> "$GITHUB_OUTPUT"
+          if [ -z "$CANON" ]; then
+            echo "::notice title=repo-drift-check::DRIFT_CANONICAL_REPO not set; skipping check."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "canonical=$CANON" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Check repo drift
+        if: steps.canon.outputs.skip != 'true'
         env:
           CANONICAL: ${{ steps.canon.outputs.canonical }}
         run: |

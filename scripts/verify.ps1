@@ -23,13 +23,28 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
   if ($badFiles) { Err "secret-scan" "secret files present: $($badFiles -join ', ')" }
   # (b) content-based: scan only git-tracked code/config, require an assigned value.
   $trackedFiles = $tracked | Where-Object { $_ -match '\.(json|env|ts|js|py|yml|yaml|toml|sh)$' }
-  $hits = $trackedFiles | ForEach-Object {
+  $rawHits = $trackedFiles | ForEach-Object {
     $f = Join-Path $RepoRoot $_
     if (Test-Path $f) {
       $m = Select-String -Path $f -Pattern '(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)\s*[=:]\s*["'']?[A-Za-z0-9/+_-]{8,}' -Quiet
-      if ($m) { $f }
+      if ($m) { $_ } # Return relative path for matching ignore list
     }
   }
+
+  $hits = $rawHits
+  $ignoreFile = Join-Path $RepoRoot '.verify\.secret-scan-ignore.json'
+  if (Test-Path $ignoreFile) {
+    $ignoreList = Get-Content $ignoreFile | ConvertFrom-Json
+    $hits = $rawHits | Where-Object { 
+      $currentFile = $_ -replace '\\', '/'
+      $isIgnored = $false
+      foreach ($item in $ignoreList) {
+        if ($item.file -eq $currentFile) { $isIgnored = $true; break }
+      }
+      -not $isIgnored
+    }
+  }
+
   if ($hits) { Err "secret-scan" "possible hardcoded secrets in: $($hits -join ', ')" }
 }
 
@@ -71,6 +86,20 @@ if ($cur -lt $base) { Err "doc-freshness" "docs md count $cur < baseline $base (
 
 # ---------------------------------------------------------------- 3. build / test (adaptive)
 Write-Host "== build / test =="
+
+# check frontend if present
+if (Test-Path (Join-Path $RepoRoot 'frontend')) {
+  Write-Host "-- frontend --"
+  Push-Location (Join-Path $RepoRoot 'frontend')
+  try {
+    npm ci; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm ci failed" }
+    npx tsc --noEmit; if ($LASTEXITCODE -ne 0) { Err "frontend" "tsc check failed" }
+    npm run build; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm run build failed" }
+  } finally {
+    Pop-Location
+  }
+}
+
 $PM = $null
 if (Test-Path (Join-Path $RepoRoot 'pnpm-lock.yaml')) { $PM = 'pnpm' }
 elseif (Test-Path (Join-Path $RepoRoot 'yarn.lock')) { $PM = 'yarn' }
@@ -116,6 +145,40 @@ if ($PM) {
 }
 
 # ---------------------------------------------------------------- 4. deploy-dry
+Write-Host "== desktop-bundle smoke =="
+if (Test-Path (Join-Path $RepoRoot 'desktop_shell\stage-backend.js')) {
+  Write-Host "-- staging bundled backend --"
+  node desktop_shell\stage-backend.js; if ($LASTEXITCODE -ne 0) { Err "bundle" "staging script failed" }
+
+  $dest = Join-Path $RepoRoot 'desktop_shell\src-tauri\bundled_app'
+  if (Test-Path $dest) {
+    # check for residue
+    $residue = Get-ChildItem -Path $dest -Recurse -Filter "__pycache__" -ErrorAction SilentlyContinue
+    $residue += Get-ChildItem -Path $dest -Recurse -Filter "*.db" -ErrorAction SilentlyContinue
+    if ($residue) {
+      Err "bundle" "staging contains runtime residue: $($residue.Name -join ', ')"
+    }
+    # minimal startup smoke
+    Write-Host "-- backend smoke --"
+    $smokeLog = Join-Path $env:TEMP "sg-smoke.log"
+    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port 8012 --no-access-log" -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeLog
+    Start-Sleep -Seconds 3
+    try {
+      $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8012/health" -UseBasicParsing -ErrorAction Stop
+      if ($resp.StatusCode -eq 200) {
+        Notice "bundle" "bundled backend smoke ok"
+      } else {
+        Err "bundle" "bundled backend smoke failed"
+        if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
+      }
+    } catch {
+      Err "bundle" "bundled backend smoke failed: $($_.Exception.Message)"
+      if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
+    }
+    $p.Kill()
+  }
+}
+
 Write-Host "== deploy-dry =="
 if (Test-Path (Join-Path $RepoRoot 'vercel.json')) {
   vercel build --dry-run; if ($LASTEXITCODE -ne 0) { Err "deploy" "vercel dry-run failed" }

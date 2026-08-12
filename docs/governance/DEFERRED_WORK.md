@@ -44,3 +44,8 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   fails intermittently (~40%) in full-suite runs due to git repo setup race in
   parallel temp directories — resume hint: use unique temp dirs per test or
   serialize repo-creation tests — open
+- [2026-08-11] full-spectrum production-local-desktop readiness: required gate
+  still does not cover the frontend/Tauri shipped surface, runtime bundling is
+  still incomplete, upload/job auth is inconsistent, and docs still drift from
+  code reality — resume from `audits/2026-08-11_Codex_FullSpectrum_Audit.md`
+  and execute the phased completion plan there — open

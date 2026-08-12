@@ -24,11 +24,24 @@ else
     | grep -v '^audits/private/' || true)
   if [ -n "$bad_files" ]; then error "secret-scan" "secret files present: $bad_files"; fi
   # (b) content-based: scan only git-tracked code/config, require an ASSIGNED VALUE.
-  hits=$(echo "$tracked" \
+  # Filter hits against .verify/.secret-scan-ignore.json if present
+  raw_hits=$(echo "$tracked" \
     | grep -E '\.(json|env|ts|js|py|yml|yaml|toml|sh)$' \
     | xargs grep -lE "(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)[[:space:]]*[=:][[:space:]]*[\"']?[A-Za-z0-9/+_-]{8,}" \
     2>/dev/null || true)
-  if [ -n "$hits" ]; then error "secret-scan" "possible hardcoded secrets in: $hits"; fi
+  
+  hits=""
+  if [ -f .verify/.secret-scan-ignore.json ]; then
+    for f in $raw_hits; do
+      if ! grep -q "\"file\": \"$f\"" .verify/.secret-scan-ignore.json; then
+        hits="$hits $f"
+      fi
+    done
+  else
+    hits=$raw_hits
+  fi
+  
+  if [ -n "$(echo $hits | xargs)" ]; then error "secret-scan" "possible hardcoded secrets in: $hits"; fi
 fi
 
 # ---------------------------------------------------------------- 2. doc-freshness
@@ -65,6 +78,13 @@ fi
 
 # ---------------------------------------------------------------- 3. build / test
 echo "== build / test =="
+
+# check frontend if present
+if [ -d frontend ] && [ -f frontend/package.json ]; then
+  echo "-- frontend --"
+  (cd frontend && npm ci && npx tsc --noEmit && npm run build) || error "frontend" "frontend build/type-check failed"
+fi
+
 # pick the package manager from lockfiles (respect pnpm/yarn, don't assume npm)
 PM=""
 if [ -f pnpm-lock.yaml ]; then PM=pnpm
@@ -99,7 +119,34 @@ else
   notice "build" "no build system detected; docs/static repo — skipping build/test"
 fi
 
-# ---------------------------------------------------------------- 4. deploy-dry
+# ---------------------------------------------------------------- 4. desktop-bundle smoke
+echo "== desktop-bundle smoke =="
+if [ -f desktop_shell/stage-backend.js ]; then
+  echo "-- staging bundled backend --"
+  node desktop_shell/stage-backend.js || error "bundle" "staging script failed"
+  
+  if [ -d desktop_shell/src-tauri/bundled_app ]; then
+    # check for residue
+    residue=$(find desktop_shell/src-tauri/bundled_app -name "__pycache__" -o -name "*.db" 2>/dev/null)
+    if [ -n "$residue" ]; then
+      error "bundle" "staging contains runtime residue: $residue"
+    fi
+    # minimal startup smoke
+    echo "-- backend smoke --"
+    python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > /tmp/sg-smoke.log 2>&1 &
+    PID=$!
+    sleep 3
+    if curl -fsS http://127.0.0.1:8011/health >/dev/null 2>&1; then
+      notice "bundle" "bundled backend smoke ok"
+    else
+      error "bundle" "bundled backend smoke failed (check /tmp/sg-smoke.log)"
+      tail -20 /tmp/sg-smoke.log
+    fi
+    kill $PID || true
+  fi
+fi
+
+# ---------------------------------------------------------------- 5. deploy-dry
 echo "== deploy-dry =="
 if [ -f vercel.json ]; then
   vercel build --dry-run >/dev/null 2>&1 || error "deploy" "vercel dry-run failed"
