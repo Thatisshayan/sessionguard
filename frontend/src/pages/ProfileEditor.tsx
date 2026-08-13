@@ -58,7 +58,16 @@ export default function ProfileEditor() {
   const [alertRules, setAlertRules] = useState({
     rtp_warning: 96, rtp_critical: 85, max_loss: 200, streak_warning: 8, streak_critical: 15,
   })
-  const [error,    setError]    = useState('')
+  const [sampleImage, setSampleImage] = useState<string | null>(null)
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = () => setSampleImage(reader.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
   const [success,  setSuccess]  = useState('')
 
   const profileQ = useQuery({
@@ -158,17 +167,32 @@ export default function ProfileEditor() {
           Use the Parser Benchmark page to test accuracy.
         </div>
 
+        {/* Sample Frame Uploader */}
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Upload sample screenshot to overlay ROI boxes onto real game UI:
+          </div>
+          <label style={{
+            background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)',
+            padding: '5px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 12
+          }}>
+            📷 Select Sample Frame
+            <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+          </label>
+        </div>
+
         {/* Visual preview box */}
         <div style={{
-          position: 'relative', background: 'var(--bg-base)', border: '1px solid var(--bg-border)',
-          borderRadius: 'var(--radius-sm)', height: 200, marginBottom: 20, overflow: 'hidden',
+          position: 'relative', background: sampleImage ? `url(${sampleImage}) no-repeat center/contain` : 'var(--bg-base)',
+          border: '1px solid var(--bg-border)',
+          borderRadius: 'var(--radius-sm)', height: 260, marginBottom: 20, overflow: 'hidden',
         }}>
-          <div style={{ position: 'absolute', top: 8, left: 8, fontSize: 10, color: 'var(--text-muted)' }}>
-            Preview (not to scale — illustrative only)
+          <div style={{ position: 'absolute', top: 8, left: 8, fontSize: 10, color: 'var(--text-muted)', background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: 3 }}>
+            {sampleImage ? 'Live ROI Overlay on Sample Frame' : 'Preview (not to scale — illustrative only)'}
           </div>
           {(Object.entries(REGION_COLORS) as [keyof typeof REGION_COLORS, typeof REGION_COLORS[keyof typeof REGION_COLORS]][]).map(([key, style]) => {
             const r = roi[key]
-            const scale = 0.3
+            const scale = 0.35
             return (
               <div key={key} style={{
                 position: 'absolute',
