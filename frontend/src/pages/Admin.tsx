@@ -14,7 +14,7 @@ import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
-type AdminTab = 'health' | 'users' | 'jobs' | 'audit'
+type AdminTab = 'health' | 'users' | 'jobs' | 'audit' | 'diagnostics'
 
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
   return (
@@ -111,6 +111,7 @@ export default function Admin() {
         {TAB('users',  'Users')}
         {TAB('jobs',   'Job Queue')}
         {TAB('audit',  'Audit Log')}
+        {TAB('diagnostics', 'Diagnostics & Logs')}
       </div>
 
       {/* ── System Health ── */}
@@ -252,6 +253,31 @@ export default function Admin() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Diagnostics ── */}
+      {tab === 'diagnostics' && (
+        <div className="card">
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>System Diagnostics & Environment</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 12 }}>
+            <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontSize: 10 }}>Environment Mode</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>Local Desktop Shell</div>
+            </div>
+            <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontSize: 10 }}>Backend Binding</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-green)' }}>127.0.0.1 (Loopback Only)</div>
+            </div>
+            <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontSize: 10 }}>App Version</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>v1.5.2</div>
+            </div>
+            <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
+              <div style={{ color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', fontSize: 10 }}>Database Status</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--accent-blue)' }}>SQLite + WAL + BusyTimeout 15s</div>
+            </div>
+          </div>
         </div>
       )}
     </div>
