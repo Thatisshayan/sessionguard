@@ -138,3 +138,63 @@ async def audit_log(
         (*params, limit)
     )
     return rows
+
+
+@router.get("/backup")
+async def backup_database(authorization: Optional[str] = Header(None)):
+    """Create a consistent SQLite database backup via VACUUM INTO."""
+    await _require_admin(authorization)
+    import tempfile
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    temp_dir = tempfile.mkdtemp()
+    backup_path = Path(temp_dir) / "sessionguard_backup.db"
+
+    conn = get_connection()
+    try:
+        conn.execute(f"VACUUM INTO '{backup_path}'")
+    finally:
+        conn.close()
+
+    return FileResponse(
+        path=str(backup_path),
+        filename="sessionguard_backup.db",
+        media_type="application/x-sqlite3"
+    )
+
+
+@router.get("/audit/export")
+async def export_audit_log(
+    format: str = Query("json", regex="^(json|csv)$"),
+    authorization: Optional[str] = Header(None),
+    limit: int = Query(500, le=5000),
+):
+    """Export security audit log as CSV or JSON."""
+    await _require_admin(authorization)
+    rows = await async_fetch_all(
+        "SELECT a.id, a.user_id, u.email, u.username, a.action, a.resource, "
+        "a.detail, a.ip_address, a.created_at "
+        "FROM audit_log a LEFT JOIN users u ON u.id = a.user_id "
+        "ORDER BY a.created_at DESC LIMIT ?", (limit,)
+    )
+
+    if format == "csv":
+        import io
+        import csv
+        from fastapi.responses import StreamingResponse
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["id", "user_id", "email", "username", "action", "resource", "detail", "ip_address", "created_at"])
+        for r in rows:
+            writer.writerow([r["id"], r["user_id"], r["email"], r["username"], r["action"], r["resource"], r["detail"], r["ip_address"], r["created_at"]])
+
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="security_audit_log.csv"'}
+        )
+
+    return {"count": len(rows), "records": rows}

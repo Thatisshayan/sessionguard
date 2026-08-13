@@ -45,12 +45,23 @@ class ConnectionManager:
     Connections are keyed by session_id (or 'global' for all-sessions).
     """
 
-    def __init__(self):
+    def __init__(self, max_buffer_size: int = 100):
         # {scope_key: [WebSocket, ...]}
         self._connections: dict[str, list] = {}
+        self._buffer: list[dict] = []
+        self._max_buffer_size = max_buffer_size
 
     def _key(self, scope: str | int) -> str:
         return str(scope)
+
+    def get_recent_events(self, scope: str | int, since_ts: float = 0) -> list[dict]:
+        """Return buffered events for scope newer than since_ts."""
+        key = self._key(scope)
+        return [
+            ev for ev in self._buffer
+            if (ev.get("scope") == key or scope == "global" or ev.get("scope") == "global")
+            and ev.get("timestamp", 0) > since_ts
+        ]
 
     async def connect(self, websocket, scope: str | int):
         await websocket.accept()
@@ -70,8 +81,17 @@ class ConnectionManager:
                 del self._connections[key]
 
     async def broadcast(self, scope: str | int, message: dict):
-        """Send message to all connections for this scope."""
+        """Send message to all connections for this scope and add to replay buffer."""
         key     = self._key(scope)
+        msg_copy = dict(message)
+        msg_copy["scope"] = key
+        if "timestamp" not in msg_copy:
+            msg_copy["timestamp"] = time.time()
+        
+        self._buffer.append(msg_copy)
+        if len(self._buffer) > self._max_buffer_size:
+            self._buffer.pop(0)
+
         payload = json.dumps(message)
         dead    = []
         for ws in self._connections.get(key, []):

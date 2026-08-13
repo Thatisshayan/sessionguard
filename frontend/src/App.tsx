@@ -66,7 +66,34 @@ function useWsStatus() {
   return ok
 }
 
-// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+// ── Idle Session Lock ────────────────────────────────────────────────────────
+function useIdleLock(timeoutMinutes = 15) {
+  const { user, logout } = useAuth()
+  const [locked, setLocked] = useState(false)
+
+  useEffect(() => {
+    if (!user || locked) return
+
+    let timer: ReturnType<typeof setTimeout>
+    const resetTimer = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        setLocked(true)
+      }, timeoutMinutes * 60 * 1000)
+    }
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll']
+    events.forEach(e => window.addEventListener(e, resetTimer))
+    resetTimer()
+
+    return () => {
+      clearTimeout(timer)
+      events.forEach(e => window.removeEventListener(e, resetTimer))
+    }
+  }, [user, locked, timeoutMinutes])
+
+  return { locked, unlock: () => setLocked(false), relogin: logout }
+}
 function useKeyboardShortcuts() {
   const navigate = useNavigate()
   useEffect(() => {
@@ -216,8 +243,9 @@ function TopBar() {
 
 // ── App shell ─────────────────────────────────────────────────────────────────
 function AppShell() {
-  const { loading } = useAuth()
+  const { loading, user } = useAuth()
   const wsOk = useWsStatus()
+  const { locked, unlock, relogin } = useIdleLock(15)
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-base)', color: 'var(--text-muted)', flexDirection: 'column', gap: 12 }}>
@@ -226,7 +254,29 @@ function AppShell() {
   )
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      {locked && user && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(10, 12, 16, 0.96)', backdropFilter: 'blur(12px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'column', gap: 16, color: 'var(--text-primary)'
+        }}>
+          <div style={{ fontSize: 48 }}>🔒</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>Session Locked</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Screen locked due to 15 minutes of inactivity.</div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <button onClick={unlock} style={{
+              background: 'var(--accent-blue)', color: '#fff', border: 'none',
+              padding: '10px 20px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600
+            }}>Unlock Screen</button>
+            <button onClick={relogin} style={{
+              background: 'transparent', color: 'var(--text-muted)', border: '1px solid var(--bg-border)',
+              padding: '10px 20px', borderRadius: 'var(--radius-sm)', cursor: 'pointer'
+            }}>Sign Out</button>
+          </div>
+        </div>
+      )}
       <Sidebar wsOk={wsOk} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <TopBar />
