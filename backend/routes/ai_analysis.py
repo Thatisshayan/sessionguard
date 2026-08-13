@@ -56,6 +56,24 @@ def list_models(authorization: str | None = Header(None, alias="Authorization"))
     return {"models": NVIDIA_MODELS, "current": get_ai_status()["model"]}
 
 
+@router.get("/ai/usage")
+async def get_ai_usage_stats(authorization: str | None = Header(None, alias="Authorization")):
+    """Return platform-wide AI token and compute cost usage metrics."""
+    require_current_user(authorization)
+    from database.db import async_fetch_one
+    row = await async_fetch_one("""
+        SELECT
+            COUNT(*)                    AS total_calls,
+            COALESCE(SUM(input_tokens), 0)  AS total_input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+            COALESCE(SUM(cost_usd), 0.0)    AS total_cost_usd
+        FROM ai_cost_log
+    """)
+    res = dict(row) if row else {"total_calls": 0, "total_input_tokens": 0, "total_output_tokens": 0, "total_cost_usd": 0.0}
+    res["total_cost_usd"] = round(res["total_cost_usd"], 4)
+    return res
+
+
 @router.post("/sessions/{session_id}/ai")
 async def run_ai_analysis(session_id: int, authorization: str | None = Header(None, alias="Authorization")):
     """
