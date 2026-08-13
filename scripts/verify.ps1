@@ -10,6 +10,7 @@ function Notice($t,$m){ Write-Host "::notice title=$t::$m" }
 function Err($t,$m){ Write-Host "::error title=$t::$m"; $script:failed = $true }
 
 # ---------------------------------------------------------------- 1. secret-scan
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
 Write-Host "== secret-scan =="
 if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
   gitleaks detect --no-banner --redact
@@ -47,8 +48,10 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
 
   if ($hits) { Err "secret-scan" "possible hardcoded secrets in: $($hits -join ', ')" }
 }
+Write-Host "secret-scan took $($sw.Elapsed.TotalSeconds)s"
 
 # ---------------------------------------------------------------- 2. doc-freshness
+$sw.Restart()
 Write-Host "== doc-freshness =="
 if (-not (Test-Path (Join-Path $RepoRoot 'README.md'))) { Err "doc-freshness" "README.md missing" }
 # link integrity (mandatory — fail if tool is unavailable)
@@ -58,13 +61,13 @@ if (-not $hasMLC -and -not $hasNPX) {
   Err "doc-freshness" "markdown-link-check not installed (required for doc-link validation)"
 } else {
   $configFile = Join-Path $RepoRoot '.markdown-link-check.json'
-  $mdFiles = Get-ChildItem -Path $RepoRoot -Recurse -Filter *.md -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.git|audits[\\/]private)[\\/]' }
+  $trackedMd = & { git ls-files "*.md" 2>$null }
+  $mdFiles = $trackedMd | Where-Object { $_ -notmatch '^audits/private/' }
   
-  $mdFiles | ForEach-Object -Parallel {
-    $cf = $using:configFile
-    markdown-link-check -q -c $cf $_.FullName >>$null 2>&1
-  } -ThrottleLimit 16
+  foreach ($relPath in $mdFiles) {
+    $fullPath = Join-Path $RepoRoot $relPath
+    markdown-link-check -q -c $configFile $fullPath | Out-Null
+  }
 
   if ($LASTEXITCODE -ne 0) { Err "doc-freshness" "broken doc links" }
 }

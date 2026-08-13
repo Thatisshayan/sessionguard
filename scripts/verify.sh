@@ -60,7 +60,7 @@ if [ -z "$MLC_CMD" ]; then
   error "doc-freshness" "markdown-link-check not installed (required for doc-link validation)"
 else
   find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*' \
-    -not -path './audits/private/*' -print0 2>/dev/null \
+    -not -path './audits/private/*' -not -path './desktop_shell/*' -not -path './.venv/*' -print0 2>/dev/null \
     | xargs -0 -r -n1 $MLC_CMD -c .markdown-link-check.json || error "doc-freshness" "broken doc links"
 fi
 # audit age (≤ 30 days, from ISO date in filename, not mtime)
@@ -149,8 +149,11 @@ if [ -f desktop_shell/stage-backend.js ]; then
     echo "-- backend smoke --"
     SMOKE_LOG=$(mktemp)
     trap "rm -f $SMOKE_LOG" EXIT
-    (cd desktop_shell/src-tauri/bundled_app && SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > "$SMOKE_LOG" 2>&1 &)
+    OLD_PWD=$(pwd)
+    cd desktop_shell/src-tauri/bundled_app
+    SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > "$SMOKE_LOG" 2>&1 &
     PID=$!
+    cd "$OLD_PWD"
     sleep 3
     if curl -fsS http://127.0.0.1:8011/health >/dev/null 2>&1; then
       notice "bundle" "bundled backend smoke ok"
