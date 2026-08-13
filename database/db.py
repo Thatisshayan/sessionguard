@@ -77,17 +77,19 @@ async def get_async_connection():
         password = encryption.get("password") or os.getenv("SG_DB_PASSWORD", "")
         if password:
             # For encrypted DBs, use SQLCipher with aiosqlite
-            conn = await aiosqlite.connect(db_path_str)
+            conn = await aiosqlite.connect(db_path_str, timeout=15)
             await conn.execute("PRAGMA key=?", [password])
             await conn.execute("PRAGMA journal_mode=WAL")
             await conn.execute("PRAGMA foreign_keys=ON")
+            await conn.execute("PRAGMA busy_timeout = 15000")
             conn.row_factory = aiosqlite.Row
             return conn
     
     # Fallback: plain async SQLite
-    conn = await aiosqlite.connect(db_path_str)
+    conn = await aiosqlite.connect(db_path_str, timeout=15)
     await conn.execute("PRAGMA journal_mode=WAL")
     await conn.execute("PRAGMA foreign_keys=ON")
+    await conn.execute("PRAGMA busy_timeout = 15000")
     conn.row_factory = aiosqlite.Row
     return conn
 
