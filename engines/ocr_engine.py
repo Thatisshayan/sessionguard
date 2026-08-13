@@ -62,6 +62,27 @@ def detect_ocr_anomalies(
     return anomalies
 
 
+def detect_ocr_anomalies(
+    balance: float | None,
+    bet: float | None,
+    win: float | None,
+    prev_balance: float | None = None
+) -> list[str]:
+    """Flag statistical anomalies in extracted OCR field values."""
+    anomalies = []
+    if balance is not None and balance < 0:
+        anomalies.append("Negative balance detected")
+    if bet is not None and bet < 0:
+        anomalies.append("Negative bet detected")
+    if win is not None and win < 0:
+        anomalies.append("Negative win detected")
+    if prev_balance is not None and balance is not None and prev_balance > 0:
+        ratio = balance / prev_balance
+        if ratio > 10.0 or ratio < 0.05:
+            anomalies.append(f"Unusual balance jump (from ${prev_balance:.2f} to ${balance:.2f})")
+    return anomalies
+
+
 # ── Availability check ────────────────────────────────────────────────────────
 
 def check_ocr_status() -> dict:

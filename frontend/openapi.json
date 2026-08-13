@@ -4164,7 +4164,7 @@
           "admin"
         ],
         "summary": "Export Audit Log",
-        "description": "Export security audit log as CSV or JSON.",
+        "description": "Export security audit log as CSV or JSON with HMAC-SHA256 signatures.",
         "operationId": "export_audit_log_api_v1_admin_audit_export_get",
         "parameters": [
           {
