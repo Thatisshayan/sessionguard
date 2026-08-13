@@ -20,6 +20,29 @@ async def require_admin(authorization: str | None) -> dict:
     return user
 
 
+def require_role(authorization: str | None, allowed_roles: set[str]) -> dict:
+    """Ensure current user holds one of the allowed RBAC roles."""
+    user = require_current_user(authorization)
+    if user["role"] not in allowed_roles:
+        raise HTTPException(status_code=403, detail=f"Access denied. Requires one of roles: {sorted(allowed_roles)}")
+    return user
+
+
+async def require_analyst(authorization: str | None) -> dict:
+    """Allow Admin or Analyst roles."""
+    return require_role(authorization, {"admin", "analyst"})
+
+
+async def require_auditor(authorization: str | None) -> dict:
+    """Allow Admin, Analyst, or Auditor roles."""
+    return require_role(authorization, {"admin", "analyst", "auditor"})
+
+
+async def require_viewer(authorization: str | None) -> dict:
+    """Allow any authenticated role (Admin, Analyst, Auditor, Viewer)."""
+    return require_role(authorization, {"admin", "analyst", "auditor", "viewer"})
+
+
 async def require_session_access(session_id: int, authorization: str | None) -> dict:
     """
     Require that the caller can access a session.
