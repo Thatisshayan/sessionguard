@@ -58,6 +58,8 @@ export default function ProfileEditor() {
   const [alertRules, setAlertRules] = useState({
     rtp_warning: 96, rtp_critical: 85, max_loss: 200, streak_warning: 8, streak_critical: 15,
   })
+  const [error,   setError]   = useState('')
+  const [success, setSuccess] = useState('')
   const [sampleImage, setSampleImage] = useState<string | null>(null)
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +70,6 @@ export default function ProfileEditor() {
       reader.readAsDataURL(file)
     }
   }
-  const [success,  setSuccess]  = useState('')
 
   const profileQ = useQuery({
     queryKey: ['profile', id],

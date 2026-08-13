@@ -74,7 +74,7 @@ function useIdleLock(timeoutMinutes = 15) {
   useEffect(() => {
     if (!user || locked) return
 
-    let timer: NodeJS.Timeout
+    let timer: ReturnType<typeof setTimeout>
     const resetTimer = () => {
       clearTimeout(timer)
       timer = setTimeout(() => {
