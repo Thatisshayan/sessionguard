@@ -7,7 +7,6 @@ import json, os, threading, time
 from dataclasses import dataclass, asdict
 from typing import Optional
 
-
 @dataclass
 class CoachMessage:
     type: str; message: str; trigger: str; source: str; timestamp: float = 0.0
@@ -23,22 +22,39 @@ def _safe(v, d=0.0):
 
 def _analyse_events(events):
     if not events: return {}
-    nets  = [_safe(e.get('payload',{}).get('net_delta',0)) for e in events]
-    bets  = [_safe(e.get('payload',{}).get('bet_amount', abs(_safe(e.get('payload',{}).get('net_delta',0))))) for e in events]
-    confs = [_safe(e.get('payload',{}).get('ocr_confidence',1.0),1.0) for e in events]
-    risks = [bool(e.get('payload',{}).get('risk_flag')) for e in events]
+
+    # Parse payload if it's stored as a JSON string
+    parsed_events = []
+    for e in events:
+        d = dict(e)
+        if isinstance(d.get("payload"), str):
+            try:
+                d["payload"] = json.loads(d["payload"])
+            except Exception:
+                d["payload"] = {}
+        elif d.get("payload") is None:
+            d["payload"] = {}
+        parsed_events.append(d)
+
+    nets  = [_safe(e.get('payload',{}).get('net_delta',0)) for e in parsed_events]
+    bets  = [_safe(e.get('payload',{}).get('bet_amount', abs(_safe(e.get('payload',{}).get('net_delta',0))))) for e in parsed_events]
+    confs = [_safe(e.get('payload',{}).get('ocr_confidence',1.0),1.0) for e in parsed_events]
+    risks = [bool(e.get('payload',{}).get('risk_flag')) for e in parsed_events]
+
     def neg_run(ns):
         c=0
         for n in reversed(ns):
             if n<0: c+=1
             else: break
         return c
+
     def pos_run(ns):
         c=0
         for n in reversed(ns):
             if n>0: c+=1
             else: break
         return c
+
     ea = sum(bets[:max(1,len(bets)//4)])/max(1,len(bets)//4)
     la = sum(bets[-max(1,len(bets)//4):])/max(1,len(bets)//4)
     bet_changes = [bets[i]-bets[i-1] for i in range(1,len(bets))] if len(bets)>1 else []
@@ -46,26 +62,76 @@ def _analyse_events(events):
     dec = sum(1 for c in bet_changes if c<0)
     session_style = ('aggressive' if la>ea*1.5 else 'conservative' if la<ea*0.7
                      else 'inconsistent' if inc>dec*1.5 else 'disciplined')
+
+    # Convert to format expected by behavior engine
+    normalized_events = []
+    for e in parsed_events:
+        normalized_events.append({
+            "bet_amount": _safe(e.get("payload", {}).get("bet_amount", 0.0)),
+            "win_amount": _safe(e.get("payload", {}).get("win_amount", 0.0)),
+            "balance_after": _safe(e.get("payload", {}).get("balance_after", 0.0)),
+        })
+
+    # Advanced detectors
+    from engines.behavior_engine import detect_martingale_progression
+    martingale = detect_martingale_progression(normalized_events)
+
+    # Local RTP Decay check
+    rtp_decay = False
+    rolling_rtp = 100.0
+    if len(normalized_events) >= 15:
+        recent = normalized_events[-15:]
+        total_bets = sum(e["bet_amount"] for e in recent)
+        total_wins = sum(e["win_amount"] for e in recent)
+        if total_bets > 0:
+            rolling_rtp = round((total_wins / total_bets) * 100.0, 2)
+            rtp_decay = rolling_rtp < 70.0
+
     return {
-        'event_count':len(events),'cumulative_net':round(sum(nets),2),
-        'recent_net_5':round(sum(nets[-5:]),2) if len(nets)>=5 else round(sum(nets),2),
-        'recent_net_10':round(sum(nets[-10:]),2) if len(nets)>=10 else round(sum(nets),2),
-        'avg_bet':round(sum(bets)/len(bets),2) if bets else 0,
-        'early_avg_bet':round(ea,2),'late_avg_bet':round(la,2),
-        'risk_flags':sum(risks),'avg_confidence':round(sum(confs)/len(confs),2) if confs else 1.0,
-        'consecutive_neg':neg_run(nets),'consecutive_pos':pos_run(nets),
-        'win_rate':round(sum(1 for n in nets if n>0)/len(nets)*100,1) if nets else 0,
-        'biggest_single_loss':round(min(nets),2) if nets else 0,
-        'session_style':session_style,
+        'event_count': len(events),
+        'cumulative_net': round(sum(nets), 2),
+        'recent_net_5': round(sum(nets[-5:]), 2) if len(nets)>=5 else round(sum(nets), 2),
+        'recent_net_10': round(sum(nets[-10:]), 2) if len(nets)>=10 else round(sum(nets), 2),
+        'avg_bet': round(sum(bets)/len(bets), 2) if bets else 0,
+        'early_avg_bet': round(ea, 2),
+        'late_avg_bet': round(la, 2),
+        'risk_flags': sum(risks),
+        'avg_confidence': round(sum(confs)/len(confs), 2) if confs else 1.0,
+        'consecutive_neg': neg_run(nets),
+        'consecutive_pos': pos_run(nets),
+        'win_rate': round(sum(1 for n in nets if n>0)/len(nets)*100, 1) if nets else 0,
+        'biggest_single_loss': round(min(nets), 2) if nets else 0,
+        'session_style': session_style,
+        'martingale': martingale,
+        'rtp_decay': rtp_decay,
+        'rolling_rtp': rolling_rtp,
     }
 
 
 def _detect_patterns(stats, style):
     neg=stats['consecutive_neg']; pos=stats['consecutive_pos']
     cum=stats['cumulative_net']
-    ea=max(stats['early_avg_bet'],0.01); la=stats['late_avg_bet']
+    ea=max(stats['early_avg_bet'], 0.01); la=stats['late_avg_bet']
     bet_ratio=la/ea
     def m(c,w,p): return {'strict':c,'balanced':w,'supportive':p}.get(style,w)
+
+    # 1. Martingale Bet Doubling
+    if stats.get('martingale', {}).get('detected'):
+        streak = stats['martingale']['max_double_streak']
+        return CoachMessage('critical', m(
+            f"STOP. Martingale bet doubling detected ({streak}x). This is a mathematically bankrupt strategy. Walk away.",
+            f"Martingale bet doubling detected ({streak} consecutive doubles). High risk of immediate ruin. Reset bet size.",
+            f"I see you doubling bets to win back losses. I know it's tempting, but Martingale is extremely risky. Let's reset."
+        ), 'martingale', 'rule')
+
+    # 2. Real-Time RTP Decay
+    if stats.get('rtp_decay'):
+        rolling_rtp = stats['rolling_rtp']
+        return CoachMessage('warning', m(
+            f"RTP decay alert. Rolling RTP is critically low at {rolling_rtp}%. Lock in or stop.",
+            f"Rolling RTP has decayed to {rolling_rtp}%. Slot is currently cold. Slow down your play.",
+            f"The game feels a bit cold right now (RTP is {rolling_rtp}% recently). Take a deep breath."
+        ), 'rtp_decay', 'rule')
 
     if neg>=10 and bet_ratio>=2.0:
         return CoachMessage('critical',m(
@@ -162,7 +228,7 @@ def _nvidia_coach(stats, style):
         payload = json.dumps({ "model": model, "max_tokens": 80, "temperature": 0.7,
                                "messages": messages })
         req = Request(api_url, payload.encode(), method="POST", 
-                      headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+                       headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
         with urlopen(req) as response:
             body = json.loads(response.read())
             text = body["choices"][0]["message"]["content"].strip()
@@ -174,6 +240,32 @@ def _nvidia_coach(stats, style):
             return CoachMessage(t, text, 'nvidia', 'nvidia')
     except Exception as e:
         print(f'[Coach] {e}'); return None
+
+
+def _local_ollama_coach(stats, style):
+    """Fallback 2nd-tier: Complete Local Ollama Offline AI Coaching."""
+    from engines.offline_ai import is_ollama_available, call_ollama_json
+    if not is_ollama_available():
+        return None
+    try:
+        messages_prompt = (
+            f"You are a professional gambling session coach — like the best boxing corner man. "
+            f"Direct, calm, data-driven. 1-2 sentences MAX. Every word earns its place. "
+            f"Never predict outcomes. DO call out tilt, escalation, patterns, discipline breaks. "
+            f"Use the actual numbers. Match the coaching style exactly.\n"
+            f"Session: {stats['event_count']} spins, net=${stats['cumulative_net']}, "
+            f"losing_run={stats['consecutive_neg']}, win_rate={stats['win_rate']}%, "
+            f"bet_ratio={round(stats['late_avg_bet']/max(stats['early_avg_bet'],0.01),1)}x, "
+            f"style={stats['session_style']}, coach_style={style}. "
+            f"Output a JSON object with keys 'type' (can be 'critical', 'warning', 'positive', or 'neutral') "
+            f"and 'message' (your 1-2 sentence coaching advice)."
+        )
+        res = call_ollama_json(messages_prompt, system_prompt=COACH_SYSTEM)
+        if "error" not in res and "message" in res:
+            return CoachMessage(res.get("type", "neutral"), res["message"], "ollama_local", "ollama_local")
+    except Exception as e:
+        print(f"[Coach] Local Ollama call failed: {e}")
+    return None
 
 
 _lock = threading.Lock()
@@ -197,10 +289,22 @@ def get_coaching_message(events, style='balanced', force=False):
     has_issue=(stats['consecutive_neg']>=5 or
                stats['late_avg_bet']>stats['early_avg_bet']*1.3 or
                stats['cumulative_net']<=-50 or
-               stats['session_style'] in ('aggressive','inconsistent'))
+               stats['session_style'] in ('aggressive','inconsistent') or
+               stats.get('martingale', {}).get('detected', False) or
+               stats.get('rtp_decay', False))
+    
     msg=None
-    if has_issue: msg=_nvidia_coach(stats,style)
-    if not msg:   msg=_detect_patterns(stats,style)
+    if has_issue:
+        # Tier 1: NVIDIA NIM Cloud LLM
+        msg = _nvidia_coach(stats, style)
+        if not msg:
+            # Tier 2: Local Ollama Offline LLM
+            msg = _local_ollama_coach(stats, style)
+            
+    if not msg:
+        # Tier 3: Local Deterministic Rule-Engine
+        msg = _detect_patterns(stats, style)
+
     if msg:
         d=msg.to_dict()
         with _lock:
@@ -209,10 +313,14 @@ def get_coaching_message(events, style='balanced', force=False):
     return None
 
 
-def reset_coach():
+def def_reset_coach():
     global _last_n, _log
     with _lock:
         _last_n=0; _log=[]
+
+
+def reset_coach():
+    def_reset_coach()
 
 
 def get_session_coaching_log():
