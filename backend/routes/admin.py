@@ -140,6 +140,30 @@ async def audit_log(
     return rows
 
 
+@router.get("/backup")
+async def backup_database(authorization: Optional[str] = Header(None)):
+    """Create a consistent SQLite database backup via VACUUM INTO."""
+    await _require_admin(authorization)
+    import tempfile
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    temp_dir = tempfile.mkdtemp()
+    backup_path = Path(temp_dir) / "sessionguard_backup.db"
+
+    conn = get_connection()
+    try:
+        conn.execute(f"VACUUM INTO '{backup_path}'")
+    finally:
+        conn.close()
+
+    return FileResponse(
+        path=str(backup_path),
+        filename="sessionguard_backup.db",
+        media_type="application/x-sqlite3"
+    )
+
+
 @router.get("/audit/export")
 async def export_audit_log(
     format: str = Query("json", regex="^(json|csv)$"),

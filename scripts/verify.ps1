@@ -22,15 +22,8 @@ if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
   $badFiles = $tracked | Where-Object { $_ -match '\.(p8|p12|pem|key)$' -or $_ -match 'credential' } |
     Where-Object { $_ -notmatch '^audits/private/' }
   if ($badFiles) { Err "secret-scan" "secret files present: $($badFiles -join ', ')" }
-  # (b) content-based: scan only git-tracked code/config, require an assigned value.
-  $trackedFiles = $tracked | Where-Object { $_ -match '\.(json|env|ts|js|py|yml|yaml|toml|sh)$' }
-  $rawHits = $trackedFiles | ForEach-Object {
-    $f = Join-Path $RepoRoot $_
-    if (Test-Path $f) {
-      $m = Select-String -Path $f -Pattern '(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)\s*[=:]\s*["'']?[A-Za-z0-9/+_-]{8,}' -Quiet
-      if ($m) { $_ } # Return relative path for matching ignore list
-    }
-  }
+  # (b) content-based: scan only git-tracked code/config using git grep
+  $rawHits = & git grep -lE '(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)\s*[=:]\s*["'']?[A-Za-z0-9/+_-]{8,}' 2>$null
 
   $hits = $rawHits
   $ignoreFile = Join-Path $RepoRoot '.verify\.secret-scan-ignore.json'
@@ -106,8 +99,8 @@ if (Test-Path (Join-Path $RepoRoot 'frontend')) {
     if (-not (Test-Path 'node_modules')) {
       npm ci; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm ci failed" }
     }
-    npx tsc --noEmit; if ($LASTEXITCODE -ne 0) { Err "frontend" "tsc check failed" }
-    npm run build; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm run build failed" }
+    node node_modules/typescript/bin/tsc --noEmit; if ($LASTEXITCODE -ne 0) { Err "frontend" "tsc check failed" }
+    node node_modules/vite/bin/vite.js build; if ($LASTEXITCODE -ne 0) { Err "frontend" "npm run build failed" }
   } finally {
     Pop-Location
   }

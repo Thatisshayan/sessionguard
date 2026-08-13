@@ -25,6 +25,15 @@ if platform.system() == "Windows":
     except ImportError:
         pass
 
+# ── Optional Sentry crash reporting ─────────────────────────────────────────
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(dsn=sentry_dsn, traces_sample_rate=0.2)
+    except ImportError:
+        pass
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
