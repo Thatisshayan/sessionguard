@@ -65,8 +65,6 @@ async def require_authenticated_api(request: Request, call_next):
     public_prefixes = (
         "/api/v1/auth",
         "/api/v1/health",
-        "/api/v1/upload",
-        "/api/v1/jobs",
     )
     if path.startswith(public_prefixes):
         return await call_next(request)

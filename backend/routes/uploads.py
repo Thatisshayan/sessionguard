@@ -11,11 +11,13 @@ Maturity: Working Prototype → Phase 2 (A8: upload validation with size limits,
 import os
 import shutil
 import structlog
+import sys
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
+from backend.auth.service import get_current_user_from_token
 from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
 from backend.auth.access import require_session_access
@@ -150,12 +152,23 @@ async def upload_file(
     Video files → frame extraction triggered (background task).
     Returns immediately with upload_id and status=processing.
     """
-    current_user = getattr(request.state, "current_user", None)
-    owner_id = current_user["user_id"] if current_user else None
+    # 1. AUTH CHECK
+    auth_header = request.headers.get("authorization")
+    current_user = get_current_user_from_token(auth_header)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    
+    owner_id = current_user["user_id"]
 
+    # 2. SESSION ACCESS CHECK
     if session_id is not None:
-        await require_session_access(session_id, request.headers.get("authorization"))
+        try:
+            sid_int = int(session_id)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid session_id format.")
+        await require_session_access(sid_int, auth_header)
 
+    # 3. RATE LIMIT
     limit_result = check_rate_limit(get_client_ip(request), "upload", max_calls=10, window_seconds=60)
     if not limit_result["allowed"]:
         raise HTTPException(
@@ -164,7 +177,7 @@ async def upload_file(
             headers=rate_limit_headers(limit_result),
         )
 
-    # Detect file type
+    # 4. TYPE CHECK
     content_type = (file.content_type or "").split(";")[0].strip()
     file_type = ALLOWED_TYPES.get(content_type)
 
@@ -182,10 +195,11 @@ async def upload_file(
                    f"Accepted: CSV, MP4, MKV, MOV, AVI, PNG, JPEG."
         )
 
+    # 5. STORAGE PREP
     safe_name = _safe_filename(file.filename or "upload")
     dest_path = _unique_path(UPLOADS_DIR / safe_name)
 
-    # Read file content to check size and write to disk
+    # 6. SIZE CHECK & WRITE
     file_size = 0
     chunk_size = 8192  # 8KB chunks
     try:
@@ -205,22 +219,18 @@ async def upload_file(
         dest_path.unlink(missing_ok=True)
         raise
 
-    # Reset file pointer for potential re-use
+    # Reset file pointer
     await file.seek(0)
-
     logger.info(f"File uploaded: {file.filename}, size: {file_size} bytes, type: {file_type}")
 
-    # Virus scan (optional - skip if unavailable)
+    # 7. VIRUS SCAN
     is_clean, scan_message = _scan_file_with_clamav(dest_path)
     if not is_clean:
-        # Delete infected file
         dest_path.unlink(missing_ok=True)
         logger.error(f"Virus scan failed for {file.filename}: {scan_message}")
-        raise HTTPException(
-            status_code=403,
-            detail=f"File rejected by virus scan: {scan_message}"
-        )
+        raise HTTPException(status_code=403, detail=f"File rejected by virus scan: {scan_message}")
 
+    # 8. DB REGISTER
     upload_id = await async_execute(
         "INSERT INTO uploads (session_id, filename, file_type, file_path, status) "
         "VALUES (?, ?, ?, ?, ?)",
@@ -228,7 +238,7 @@ async def upload_file(
          "processing" if file_type in ("csv", "video") else "complete")
     )
 
-    # Trigger background processing
+    # 9. TRIGGER BG
     if file_type == "csv":
         background_tasks.add_task(_bg_parse_csv, str(dest_path), upload_id, session_id, owner_id)
         processing_note = "CSV file queued for parsing — sessions and events will appear shortly."

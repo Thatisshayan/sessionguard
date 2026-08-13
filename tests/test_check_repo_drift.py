@@ -31,11 +31,15 @@ def _git(repo: Path, *args: str) -> str:
 @pytest.fixture
 def two_repos(tmp_path: Path):
     """Two throwaway git repos so the drift script can be exercised off-line."""
-    a = tmp_path / "checkout_a"
-    b = tmp_path / "checkout_b"
+    # Ensure unique directory names per test run to avoid race conditions in parallel runs
+    import uuid
+    base = tmp_path / str(uuid.uuid4())
+    base.mkdir()
+    a = base / "checkout_a"
+    b = base / "checkout_b"
     for repo in (a, b):
         repo.mkdir()
-        _git(repo, "init", "-q")
+        _git(repo, "init", "-q", "--initial-branch=main")
         (repo / "README.md").write_text("# SessionGuard\n")
         _git(repo, "add", "README.md")
         _git(repo, "commit", "-q", "-m", "init")
