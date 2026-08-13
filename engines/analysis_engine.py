@@ -165,3 +165,40 @@ def get_performance_by_game() -> list:
     """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def calculate_volatility_index(session_id: int) -> dict:
+    """
+    Calculate standard deviation of win multipliers and variance to assign a Volatility Rating.
+    Ratings: Low, Medium, High, Extreme
+    """
+    import numpy as np
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT bet_amount, win_amount FROM events WHERE session_id=? AND bet_amount > 0",
+        (session_id,)
+    ).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"volatility_rating": "Medium", "std_dev": 0.0, "variance": 0.0}
+
+    multipliers = [r["win_amount"] / r["bet_amount"] for r in rows]
+    std_dev = float(np.std(multipliers))
+    variance = float(np.var(multipliers))
+
+    rating = "Low"
+    if std_dev > 15.0:
+        rating = "Extreme"
+    elif std_dev > 8.0:
+        rating = "High"
+    elif std_dev > 3.0:
+        rating = "Medium"
+
+    return {
+        "session_id": session_id,
+        "volatility_rating": rating,
+        "std_dev": round(std_dev, 2),
+        "variance": round(variance, 2),
+        "max_multiplier": round(float(max(multipliers)), 2) if multipliers else 0.0
+    }
