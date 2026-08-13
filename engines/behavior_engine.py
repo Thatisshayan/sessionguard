@@ -79,6 +79,15 @@ def detect_bet_escalation(events: list[dict]) -> dict:
     if detected:
         severity = "critical" if escalation_ratio > 3.0 else "warning"
 
+    return {
+        "detected": detected,
+        "severity": severity,
+        "slope": slope,
+        "escalation_ratio": round(escalation_ratio, 2),
+        "avg_bet": avg_bet,
+        "peak_bet": peak_bet,
+    }
+
 
 def detect_martingale_progression(events: list[dict]) -> dict:
     """
