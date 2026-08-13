@@ -37,6 +37,7 @@ if sentry_dsn:
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from backend.version import APP_VERSION
 from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, init_db_v9, init_db_v10, init_db_v11, init_db_v12, init_db_v13, seed_demo_data, seed_demo_user
 from backend.auth.service import get_current_user_from_token
@@ -56,6 +57,7 @@ from backend.routes import (
 )
 
 app = FastAPI(title="SessionGuard API", version=APP_VERSION, docs_url="/docs")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 ORIGINS = ["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000",
            "http://127.0.0.1:3000","http://localhost:1420","http://127.0.0.1:1420"]
