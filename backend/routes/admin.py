@@ -164,20 +164,35 @@ async def backup_database(authorization: Optional[str] = Header(None)):
     )
 
 
+import os, hmac, hashlib
+
+def compute_audit_hmac(row: dict) -> str:
+    """Compute HMAC-SHA256 signature for audit log tamper verification."""
+    secret = os.getenv("SECRET_KEY", "sg-audit-signing-key")
+    raw = f"{row.get('id')}:{row.get('user_id')}:{row.get('action')}:{row.get('created_at')}"
+    return hmac.new(secret.encode("utf-8"), raw.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
 @router.get("/audit/export")
 async def export_audit_log(
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     authorization: Optional[str] = Header(None),
     limit: int = Query(500, le=5000),
 ):
-    """Export security audit log as CSV or JSON."""
+    """Export security audit log as CSV or JSON with HMAC-SHA256 signatures."""
     await _require_admin(authorization)
-    rows = await async_fetch_all(
+    raw_rows = await async_fetch_all(
         "SELECT a.id, a.user_id, u.email, u.username, a.action, a.resource, "
         "a.detail, a.ip_address, a.created_at "
         "FROM audit_log a LEFT JOIN users u ON u.id = a.user_id "
         "ORDER BY a.created_at DESC LIMIT ?", (limit,)
     )
+
+    signed_rows = []
+    for r in raw_rows:
+        row_dict = dict(r)
+        row_dict["hmac_signature"] = compute_audit_hmac(row_dict)
+        signed_rows.append(row_dict)
 
     if format == "csv":
         import io
@@ -186,9 +201,9 @@ async def export_audit_log(
 
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["id", "user_id", "email", "username", "action", "resource", "detail", "ip_address", "created_at"])
-        for r in rows:
-            writer.writerow([r["id"], r["user_id"], r["email"], r["username"], r["action"], r["resource"], r["detail"], r["ip_address"], r["created_at"]])
+        writer.writerow(["id", "user_id", "email", "username", "action", "resource", "detail", "ip_address", "created_at", "hmac_signature"])
+        for r in signed_rows:
+            writer.writerow([r["id"], r["user_id"], r["email"], r["username"], r["action"], r["resource"], r["detail"], r["ip_address"], r["created_at"], r["hmac_signature"]])
 
         output.seek(0)
         return StreamingResponse(
@@ -197,4 +212,4 @@ async def export_audit_log(
             headers={"Content-Disposition": 'attachment; filename="security_audit_log.csv"'}
         )
 
-    return {"count": len(rows), "records": rows}
+    return {"count": len(signed_rows), "records": signed_rows}

@@ -134,6 +134,23 @@ export default function Settings() {
         )
       })}
 
+      {/* Database Backup & Snapshot Card */}
+      <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+          Database Backup & Snapshot
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+          Download a consistent SQLite database backup snapshot generated via native <code>VACUUM INTO</code> for safe offline storage or hardware migration.
+        </div>
+        <a href={`${BASE}/admin/backup`} target="_blank" rel="noreferrer" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          background: 'var(--accent-blue)', color: '#fff', padding: '9px 18px',
+          borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontSize: 13, fontWeight: 600
+        }}>
+          💾 Download Database Backup Snapshot
+        </a>
+      </div>
+
       {/* Build info */}
       <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Build Info</div>

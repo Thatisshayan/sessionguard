@@ -11,6 +11,7 @@ import { NotificationCenter } from './components/NotificationCenter'
 import { RequireAdmin } from './components/RequireAdmin'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
+import { ShortcutModal } from './components/ShortcutModal'
 
 // ── Pages (lazy-loaded — each page is its own chunk, split from the main bundle) ──
 const Dashboard       = lazy(() => import('./pages/Dashboard'))
@@ -319,6 +320,7 @@ export default function App() {
       <AuthProvider>
         <AppShell />
         <ToastProvider />
+        <ShortcutModal />
       </AuthProvider>
     </BrowserRouter>
   )
