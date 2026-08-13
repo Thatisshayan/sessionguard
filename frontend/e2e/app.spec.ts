@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Login page', () => {
-  test('renders login form with default credentials', async ({ page }) => {
+  test('renders login form with input fields', async ({ page }) => {
     await page.goto('/login');
     await expect(page.getByRole('button', { name: 'Sign In' }).first()).toBeVisible();
-    await expect(page.locator('input[type="email"]')).toHaveValue('demo@sessionguard.local');
-    await expect(page.locator('input[type="password"]')).toHaveValue('demo123');
+    await expect(page.locator('input[type="email"]')).toHaveAttribute('placeholder', 'you@example.com');
+    await expect(page.locator('input[type="password"]')).toHaveAttribute('placeholder', '••••••••');
   });
 
   test('can switch to signup mode and back', async ({ page }) => {
@@ -17,10 +17,9 @@ test.describe('Login page', () => {
     await expect(page.locator('input[type="password"]')).toBeVisible();
   });
 
-  test('shows demo credentials hint', async ({ page }) => {
+  test('shows local first build hint', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.getByText('Demo credentials')).toBeVisible();
-    await expect(page.getByText('demo@sessionguard.local')).toBeVisible();
+    await expect(page.getByText('Local-first build')).toBeVisible();
   });
 });
 
