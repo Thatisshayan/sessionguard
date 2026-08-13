@@ -27,7 +27,6 @@ jobs:
   drift-check:
     name: canonical-repo drift check
     runs-on: ubuntu-latest
-    if: ${{ vars.DRIFT_CANONICAL_REPO != '' || secrets.DRIFT_CANONICAL_REPO != '' }}
     steps:
       - name: Checkout candidate
         uses: actions/checkout@v4
