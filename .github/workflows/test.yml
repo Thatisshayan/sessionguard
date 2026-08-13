@@ -63,3 +63,28 @@ jobs:
       
       - name: Run OCR benchmarks
         run: python -m pytest tests/test_ocr_benchmark.py -v
+
+  playwright-e2e:
+    name: Frontend E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Run Playwright smoke tests
+        run: cd frontend && npx playwright test
