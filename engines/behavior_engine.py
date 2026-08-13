@@ -315,11 +315,12 @@ def analyze_behavior(session_id: int) -> dict:
         }
 
     patterns = {
-        "bet_escalation":    detect_bet_escalation(events),
-        "session_drift":     detect_session_drift(events),
-        "losing_clusters":   detect_losing_clusters(events),
-        "recovery_chasing":  detect_recovery_chasing(events),
-        "volatility_zones":  detect_volatility_zones(events),
+        "bet_escalation":        detect_bet_escalation(events),
+        "martingale_progression": detect_martingale_progression(events),
+        "session_drift":         detect_session_drift(events),
+        "losing_clusters":       detect_losing_clusters(events),
+        "recovery_chasing":      detect_recovery_chasing(events),
+        "volatility_zones":      detect_volatility_zones(events),
     }
 
     # Composite risk score (0-100)
