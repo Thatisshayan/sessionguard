@@ -924,6 +924,46 @@ def init_db_v12():
 
 
 # ── Phase 6b (V13): live_runs atomicity guard ──────────────────────────────────
+def init_db_v13():
+    """Add partial unique index to prevent duplicate active live runs per session."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_live_runs_active
+            ON live_runs(session_id) WHERE status IN ('running','paused')
+        """)
+        conn.commit()
+        print("[DB] V13 live_runs active-run index added.")
+    except Exception as e:
+        print(f"[DB] V13: {e}")
+    finally:
+        conn.close()
+
+
+# ── V14 FTS5 Search ──────────────────────────────────────────────────────────
+SCHEMA_V14_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+    name,
+    game_name,
+    platform,
+    notes,
+    content='sessions',
+    content_rowid='id'
+);
+"""
+
+
+def init_db_v14():
+    """Apply V14 FTS5 search index."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V14_SQL)
+        conn.commit()
+        print("[DB] V14 FTS5 search index initialized.")
+    except Exception as e:
+        print(f"[DB] V14 FTS5: {e}")
+    finally:
+        conn.close()
 
 
 def init_db_v13():
