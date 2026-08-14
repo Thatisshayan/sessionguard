@@ -11,6 +11,7 @@ Architecture:
   - ConnectionManager holds all active WebSocket connections
   - broadcast() called from engines/workers when events fire
   - Heartbeat ping every 30s to detect dead connections
+  - Connection rate limited per client IP
 
 Maturity: Working Prototype
 Future:   Replace in-memory manager with Redis pub/sub (V7) for multi-process.
@@ -20,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections import deque
 from typing import Optional
 
 # FastAPI WebSocket is built-in — no external library needed
@@ -35,6 +37,9 @@ if _HAS_FASTAPI:
 else:
     class router:  # type: ignore
         pass
+
+
+from backend.middleware.rate_limit import check_rate_limit
 
 
 # ── Connection Manager ────────────────────────────────────────────────────────
@@ -142,6 +147,12 @@ if _HAS_FASTAPI:
         Message format (server → client):
             {"type": "alert|insight|job|live_event|ping", "data": {...}}
         """
+        client_ip = websocket.client.host if websocket.client else "unknown"
+        conn_limit = check_rate_limit(client_ip, "ws_connect", max_calls=10, window_seconds=60)
+        if not conn_limit["allowed"]:
+            await websocket.close(code=4429)
+            return
+
         token = websocket.query_params.get("token") or websocket.headers.get("authorization")
         current_user = get_current_user_from_token(token if token and token.startswith("Bearer ") else f"Bearer {token}" if token else None)
         if not current_user:
@@ -173,12 +184,25 @@ if _HAS_FASTAPI:
             }))
 
             # Keep-alive loop — client can also send pings
+            msg_times = deque(maxlen=100)
             while True:
                 try:
                     # Wait for client message or timeout
                     data = await asyncio.wait_for(
                         websocket.receive_text(), timeout=30.0
                     )
+                    now = time.monotonic()
+                    msg_times.append(now)
+                    cutoff = now - 60.0
+                    recent = [t for t in msg_times if t > cutoff]
+                    if len(recent) > 120:
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "data": {"message": "Rate limit exceeded"},
+                        }))
+                        await websocket.close(code=4429)
+                        return
+
                     msg = json.loads(data)
                     if msg.get("type") == "ping":
                         await websocket.send_text(json.dumps({
