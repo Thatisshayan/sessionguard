@@ -9,10 +9,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import axios from 'axios'
+import { getProfile, createProfile, deleteProfile } from '../services/api'
 import { toast } from '../components/Toast'
-
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
 interface Region { x: number; y: number; w: number; h: number }
 interface RoiConfig {
@@ -73,7 +71,7 @@ export default function ProfileEditor() {
 
   const profileQ = useQuery({
     queryKey: ['profile', id],
-    queryFn: () => axios.get(`${BASE}/profiles/${id}`).then(res => res.data),
+    queryFn: () => getProfile(Number(id)),
     enabled: !isNew && !!id,
     retry: false,
   })
@@ -103,11 +101,11 @@ export default function ProfileEditor() {
         alert_rules: alertRules,
       }
       if (isNew) {
-        await axios.post(`${BASE}/profiles`, payload)
+        await createProfile(payload)
       } else {
         // patch — use delete+create for simplicity since no PATCH on profiles
-        await axios.delete(`${BASE}/profiles/${id}`)
-        await axios.post(`${BASE}/profiles`, payload)
+        await deleteProfile(Number(id))
+        await createProfile(payload)
       }
     },
   })

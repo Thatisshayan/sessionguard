@@ -9,9 +9,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
-
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
+import { getVideoStatus, getJobs, getSessionOcrResults } from '../services/api'
 
 interface OcrResult {
   id:              number
@@ -62,13 +60,13 @@ export default function VideoLab() {
     queryKey: ['video-lab', sessionId],
     queryFn: async () => {
       const [, j, ocr] = await Promise.all([
-        axios.get(`${BASE}/video-status`),
-        axios.get(`${BASE}/jobs?session_id=${sessionId}&status=complete&limit=10`),
-        sessionId ? axios.get(`${BASE}/sessions/${sessionId}/ocr-results`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        getVideoStatus(),
+        getJobs({ session_id: sessionId, status: 'complete', limit: 10 }),
+        sessionId ? getSessionOcrResults(sessionId).catch(() => []) : Promise.resolve([] as OcrResult[]),
       ])
       return {
-        jobs: (j.data as VideoJob[]).filter((x: any) => x.job_type === 'video_pipeline'),
-        ocrResults: (ocr.data ?? []) as OcrResult[],
+        jobs: (j as VideoJob[]).filter((x: any) => x.job_type === 'video_pipeline'),
+        ocrResults: (ocr ?? []) as OcrResult[],
       }
     },
   })

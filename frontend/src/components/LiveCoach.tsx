@@ -5,11 +5,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import axios from 'axios'
+import { getCoachStatus, getCoachMessage, resetCoach } from '../services/api'
 import { playCoachSound } from '../utils/coachSounds'
 import { toast } from './Toast'
-
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
 interface CoachMsg {
   type: 'tip' | 'warning' | 'critical' | 'positive' | 'neutral'
@@ -32,16 +30,16 @@ export default function LiveCoach({ runId, running, style = 'balanced' }: Props)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    axios.get(`${BASE}/coach-status`).then(r => setAiActive(r.data.ai_available)).catch(() => {})
+    getCoachStatus().then(r => setAiActive(r.ai_available)).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (pollRef.current) clearInterval(pollRef.current)
     if (!running || !runId) return
-    axios.post(`${BASE}/coach/${runId}/reset`).catch(() => { toast.error('Failed to reset coach') })
+    resetCoach(runId).catch(() => { toast.error('Failed to reset coach') })
     pollRef.current = setInterval(() => {
-      axios.get(`${BASE}/coach/${runId}?style=${style}`).then(res => {
-        const msg = res.data.message
+      getCoachMessage(runId, style).then(res => {
+        const msg = res.message
         if (msg) {
             playCoachSound(msg.type)
             setMessages(prev => [{...msg, id: Date.now()}, ...prev].slice(0, 20))
