@@ -208,19 +208,20 @@ def _validate_backup_snapshot(upload_path: Path) -> None:
 
 
 def _create_safety_backup(db_path: Path) -> Optional[Path]:
-    """VACUUM INTO a safety copy of the current database alongside it.
+    """Copy a consistent snapshot of the current database alongside it.
 
-    Returns None if the backup could not be created (restore proceeds anyway).
+    Uses the sqlite3 online-backup API (Connection.backup) rather than SQL,
+    avoiding any VACUUM INTO injection surface. Returns None if the backup
+    could not be created (restore proceeds anyway).
     """
     safety = db_path.with_suffix(f".pre-restore-{int(time.time())}.db")
     try:
-        cur = get_connection()
+        src = get_connection()
         try:
-            # VACUUM INTO does not support bound parameters; `safety` is derived
-            # from the server-controlled DB path, never from user input.
-            cur.execute(f"VACUUM INTO '{safety}'")  # noqa: B608 - server-derived path, VACUUM INTO has no bind support
+            with sqlite3.connect(str(safety)) as dst:
+                src.backup(dst)
         finally:
-            cur.close()
+            src.close()
     except sqlite3.Error:
         return None
     return safety

@@ -51,7 +51,7 @@ export default function Settings() {
       setRestoreFile(null)
       setConfirmOpen(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
-      window.setTimeout(() => window.location.reload(), 800)
+      window.setTimeout(() => { window.location.reload() }, 800)
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
       toast.error(detail ? `Restore failed: ${detail}` : 'Restore failed')
@@ -243,14 +243,14 @@ export default function Settings() {
           <div className="card" style={{ width: 460, maxWidth: '90vw', border: '1px solid var(--bg-border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>⚠️ Restore Database?</div>
-              <button onClick={() => setConfirmOpen(false)} disabled={restoring} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+              <button onClick={() => { setConfirmOpen(false) }} disabled={restoring} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
               This will replace the current database with the selected snapshot{restoreFile ? <> (<b style={{ color: 'var(--text-primary)' }}>{restoreFile.name}</b>)</> : null}.
               A safety copy of your current database is kept before the swap. This action cannot be undone from the UI.
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => setConfirmOpen(false)} disabled={restoring} style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--bg-border)', cursor: 'pointer', fontSize: 13 }}>
+              <button onClick={() => { setConfirmOpen(false) }} disabled={restoring} style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--bg-border)', cursor: 'pointer', fontSize: 13 }}>
                 Cancel
               </button>
               <button onClick={() => { void handleRestore() }} disabled={restoring} style={{ background: 'var(--severity-critical)', color: '#fff', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
