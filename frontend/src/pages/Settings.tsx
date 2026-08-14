@@ -165,7 +165,7 @@ export default function Settings() {
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
           Download a consistent SQLite database backup snapshot generated via native <code>VACUUM INTO</code> for safe offline storage or hardware migration.
         </div>
-        <button onClick={handleBackup} disabled={backingUp} style={{
+        <button onClick={() => { void handleBackup() }} disabled={backingUp} style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           background: 'var(--accent-blue)', color: '#fff', padding: '9px 18px',
           borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600

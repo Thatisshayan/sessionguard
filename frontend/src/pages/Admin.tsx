@@ -54,7 +54,7 @@ export default function Admin() {
   const fetchAll = () => adminQ.refetch()
 
   const patchUserMutation = useMutation({
-    mutationFn: ({ uid, patch }: { uid: number; patch: any }) => updateAdminUser(uid, patch),
+    mutationFn: ({ uid, patch }: { uid: number; patch: Record<string, unknown> }) => updateAdminUser(uid, patch),
     onSuccess: () => {
       toast.success('User updated')
       qc.invalidateQueries({ queryKey: ['admin', 'all'] })
