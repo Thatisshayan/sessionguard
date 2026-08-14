@@ -11,13 +11,6 @@ import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
-const RESTORE_BTN_STYLE = {
-  display: 'inline-flex', alignItems: 'center', gap: 8,
-  background: 'var(--severity-critical)', color: '#fff', padding: '9px 18px',
-  borderRadius: 'var(--radius-sm)', border: 'none',
-  fontSize: 13, fontWeight: 600,
-} as const
-
 interface DepRow { label: string; ok: boolean; detail: string; install?: string; group: string }
 
 export default function Settings() {
@@ -65,12 +58,6 @@ export default function Settings() {
     } finally {
       setRestoring(false)
     }
-  }
-
-  const restoreBtnStyle = {
-    ...RESTORE_BTN_STYLE,
-    cursor: restoreFile && !restoring ? 'pointer' : 'not-allowed',
-    opacity: restoreFile && !restoring ? 1 : 0.5,
   }
 
   const rowsQ = useQuery({
@@ -231,9 +218,9 @@ export default function Settings() {
               style={{ fontSize: 12, color: 'var(--text-secondary)' }}
             />
             <button
+              className="btn-danger"
               onClick={() => { if (restoreFile) setConfirmOpen(true) }}
               disabled={!restoreFile || restoring}
-              style={restoreBtnStyle}
             >
               {restoring ? '⏳ Restoring…' : '↩ Restore Database…'}
             </button>
