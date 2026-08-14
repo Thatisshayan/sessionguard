@@ -4,8 +4,10 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import axios from 'axios'
+import { getHealth, getVideoStatus, getOcrStatus, downloadDbBackup } from '../services/api'
+import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -13,19 +15,40 @@ interface DepRow { label: string; ok: boolean; detail: string; install?: string;
 
 export default function Settings() {
   const { user } = useAuth()
+  const [backingUp, setBackingUp] = useState(false)
+
+  const handleBackup = async () => {
+    setBackingUp(true)
+    try {
+      const blob = await downloadDbBackup()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `sessionguard-backup-${new Date().toISOString().slice(0, 10)}.db`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Database backup downloaded')
+    } catch {
+      toast.error('Backup download failed')
+    } finally {
+      setBackingUp(false)
+    }
+  }
 
   const rowsQ = useQuery({
     queryKey: ['settings', 'diagnostics', !!user],
     queryFn: async () => {
       const [health, video, ocr] = await Promise.allSettled([
-        axios.get(`${BASE}/health`).then(r => r.data),
-        axios.get(`${BASE}/video-status`).then(r => r.data),
-        axios.get(`${BASE}/ocr-status`).then(r => r.data),
+        getHealth(),
+        getVideoStatus(),
+        getOcrStatus(),
       ])
       const out: DepRow[] = []
 
       out.push({
-        label: 'Backend (FastAPI v0.6)',
+        label: 'Backend (FastAPI)',
         ok:    health.status === 'fulfilled',
         detail: health.status === 'fulfilled' ? 'Running on http://127.0.0.1:8000 — 20 route groups active' : 'Not reachable — run scripts/run_backend',
         group: 'core',
@@ -142,13 +165,13 @@ export default function Settings() {
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
           Download a consistent SQLite database backup snapshot generated via native <code>VACUUM INTO</code> for safe offline storage or hardware migration.
         </div>
-        <a href={`${BASE}/admin/backup`} target="_blank" rel="noreferrer" style={{
+        <button onClick={() => { void handleBackup() }} disabled={backingUp} style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           background: 'var(--accent-blue)', color: '#fff', padding: '9px 18px',
-          borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontSize: 13, fontWeight: 600
+          borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600
         }}>
-          💾 Download Database Backup Snapshot
-        </a>
+          {backingUp ? '⏳ Generating…' : '💾 Download Database Backup Snapshot'}
+        </button>
       </div>
 
       {/* Build info */}
@@ -156,15 +179,11 @@ export default function Settings() {
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Build Info</div>
         {[
           ['Product',        'SessionGuard'],
-          ['Version',        'v0.6.0 — Phase 4 Complete'],
+          ['Version',        'v1.5.2'],
           ['Architecture',   'FastAPI + SQLite + React + PySide6 + Tesseract + cv2 + sklearn'],
           ['DB Tables',      '21 — sessions, events, users, projects, jobs, live_runs, ocr_results…'],
           ['Backend Routes', '20 route groups, 45+ endpoints'],
           ['Frontend Pages', '16 pages (Dashboard, Sessions, Detail, Compare, Live, Upload, Review, Reports, Projects, Profiles, Benchmark, Jobs, Admin, Login, Settings)'],
-          ['Phase 1–2',      'DB + engines + all core routes + CSV/PDF/Excel exports'],
-          ['Phase 3',        'Real OCR · Behavior engine · Live monitor · Event timeline'],
-          ['Phase 4',        'Auth (JWT) · Projects · Job queue · Admin panel · Parser benchmark'],
-          ['Next (V7)',       'OAuth2 · Rate limiting · WebSocket alerts · EasyOCR GPU · Tauri native build'],
         ].map(([k, v]) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '7px 0', borderBottom: '1px solid var(--bg-border)', fontSize: 12, gap: 16 }}>
             <span style={{ color: 'var(--text-muted)', flexShrink: 0, minWidth: 140 }}>{k}</span>

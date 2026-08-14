@@ -132,13 +132,10 @@ export const regenerateInsights  = (id: number) => client.post(`/insights/${id}/
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
 export const getAlerts           = (params: any = {}) => client.get('/alerts', { params }).then(r => r.data)
-export const getAlertsSummary    = () => client.get('/alerts/summary').then(r => r.data)
-export const getAlertSummary     = () => client.get('/alerts/summary').then(r => r.data)
 export const acknowledgeAlert    = (id: number) => client.patch(`/alerts/${id}/acknowledge`).then(r => r.data)
 
 // ── Review Queue ──────────────────────────────────────────────────────────────
 export const getReviewQueue      = (params: any = {}) => client.get('/review-queue', { params }).then(r => r.data)
-export const getReviewSummary    = () => client.get('/review-queue/summary').then(r => r.data)
 export const getQueueSummary     = () => client.get('/review-queue/summary').then(r => r.data)
 export const resolveReviewItem   = (id: number, data: any) => client.patch(`/review-queue/${id}/resolve`, data).then(r => r.data)
 
@@ -162,6 +159,7 @@ export const compareSessions     = (session_ids: number[]) => client.post('/comp
 
 // ── Profiles ──────────────────────────────────────────────────────────────────
 export const getProfiles         = () => client.get('/profiles').then(r => r.data)
+export const getProfile          = (id: number) => client.get(`/profiles/${id}`).then(r => r.data)
 export const createProfile       = (data: any) => client.post('/profiles', data).then(r => r.data)
 export const updateProfile       = (id: number, data: any) => client.patch(`/profiles/${id}`, data).then(r => r.data)
 export const deleteProfile       = (id: number) => client.delete(`/profiles/${id}`).then(r => r.data)
@@ -187,6 +185,20 @@ export const resumeLiveRun = (id: number) => client.post(`/live/${id}/resume`).t
 export const stopLiveRun   = (id: number) => client.post(`/live/${id}/stop`).then(r => r.data)
 export const getLiveEvents = (id: number, since_id = 0) => client.get(`/live/${id}/events`, { params: { since_id } }).then(r => r.data)
 
+// ── Admin ─────────────────────────────────────────────────────────────────────
+export const getAdminHealth = () => client.get('/admin/health').then(r => r.data)
+export const getAdminStats  = () => client.get('/admin/stats').then(r => r.data)
+export const getAdminUsers  = () => client.get('/admin/users').then(r => r.data)
+export const updateAdminUser= (uid: number, patch: Record<string, unknown>) => client.patch(`/admin/users/${uid}`, patch).then(r => r.data)
+export const getAdminAudit  = (limit = 50) => client.get('/admin/audit', { params: { limit } }).then(r => r.data)
+export const downloadDbBackup = () => client.get('/admin/backup', { responseType: 'blob' }).then(r => r.data)
+
+// ── Coach ─────────────────────────────────────────────────────────────────────
+export const getCoachStatus = () => client.get('/coach/coach-status').then(r => r.data)
+export const getCoachMessage = (runId: number, style = 'balanced', force = false) =>
+  client.get(`/coach/${runId}`, { params: { style, force } }).then(r => r.data)
+export const resetCoach = (runId: number) => client.post(`/coach/${runId}/reset`).then(r => r.data)
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const login    = (email: string, password: string) => client.post('/auth/login', { email, password }).then(r => r.data)
 export const signup   = (data: any) => client.post('/auth/signup', data).then(r => r.data)
@@ -195,6 +207,7 @@ export const authLogout = () => client.post('/auth/logout').then(r => r.data)
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 export const getProjects   = () => client.get('/projects').then(r => r.data)
+export const getProject    = (id: number) => client.get(`/projects/${id}`).then(r => r.data)
 export const createProject = (data: any) => client.post('/projects', data).then(r => r.data)
 export const deleteProject = (id: number) => client.delete(`/projects/${id}`).then(r => r.data)
 

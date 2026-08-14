@@ -1,4 +1,4 @@
-﻿/**
+/**
  * src/App.tsx — SessionGuard Launch Edition.
  * 18 pages + NotificationCenter in top bar + keyboard shortcut listener.
  * All routes wired. AuthProvider. WebSocket status dot.
@@ -189,7 +189,7 @@ function Sidebar({ wsOk }: { wsOk: boolean }) {
             style={{ width: 7, height: 7, borderRadius: '50%', background: wsOk ? 'var(--accent-green)' : 'var(--text-muted)' }} />
         </div>
         <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          v1.0.0
+          v1.5.2
         </div>
       </div>
 

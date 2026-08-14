@@ -9,10 +9,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
-import axios from 'axios'
+import {
+  getAdminHealth, getAdminStats, getAdminUsers, getAdminAudit,
+  updateAdminUser, getJobs,
+} from '../services/api'
 import { toast } from '../components/Toast'
-
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
 type AdminTab = 'health' | 'users' | 'jobs' | 'audit' | 'diagnostics'
 
@@ -26,21 +27,19 @@ function StatCard({ label, value, accent }: { label: string; value: string | num
 }
 
 export default function Admin() {
-  const { accessToken, user, isAdmin } = useAuth()
+  const { user, isAdmin } = useAuth()
   const qc = useQueryClient()
   const [tab, setTab] = useState<AdminTab>('health')
 
-  const hdrs = { headers: { Authorization: `Bearer ${accessToken}` } }
-
   const adminQ = useQuery({
-    queryKey: ['admin', 'all', accessToken],
+    queryKey: ['admin', 'all'],
     queryFn: async () => {
       const [h, s, u, j, a] = await Promise.all([
-        axios.get(`${BASE}/admin/health`,  hdrs).then(r => r.data),
-        axios.get(`${BASE}/admin/stats`,   hdrs).then(r => r.data),
-        axios.get(`${BASE}/admin/users`,   hdrs).then(r => r.data),
-        axios.get(`${BASE}/jobs?limit=50`, hdrs).then(r => r.data),
-        axios.get(`${BASE}/admin/audit?limit=50`, hdrs).then(r => r.data),
+        getAdminHealth(),
+        getAdminStats(),
+        getAdminUsers(),
+        getJobs({ limit: 50 }),
+        getAdminAudit(50),
       ])
       return { health: h, stats: s, users: u, jobs: j, audit: a }
     },
@@ -55,7 +54,7 @@ export default function Admin() {
   const fetchAll = () => adminQ.refetch()
 
   const patchUserMutation = useMutation({
-    mutationFn: ({ uid, patch }: { uid: number; patch: any }) => axios.patch(`${BASE}/admin/users/${uid}`, patch, hdrs),
+    mutationFn: ({ uid, patch }: { uid: number; patch: Record<string, unknown> }) => updateAdminUser(uid, patch),
     onSuccess: () => {
       toast.success('User updated')
       qc.invalidateQueries({ queryKey: ['admin', 'all'] })

@@ -10,10 +10,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
-import axios from 'axios'
+import { getProjects, getProject, createProject, deleteProject } from '../services/api'
 import { toast } from '../components/Toast'
-
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
 interface Project {
   id:          number
@@ -35,43 +33,44 @@ const inputStyle: React.CSSProperties = {
 }
 
 export default function Projects() {
-  const { accessToken, user } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [form,       setForm]       = useState({ name: '', description: '', tags: '' })
   const [error,      setError]      = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
-  const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-
   const projectsQ = useQuery({
-    queryKey: ['projects', accessToken],
+    queryKey: ['projects', user?.id],
     queryFn: async () => {
       try {
-        const res = await axios.get(`${BASE}/projects`, { headers })
-        return res.data as Project[]
+        return await getProjects() as Project[]
       } catch (e: any) {
         if (e?.response?.status === 401) navigate('/login')
         throw e
       }
     },
+    enabled: !!user,
   })
   const projects = projectsQ.data ?? []
   const loading = projectsQ.isPending
 
   const selectedQ = useQuery({
     queryKey: ['projects', selectedId],
-    queryFn: async () => (await axios.get(`${BASE}/projects/${selectedId}`, { headers })).data as Project,
+    queryFn: async () => {
+      if (selectedId == null) throw new Error('No project selected')
+      return await getProject(selectedId) as Project
+    },
     enabled: selectedId != null,
   })
   const selected = selectedQ.data ?? null
 
   const createMutation = useMutation({
-    mutationFn: () => axios.post(`${BASE}/projects`, {
+    mutationFn: () => createProject({
       name:        form.name,
       description: form.description,
       tags:        form.tags.split(',').map(t => t.trim()).filter(Boolean),
-    }, { headers }),
+    }),
     onSuccess: () => {
       toast.success('Project created')
       setForm({ name: '', description: '', tags: '' })
@@ -80,7 +79,7 @@ export default function Projects() {
   })
   const creating = createMutation.isPending
 
-  const createProject = async () => {
+  const createProjectForm = async () => {
     if (!form.name.trim()) { setError('Project name is required.'); return }
     setError('')
     try {
@@ -92,7 +91,7 @@ export default function Projects() {
   }
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => axios.delete(`${BASE}/projects/${id}`, { headers }),
+    mutationFn: (id: number) => deleteProject(id),
     onSuccess: (_r, id) => {
       toast.success('Project deleted')
       qc.invalidateQueries({ queryKey: ['projects'] })
@@ -103,7 +102,7 @@ export default function Projects() {
     },
   })
 
-  const deleteProject = (id: number) => {
+  const confirmDeleteProject = (id: number) => {
     if (!confirm('Delete this project?')) return
     deleteMutation.mutate(id)
   }
@@ -130,7 +129,7 @@ export default function Projects() {
                 placeholder={placeholder} />
             </div>
           ))}
-          <button onClick={createProject} disabled={creating}
+          <button onClick={() => { void createProjectForm() }} disabled={creating}
             style={{ background: 'var(--accent-blue)', border: 'none', color: '#fff', padding: '9px 18px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {creating ? '…' : '+ Create'}
           </button>
@@ -165,7 +164,7 @@ export default function Projects() {
                     </div>
                   </div>
                   {(p.owner_id === user?.id || user?.role === 'admin') && (
-                    <button onClick={e => { e.stopPropagation(); deleteProject(p.id) }}
+                    <button onClick={e => { e.stopPropagation(); confirmDeleteProject(p.id) }}
                       style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}>×</button>
                   )}
                 </div>
