@@ -218,7 +218,7 @@ def _create_safety_backup(db_path: Path) -> Optional[Path]:
         try:
             # VACUUM INTO does not support bound parameters; `safety` is derived
             # from the server-controlled DB path, never from user input.
-            cur.execute(f"VACUUM INTO '{safety}'")
+            cur.execute(f"VACUUM INTO '{safety}'")  # noqa: B608 - server-derived path, VACUUM INTO has no bind support
         finally:
             cur.close()
     except sqlite3.Error:
