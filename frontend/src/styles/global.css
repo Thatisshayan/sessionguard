@@ -132,3 +132,84 @@ a:hover { text-decoration: underline; }
 .badge-warning  { background: rgba(245,158,11,0.15); color: var(--severity-warning); }
 .badge-info     { background: rgba(59,130,246,0.15); color: var(--severity-info); }
 .badge-success  { background: rgba(34,197,94,0.15);  color: var(--accent-green); }
+
+.btn-danger {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           8px;
+  background:    var(--severity-critical);
+  color:         #fff;
+  padding:       9px 18px;
+  border-radius: var(--radius-sm);
+  border:        none;
+  font-size:     13px;
+  font-weight:   600;
+}
+.btn-danger:disabled { cursor: not-allowed; opacity: 0.5; }
+.btn-danger:not(:disabled) { cursor: pointer; }
+
+.btn-secondary {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           8px;
+  background:    var(--bg-elevated);
+  color:         var(--text-primary);
+  padding:       9px 16px;
+  border-radius: var(--radius-sm);
+  border:        1px solid var(--bg-border);
+  font-size:     13px;
+}
+.btn-secondary:disabled { cursor: not-allowed; opacity: 0.5; }
+.btn-secondary:not(:disabled) { cursor: pointer; }
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position:        fixed;
+  inset:           0;
+  z-index:         9999;
+  background:      rgba(10, 12, 16, 0.85);
+  backdrop-filter: blur(8px);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.modal-card {
+  width:     460px;
+  max-width: 90vw;
+}
+
+.modal-header {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  margin-bottom:   var(--space-4);
+}
+
+.modal-title {
+  font-size:   16px;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: none;
+  border:     none;
+  color:      var(--text-muted);
+  cursor:     pointer;
+  font-size:  16px;
+}
+
+.modal-close:hover { color: var(--text-primary); }
+
+.modal-body {
+  font-size:     13px;
+  color:         var(--text-secondary);
+  line-height:   1.6;
+  margin-bottom: var(--space-4);
+}
+
+.modal-actions {
+  display:         flex;
+  justify-content: flex-end;
+  gap:             10px;
+}
