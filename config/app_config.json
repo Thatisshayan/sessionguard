@@ -25,7 +25,8 @@
   "storage": {
     "uploads_dir": "storage/uploads",
     "exports_dir": "storage/exports",
-    "recordings_dir": "storage/recordings"
+    "recordings_dir": "storage/recordings",
+    "frame_cleanup_retention_hours": 24
   },
   "thresholds": {
     "rtp_warning": 96.0,
