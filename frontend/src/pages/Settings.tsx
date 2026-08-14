@@ -67,6 +67,12 @@ export default function Settings() {
     }
   }
 
+  const restoreBtnStyle = {
+    ...RESTORE_BTN_STYLE,
+    cursor: restoreFile && !restoring ? 'pointer' : 'not-allowed',
+    opacity: restoreFile && !restoring ? 1 : 0.5,
+  }
+
   const rowsQ = useQuery({
     queryKey: ['settings', 'diagnostics', !!user],
     queryFn: async () => {
@@ -227,11 +233,7 @@ export default function Settings() {
             <button
               onClick={() => { if (restoreFile) setConfirmOpen(true) }}
               disabled={!restoreFile || restoring}
-              style={{
-                ...RESTORE_BTN_STYLE,
-                cursor: restoreFile && !restoring ? 'pointer' : 'not-allowed',
-                opacity: restoreFile && !restoring ? 1 : 0.5
-              }}
+              style={restoreBtnStyle}
             >
               {restoring ? '⏳ Restoring…' : '↩ Restore Database…'}
             </button>
