@@ -15,7 +15,12 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   approved real key (REPO_RULES R24) and external network —
   resume hint: run `analyse_session_with_ai` against a seeded session with
   `NVIDIA_API_KEY` set, assert `source == "nvidia_ai"`, check tokens logged in
-  `ai_cost_log` — open
+  `ai_cost_log` — resolved 2026-08-14: `scripts/verify_nvidia_live.py` passed
+  against the real API (source == nvidia_ai, 3 [AI] insights persisted, cost
+  logged in=537/out=244 $0.000151). Fixes surfaced: default model 404'd for the
+  account — `NVIDIA_MODELS` reordered to verified `nvidia/llama-3.3-nemotron-super-49b-v1`
+  (+pricing); `_log_ai_cost` only read `input_tokens`/`output_tokens` but NVIDIA
+  returns OpenAI-style `prompt_tokens`/`completion_tokens` — normalization added.
 - [2026-07-24] A1/A2 GitHub runner execution: the bundled-backend-smoke workflow
   and packaging-resource tests are structurally complete and locally verified
   (`tests/test_bundled_backend_smoke.py`), but no GitHub Actions run has been

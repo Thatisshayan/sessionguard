@@ -7,7 +7,7 @@ Replaces rule-based insight text with real AI narrative.
 Uses the NVIDIA API (OpenAI-compatible) directly via urllib (stdlib — no extra deps).
 Falls back to Ollama (offline) then rule-based engine gracefully when no API key is set.
 
-Model: nvidia/llama-3.1-nemotron-70b-instruct  (pricing per NVIDIA NIM)
+Model: nvidia/llama-3.3-nemotron-super-49b-v1  (pricing per NVIDIA NIM)
 Context sent: summarised session data only — never raw events (cost control).
 
 Setup:
@@ -46,6 +46,8 @@ API_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
 MAX_TOKENS   = 1024
 
 NVIDIA_MODELS = [
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
     "nvidia/llama-3.1-nemotron-70b-instruct",
     "nvidia/llama-3.3-70b-instruct",
     "nvidia/mistral-large-2-instruct",
@@ -508,6 +510,8 @@ def _is_budget_exceeded_unsafe() -> bool:
 # ── Cost tracking ─────────────────────────────────────────────────────────────
 
 MODEL_PRICING = {
+    "nvidia/llama-3.3-nemotron-super-49b-v1": {"input": 0.10, "output": 0.40},
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5": {"input": 0.10, "output": 0.40},
     "nvidia/llama-3.1-nemotron-70b-instruct": {"input": 0.12, "output": 0.12},
     "nvidia/llama-3.3-70b-instruct":          {"input": 0.12, "output": 0.12},
     "nvidia/mistral-large-2-instruct":        {"input": 0.15, "output": 0.15},
@@ -523,9 +527,13 @@ def _compute_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 
 def _log_ai_cost(session_id: int, model: str, usage: dict):
-    """Log AI API cost to the database."""
-    input_tokens = usage.get("input_tokens", 0)
-    output_tokens = usage.get("output_tokens", 0)
+    """Log AI API cost to the database.
+
+    NVIDIA NIM returns OpenAI-style usage keys (``prompt_tokens`` /
+    ``completion_tokens``); normalize to ``input_tokens`` / ``output_tokens``.
+    """
+    input_tokens = usage.get("input_tokens") or usage.get("prompt_tokens") or 0
+    output_tokens = usage.get("output_tokens") or usage.get("completion_tokens") or 0
     cost = _compute_cost(model, input_tokens, output_tokens)
     try:
         conn = get_connection()

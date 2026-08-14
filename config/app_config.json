@@ -49,11 +49,11 @@
   },
     "ai": {
         "nvidia_api_key": "",
-        "model": "nvidia/llama-3.1-nemotron-70b-instruct",
+        "nvidia_model": "nvidia/llama-3.3-nemotron-super-49b-v1",
         "note": "SECURITY: Use NVIDIA_API_KEY environment variable instead. Never commit real keys to config files.",
         "max_tokens": 1024,
-        "cost_per_million_input": 0.12,
-        "cost_per_million_output": 0.12,
+        "cost_per_million_input": 0.10,
+        "cost_per_million_output": 0.40,
         "budget_usd": 0.001,
         "ollama_model": "llama3.2:latest",
         "ollama_url": "http://localhost:11434"

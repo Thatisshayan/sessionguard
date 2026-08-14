@@ -1,6 +1,7 @@
 # SessionGuard Application Changelog
 Automated conventional commit release log.
 ## Features
+- `d6e28fe` feat(scripts): add B3 live NVIDIA NIM verification harness (thatisshayan, 2026-08-14)
 - `dd8fc61` feat(admin): DB restore endpoint + Settings restore UI (C5) (#18) (Shayan, 2026-08-14)
 - `2b9f42c` feat: Roadmap Execution Final Batch 7 - i18n Translations & Playwright E2E CI Workflow (#15) (Shayan, 2026-08-13)
 - `2cecaed` feat: Roadmap Execution Batch 6 - Production Dockerfile, FTS5 Search & Gzip Middleware (#14) (Shayan, 2026-08-13)
@@ -16,6 +17,7 @@ Automated conventional commit release log.
 - `609b8d9` feat(revival): verify runtime and unify app version (thatisshayan, 2026-07-24)
 
 ## Bug Fixes
+- `777c0e0` fix(ai): live NVIDIA NIM verification (B3) + cost-log token normalization (thatisshayan, 2026-08-14)
 - `93f1663` fix(coach): resolve payload parsing and pattern detection robustness (#16) (Shayan, 2026-08-13)
 - `d270d67` fix: address 3 remaining CodeRabbit corners (thatisshayan, 2026-07-25)
 - `04409b5` fix: wrap ScreenRecorder sync calls in asyncio.to_thread (thatisshayan, 2026-07-25)
@@ -31,6 +33,7 @@ Automated conventional commit release log.
 - `a6bc1d1` fix(auth): exempt public upload and job endpoints (thatisshayan, 2026-07-24)
 
 ## Documentation
+- `36bafbc` docs: reflect PR #18 merge in changelog and audit (#19) (Shayan, 2026-08-14)
 - `c8efd4e` docs(governance): add REPO_DIRECTIVE.md (goal-layer constitution) (thatisshayan, 2026-07-24)
 - `ea9c0f6` docs(audit): honest gap-fix audit for C5/D1 push and CI status (thatisshayan, 2026-07-25)
 - `e777900` docs(revival): align sprint status and audit evidence (thatisshayan, 2026-07-24)
@@ -56,7 +59,4 @@ Automated conventional commit release log.
 - `f234481` merge main into app hardening branch (thatisshayan, 2026-07-24)
 - `67975a9` Merge pull request #1 from Thatisshayan/codex_hygiene_archive_2026_07_24 (Shayan, 2026-07-24)
 - `cd5e67b` chore(hardening): tighten auth and archive runtime artifacts (thatisshayan, 2026-07-24)
-- `c7d81a3` chore(hygiene): archive root artifacts and update docs (thatisshayan, 2026-07-24)
-- `f9f7996` chore(governance): add directive-lint (traces-to) stage to verify + gate (thatisshayan, 2026-07-24)
-- `49cb1e8` chore(governance): harden secret-scan exclusions (.venv/_repo_clone/dist/nested node_modules) (thatisshayan, 2026-07-23)
 
