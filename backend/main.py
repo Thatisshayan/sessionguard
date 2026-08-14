@@ -1,4 +1,4 @@
-﻿"""backend/main.py -- SessionGuard v1.2.0"""
+"""backend/main.py -- SessionGuard API"""
 import os, sys, platform
 from pathlib import Path
 
@@ -65,7 +65,8 @@ extra = os.getenv("CORS_ORIGINS","")
 if extra: ORIGINS += [o.strip() for o in extra.split(",") if o.strip()]
 
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True,
-                   allow_methods=["*"], allow_headers=["*"])
+                   allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                   allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
 app.add_middleware(RequestLoggingMiddleware)
 
 @app.middleware("http")
