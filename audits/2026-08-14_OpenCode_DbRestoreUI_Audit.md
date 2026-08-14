@@ -11,7 +11,7 @@
 
 The final deferred piece of the 50-task roadmap — the **DB restore half of C5/W4.8** — has been implemented, tested, and verified. PR #17 (frontend API-consistency + backup download UI) was merged first at `e17903e` per user approval, and this restore feature builds directly on it. The backup **download** half was already shipped in PR #17; this change adds the matching **restore** half (validated upload, atomic swap, safety backup, confirm modal).
 
-All verification gates are **GREEN**: backend suite 260 passed / 6 skipped (was 253 — +7 new restore tests), frontend type-check and vite build pass, bundled-backend smoke passes.
+All verification gates are **GREEN**: backend suite 260 passed / 6 skipped (was 253 — +7 new restore tests), frontend type-check and vite build pass, bundled-backend smoke passes. PR #18 merged to `main` as `dd8fc61` (2026-08-14).
 
 ---
 
@@ -69,8 +69,9 @@ The `feat/db-restore-UI` branch went through a multi-round Codacy remediation (P
 6. **MEDIUM — restore replaces whole DB → stale frontend state** → `window.setTimeout(() => window.location.reload(), 800)` after successful restore.
 7. **LOW/MEDIUM — void-returning arrow shorthands** in `Settings.tsx` → braces added to `onClick`/`onChange`/`setTimeout` callbacks.
 8. **MEDIUM — "Method (anonymous) has 14 parameters"** on the restore `<button>`: Lizard counts the inline style object's keys + JSX attributes as function parameters. Hoisting the style to a module const (`RESTORE_BTN_STYLE`) and then a component-level `restoreBtnStyle` did **not** reduce the count — Lizard resolves the referenced const. Fix: moved the button styling into a reusable `.btn-danger` CSS class in `frontend/src/styles/global.css` and removed the inline style object entirely (button now has 3 attributes).
+9. **MEDIUM — "Method (anonymous) has 14 parameters"** (2nd report, `Settings.tsx` line ~223): the first fix dropped the button to 3 attributes but the *confirm-restore modal* block (`{confirmOpen && (...)}`) still carried multiple multi-key inline `style={{...}}` objects, which Lizard again counted as parameters — this time reproducing locally via `python -m lizard frontend/src/pages/Settings.tsx -l typescript` (the anonymous `@223-231` had PARAM 14). Local bisection (isolating the modal in `$env:TEMP` repro files) proved the trigger was the inline style objects inside the `{confirmOpen && (...)}` wrapper, not the button. Fix (`270b521`): extracted **all** modal styling into `global.css` classes (`modal-overlay`, `modal-card`, `modal-header`, `modal-title`, `modal-close`, `modal-body`, `modal-actions`) plus a `.btn-secondary` button class, and rewrote the modal JSX to use `className` only. Local lizard then showed no anonymous function with PARAM > 8.
 
-Final Codacy result pending at time of writing; all 7 original findings and the follow-up rounds have been addressed in commits `1db028b` → `c1c7bdc`.
+**Final Codacy result: PASS — 0 new issues** on head `270b521` (PR #18 CI). The 0-new-issues gate is satisfied and the merge was approved and completed as squash commit `dd8fc61` ("feat(admin): DB restore endpoint + Settings restore UI (C5) (#18)"). The Linux (AppImage + deb) build, which had failed once on a transient GitHub Actions infrastructure error ("No server is currently available to service your request"), also passed on the re-run and on `270b521`.
 
 ## Verification
 
@@ -82,6 +83,7 @@ Final Codacy result pending at time of writing; all 7 original findings and the 
 | `vite build` | pass |
 | Bundled-backend smoke (port 8012) | pass (`/health` → 200, version 1.5.2) |
 | `scripts/verify.ps1` | backend + bundle + deploy-dry + directive-lint green (one cold-start smoke timing flake re-run green) |
+| PR #18 CI (head `270b521`) | **all green** — Codacy 0 new issues, CodeFactor, CodeRabbit, qlty, backend tests, frontend type check, E2E smoke, OCR benchmarks, Linux (AppImage + deb), Windows (MSI + NSIS), macOS (DMG), bundled-backend smoke, governance gate (x2), repo-drift check |
 
 ---
 
