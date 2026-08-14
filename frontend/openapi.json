@@ -4158,6 +4158,64 @@
         }
       }
     },
+    "/api/v1/admin/restore": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Restore Database",
+        "description": "Restore the database from an uploaded SQLite backup snapshot.\n\nThe uploaded file is validated before any swap happens:\n  1. must be a readable SQLite database,\n  2. must pass an integrity check,\n  3. must contain the expected core tables.\n\nIf validation passes, the current database is first copied to a safety\nbackup alongside it, then atomically replaced by the uploaded snapshot.",
+        "operationId": "restore_database_api_v1_admin_restore_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_restore_database_api_v1_admin_restore_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/audit/export": {
       "get": {
         "tags": [
@@ -5847,6 +5905,47 @@
               "maximum": 200,
               "default": 50,
               "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tags/sessions/{session_id}/auto-tag": {
+      "post": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Auto Tag Session",
+        "description": "Automatically analyze session metrics and apply categorization tags.",
+        "operationId": "auto_tag_session_api_v1_tags_sessions__session_id__auto_tag_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
             }
           }
         ],
@@ -7809,6 +7908,54 @@
         }
       }
     },
+    "/api/v1/ai/usage": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Get Ai Usage Stats",
+        "description": "Return platform-wide AI token and compute cost usage metrics.",
+        "operationId": "get_ai_usage_stats_api_v1_ai_usage_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{session_id}/ai": {
       "post": {
         "tags": [
@@ -8142,6 +8289,20 @@
           "file"
         ],
         "title": "Body_preview_import_api_v1_import_wizard_import_preview_post"
+      },
+      "Body_restore_database_api_v1_admin_restore_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_restore_database_api_v1_admin_restore_post"
       },
       "Body_scan_full_api_v1_ocr_calibrate_ocr_calibrate_scan_post": {
         "properties": {

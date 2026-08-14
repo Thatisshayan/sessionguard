@@ -4,9 +4,9 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getHealth, getVideoStatus, getOcrStatus, downloadDbBackup } from '../services/api'
+import { getHealth, getVideoStatus, getOcrStatus, downloadDbBackup, restoreDb } from '../services/api'
 import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -16,6 +16,11 @@ interface DepRow { label: string; ok: boolean; detail: string; install?: string;
 export default function Settings() {
   const { user } = useAuth()
   const [backingUp, setBackingUp] = useState(false)
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isAdmin = user?.role === 'admin'
 
   const handleBackup = async () => {
     setBackingUp(true)
@@ -34,6 +39,23 @@ export default function Settings() {
       toast.error('Backup download failed')
     } finally {
       setBackingUp(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    if (!restoreFile) return
+    setRestoring(true)
+    try {
+      await restoreDb(restoreFile)
+      toast.success('Database restored from snapshot')
+      setRestoreFile(null)
+      setConfirmOpen(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail ? `Restore failed: ${detail}` : 'Restore failed')
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -173,6 +195,70 @@ export default function Settings() {
           {backingUp ? '⏳ Generating…' : '💾 Download Database Backup Snapshot'}
         </button>
       </div>
+
+      {/* Database Restore Card */}
+      <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+          Database Restore
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
+          Restore from a previously downloaded backup snapshot. The uploaded file is validated before the live
+          database is replaced, and a safety copy of your current database is kept alongside it.
+        </div>
+        {!isAdmin ? (
+          <div style={{ fontSize: 13, color: 'var(--severity-critical)' }}>Admin access required to restore the database.</div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".db,application/x-sqlite3"
+              onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
+              style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+            />
+            <button
+              onClick={() => { if (restoreFile) setConfirmOpen(true) }}
+              disabled={!restoreFile || restoring}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                background: 'var(--severity-critical)', color: '#fff', padding: '9px 18px',
+                borderRadius: 'var(--radius-sm)', border: 'none', cursor: restoreFile && !restoring ? 'pointer' : 'not-allowed',
+                fontSize: 13, fontWeight: 600, opacity: restoreFile && !restoring ? 1 : 0.5
+              }}
+            >
+              {restoring ? '⏳ Restoring…' : '↩ Restore Database…'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Confirm restore modal */}
+      {confirmOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div className="card" style={{ width: 460, maxWidth: '90vw', border: '1px solid var(--bg-border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>⚠️ Restore Database?</div>
+              <button onClick={() => setConfirmOpen(false)} disabled={restoring} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
+              This will replace the current database with the selected snapshot{restoreFile ? <> (<b style={{ color: 'var(--text-primary)' }}>{restoreFile.name}</b>)</> : null}.
+              A safety copy of your current database is kept before the swap. This action cannot be undone from the UI.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setConfirmOpen(false)} disabled={restoring} style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--bg-border)', cursor: 'pointer', fontSize: 13 }}>
+                Cancel
+              </button>
+              <button onClick={() => { void handleRestore() }} disabled={restoring} style={{ background: 'var(--severity-critical)', color: '#fff', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                {restoring ? 'Restoring…' : 'Confirm Restore'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Build info */}
       <div className="card" style={{ marginBottom: 'var(--space-4)' }}>

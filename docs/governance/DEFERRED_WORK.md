@@ -26,7 +26,11 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   the backup/restore UI half remains — it is a frontend (React) feature needing
   component work + a DB snapshot endpoint — resume hint: add
   `GET /api/v1/admin/backup` streaming a SQLite `VACUUM INTO`, plus a Settings
-  panel with download/restore buttons and a confirm-restore modal — open
+  panel with download/restore buttons and a confirm-restore modal — resolved
+  2026-08-14: `GET /api/v1/admin/backup` + `POST /api/v1/admin/restore`
+  (validated, atomic swap with safety backup) implemented; Settings panel has
+  download + restore buttons and a confirm-restore modal; 7 tests in
+  `tests/test_admin_restore.py`.
 - [2026-07-25] C1 full async engine conversion: routes in `alerts.py` and
   `insights.py` now wrap sync calls with `asyncio.to_thread()`, but engine
   functions (alerts_engine, insights_engine, base db module) remain sync —

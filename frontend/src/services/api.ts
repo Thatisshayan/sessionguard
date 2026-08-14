@@ -192,6 +192,11 @@ export const getAdminUsers  = () => client.get('/admin/users').then(r => r.data)
 export const updateAdminUser= (uid: number, patch: Record<string, unknown>) => client.patch(`/admin/users/${uid}`, patch).then(r => r.data)
 export const getAdminAudit  = (limit = 50) => client.get('/admin/audit', { params: { limit } }).then(r => r.data)
 export const downloadDbBackup = () => client.get('/admin/backup', { responseType: 'blob' }).then(r => r.data)
+export const restoreDb = (file: File) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return client.post('/admin/restore', fd).then(r => r.data)
+}
 
 // ── Coach ─────────────────────────────────────────────────────────────────────
 export const getCoachStatus = () => client.get('/coach/coach-status').then(r => r.data)

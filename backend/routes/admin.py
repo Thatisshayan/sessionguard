@@ -8,9 +8,14 @@ Future:   Add system metrics dashboard, quota management, org controls (V14).
 """
 
 import asyncio
-from fastapi import APIRouter, HTTPException, Header, Query
+import sqlite3
+import tempfile
+import time
+from pathlib import Path
+from fastapi import APIRouter, File, HTTPException, Header, Query, UploadFile
 from pydantic import BaseModel
 from typing import Optional
+import database.db as db_module
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.auth.service import get_current_user_from_token, hash_password
 from backend.auth.access import require_admin as _require_admin
@@ -162,6 +167,109 @@ async def backup_database(authorization: Optional[str] = Header(None)):
         filename="sessionguard_backup.db",
         media_type="application/x-sqlite3"
     )
+
+
+_EXPECTED_TABLES = {
+    "sessions", "events", "users", "projects", "jobs",
+    "live_runs", "ocr_results", "insights", "alerts", "audit_log",
+}
+
+
+@router.post("/restore")
+async def restore_database(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Restore the database from an uploaded SQLite backup snapshot.
+
+    The uploaded file is validated before any swap happens:
+      1. must be a readable SQLite database,
+      2. must pass an integrity check,
+      3. must contain the expected core tables.
+
+    If validation passes, the current database is first copied to a safety
+    backup alongside it, then atomically replaced by the uploaded snapshot.
+    """
+    await _require_admin(authorization)
+
+    if not file.filename or not file.filename.lower().endswith(".db"):
+        raise HTTPException(status_code=400, detail="Upload a .db SQLite backup file.")
+
+    # Stream the upload to a temp file so the client is fully consumed before
+    # we touch the live database.
+    upload_tmp = Path(tempfile.mkdtemp(prefix="sg_restore_")) / "upload.db"
+    try:
+        with upload_tmp.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                out.write(chunk)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to read uploaded file.")
+    finally:
+        await file.close()
+
+    if upload_tmp.stat().st_size == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    # Validate: readable SQLite + integrity + expected schema.
+    try:
+        conn = sqlite3.connect(str(upload_tmp))
+        try:
+            integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise HTTPException(status_code=400, detail=f"SQLite integrity check failed: {integrity}")
+            tables = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            missing = _EXPECTED_TABLES - tables
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Not a SessionGuard backup — missing tables: {', '.join(sorted(missing))}"
+                )
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite database.")
+
+    DB_PATH = db_module.DB_PATH
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    # Safety backup of the current database before replacing it.
+    safety = DB_PATH.with_suffix(f".pre-restore-{int(time.time())}.db")
+    try:
+        cur = get_connection()
+        try:
+            cur.execute(f"VACUUM INTO '{safety}'")
+        finally:
+            cur.close()
+    except sqlite3.Error:
+        safety = None
+
+    # Atomic swap: copy into place then replace on same filesystem.
+    staging = DB_PATH.with_suffix(".db.restore-staging")
+    try:
+        staging.write_bytes(upload_tmp.read_bytes())
+        staging.replace(DB_PATH)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Restore failed while replacing database: {exc}")
+
+    # Drop stale WAL/SHM sidecars left by the pre-restore database so they are
+    # not replayed against the restored snapshot.
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(f"{DB_PATH}{suffix}")
+        if sidecar.exists():
+            try:
+                sidecar.unlink()
+            except OSError:
+                pass
+
+    return {
+        "restored": True,
+        "safety_backup": str(safety) if safety else None,
+    }
+
 
 
 import os, hmac, hashlib

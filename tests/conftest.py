@@ -94,15 +94,12 @@ def admin_headers(client: TestClient) -> dict:
     """
     Create an admin user and return authentication headers.
     """
-    import hashlib
+    from backend.auth.service import hash_password
 
     conn = db_module.get_connection()
-    salt = os.urandom(16).hex()
-    password_hash = hashlib.pbkdf2_hmac('sha256', b'adminpassword123', salt.encode(), 260000).hex()
-
     conn.execute(
-        "INSERT INTO users (email, hashed_password, salt, role) VALUES (?, ?, ?, ?)",
-        ("admin@example.com", password_hash, salt, "admin")
+        "INSERT INTO users (email, username, hashed_password, role) VALUES (?, ?, ?, ?)",
+        ("admin@example.com", "adminuser", hash_password("adminpassword123"), "admin")
     )
     conn.commit()
     conn.close()
