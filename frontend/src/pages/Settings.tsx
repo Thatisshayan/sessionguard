@@ -230,25 +230,21 @@ export default function Settings() {
 
       {/* Confirm restore modal */}
       {confirmOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div className="card" style={{ width: 460, maxWidth: '90vw', border: '1px solid var(--bg-border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>⚠️ Restore Database?</div>
-              <button onClick={() => { setConfirmOpen(false) }} disabled={restoring} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+        <div className="modal-overlay">
+          <div className="card modal-card">
+            <div className="modal-header">
+              <div className="modal-title">⚠️ Restore Database?</div>
+              <button className="modal-close" onClick={() => { setConfirmOpen(false) }} disabled={restoring}>✕</button>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
-              This will replace the current database with the selected snapshot{restoreFile ? <> (<b style={{ color: 'var(--text-primary)' }}>{restoreFile.name}</b>)</> : null}.
+            <div className="modal-body">
+              This will replace the current database with the selected snapshot{restoreFile ? <> (<b className="text-primary">{restoreFile.name}</b>)</> : null}.
               A safety copy of your current database is kept before the swap. This action cannot be undone from the UI.
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button onClick={() => { setConfirmOpen(false) }} disabled={restoring} style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--bg-border)', cursor: 'pointer', fontSize: 13 }}>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => { setConfirmOpen(false) }} disabled={restoring}>
                 Cancel
               </button>
-              <button onClick={() => { void handleRestore() }} disabled={restoring} style={{ background: 'var(--severity-critical)', color: '#fff', padding: '9px 16px', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              <button className="btn-danger" onClick={() => { void handleRestore() }} disabled={restoring}>
                 {restoring ? 'Restoring…' : 'Confirm Restore'}
               </button>
             </div>
