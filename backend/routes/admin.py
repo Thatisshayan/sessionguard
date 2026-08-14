@@ -8,6 +8,7 @@ Future:   Add system metrics dashboard, quota management, org controls (V14).
 """
 
 import asyncio
+import shutil
 import sqlite3
 import tempfile
 import time
@@ -175,44 +176,16 @@ _EXPECTED_TABLES = {
 }
 
 
-@router.post("/restore")
-async def restore_database(
-    file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None),
-):
-    """Restore the database from an uploaded SQLite backup snapshot.
+def _validate_backup_snapshot(upload_path: Path) -> None:
+    """Validate an uploaded file is a genuine SessionGuard SQLite backup.
 
-    The uploaded file is validated before any swap happens:
+    Raises HTTPException(400) with a user-facing message on any failure:
       1. must be a readable SQLite database,
       2. must pass an integrity check,
       3. must contain the expected core tables.
-
-    If validation passes, the current database is first copied to a safety
-    backup alongside it, then atomically replaced by the uploaded snapshot.
     """
-    await _require_admin(authorization)
-
-    if not file.filename or not file.filename.lower().endswith(".db"):
-        raise HTTPException(status_code=400, detail="Upload a .db SQLite backup file.")
-
-    # Stream the upload to a temp file so the client is fully consumed before
-    # we touch the live database.
-    upload_tmp = Path(tempfile.mkdtemp(prefix="sg_restore_")) / "upload.db"
     try:
-        with upload_tmp.open("wb") as out:
-            while chunk := await file.read(1024 * 1024):
-                out.write(chunk)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Failed to read uploaded file.")
-    finally:
-        await file.close()
-
-    if upload_tmp.stat().st_size == 0:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-    # Validate: readable SQLite + integrity + expected schema.
-    try:
-        conn = sqlite3.connect(str(upload_tmp))
+        conn = sqlite3.connect(str(upload_path))
         try:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
             if integrity != "ok":
@@ -233,27 +206,73 @@ async def restore_database(
     except sqlite3.DatabaseError:
         raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite database.")
 
-    DB_PATH = db_module.DB_PATH
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    # Safety backup of the current database before replacing it.
-    safety = DB_PATH.with_suffix(f".pre-restore-{int(time.time())}.db")
+def _create_safety_backup(db_path: Path) -> Optional[Path]:
+    """VACUUM INTO a safety copy of the current database alongside it.
+
+    Returns None if the backup could not be created (restore proceeds anyway).
+    """
+    safety = db_path.with_suffix(f".pre-restore-{int(time.time())}.db")
     try:
         cur = get_connection()
         try:
+            # VACUUM INTO does not support bound parameters; `safety` is derived
+            # from the server-controlled DB path, never from user input.
             cur.execute(f"VACUUM INTO '{safety}'")
         finally:
             cur.close()
     except sqlite3.Error:
-        safety = None
+        return None
+    return safety
 
-    # Atomic swap: copy into place then replace on same filesystem.
-    staging = DB_PATH.with_suffix(".db.restore-staging")
-    try:
-        staging.write_bytes(upload_tmp.read_bytes())
-        staging.replace(DB_PATH)
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Restore failed while replacing database: {exc}")
+
+@router.post("/restore")
+async def restore_database(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Restore the database from an uploaded SQLite backup snapshot.
+
+    The uploaded file is validated before any swap happens; if validation
+    passes, the current database is first copied to a safety backup alongside
+    it, then atomically replaced by the uploaded snapshot.
+    """
+    await _require_admin(authorization)
+
+    if not file.filename or not file.filename.lower().endswith(".db"):
+        raise HTTPException(status_code=400, detail="Upload a .db SQLite backup file.")
+
+    # Stream the upload to a temp file so the client is fully consumed before
+    # we touch the live database. TemporaryDirectory removes the staging dir
+    # on success or failure.
+    with tempfile.TemporaryDirectory(prefix="sg_restore_") as tmp_dir:
+        upload_tmp = Path(tmp_dir) / "upload.db"
+        try:
+            with upload_tmp.open("wb") as out:
+                while chunk := await file.read(1024 * 1024):
+                    out.write(chunk)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Failed to read uploaded file.")
+        finally:
+            await file.close()
+
+        if upload_tmp.stat().st_size == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        _validate_backup_snapshot(upload_tmp)
+
+        DB_PATH = db_module.DB_PATH
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        safety = _create_safety_backup(DB_PATH)
+
+        # Atomic swap: copy into place on the same filesystem then replace.
+        staging = DB_PATH.with_suffix(".db.restore-staging")
+        try:
+            shutil.copyfile(upload_tmp, staging)
+            staging.replace(DB_PATH)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Restore failed while replacing database: {exc}")
 
     # Drop stale WAL/SHM sidecars left by the pre-restore database so they are
     # not replayed against the restored snapshot.

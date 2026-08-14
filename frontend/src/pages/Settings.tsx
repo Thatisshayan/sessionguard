@@ -47,12 +47,13 @@ export default function Settings() {
     setRestoring(true)
     try {
       await restoreDb(restoreFile)
-      toast.success('Database restored from snapshot')
+      toast.success('Database restored — reloading…')
       setRestoreFile(null)
       setConfirmOpen(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+      window.setTimeout(() => window.location.reload(), 800)
     } catch (err) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const detail = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
       toast.error(detail ? `Restore failed: ${detail}` : 'Restore failed')
     } finally {
       setRestoring(false)
@@ -213,7 +214,7 @@ export default function Settings() {
               ref={fileInputRef}
               type="file"
               accept=".db,application/x-sqlite3"
-              onChange={e => setRestoreFile(e.target.files?.[0] ?? null)}
+              onChange={e => { setRestoreFile(e.target.files?.[0] ?? null) }}
               style={{ fontSize: 12, color: 'var(--text-secondary)' }}
             />
             <button
