@@ -412,9 +412,6 @@ def cleanup_video_frames(retention_hours: int = 24) -> dict:
     """Remove frame directories for video jobs that completed successfully
     older than retention_hours. Idempotent — skips missing dirs and jobs
     that are not in a terminal success state."""
-    from datetime import timedelta
-    from pathlib import Path
-
     BASE_DIR = Path(__file__).resolve().parent.parent.parent
     FRAMES_DIR = BASE_DIR / "storage" / "recordings"
     cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)

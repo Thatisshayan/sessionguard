@@ -6,6 +6,8 @@ Maturity: Working Prototype — enhanced with thread-pool worker health
 """
 
 import asyncio
+import json
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -113,9 +115,33 @@ async def worker_health():
     return await asyncio.to_thread(get_worker_health)
 
 
+_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "app_config.json"
+
+
+def _frame_retention_hours(default: int = 24) -> int:
+    """Read frame cleanup retention from app_config.json, falling back to default."""
+    try:
+        cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        value = cfg.get("storage", {}).get("frame_cleanup_retention_hours", default)
+        return int(value)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return default
+
+
 @router.post("/worker/cleanup")
-async def cleanup_worker(max_age_seconds: int = 3600, retention_hours: int = 24):
-    """Clean up completed job metadata and video frame directories."""
+async def cleanup_worker(
+    max_age_seconds: int = 3600,
+    retention_hours: Optional[int] = None,
+    authorization: Optional[str] = Header(None),
+):
+    """Clean up completed job metadata and video frame directories. Admin only."""
+    user = await asyncio.to_thread(get_current_user_from_token, authorization)
+    if not user or user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required.")
+
+    if retention_hours is None:
+        retention_hours = await asyncio.to_thread(_frame_retention_hours)
+
     removed = await asyncio.to_thread(cleanup_completed_jobs, max_age_seconds)
     frames = await asyncio.to_thread(cleanup_video_frames, retention_hours)
     return {

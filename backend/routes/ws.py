@@ -183,8 +183,10 @@ if _HAS_FASTAPI:
                 "message": f"Connected to scope '{scope}'",
             }))
 
-            # Keep-alive loop — client can also send pings
-            msg_times = deque(maxlen=100)
+            # Keep-alive loop — client can also send pings.
+            # No maxlen: prune by the 60s window so the >120/min check is
+            # actually reachable (a maxlen deque would cap length below 120).
+            msg_times: deque[float] = deque()
             while True:
                 try:
                     # Wait for client message or timeout
@@ -194,8 +196,9 @@ if _HAS_FASTAPI:
                     now = time.monotonic()
                     msg_times.append(now)
                     cutoff = now - 60.0
-                    recent = [t for t in msg_times if t > cutoff]
-                    if len(recent) > 120:
+                    while msg_times and msg_times[0] <= cutoff:
+                        msg_times.popleft()
+                    if len(msg_times) > 120:
                         await websocket.send_text(json.dumps({
                             "type": "error",
                             "data": {"message": "Rate limit exceeded"},
