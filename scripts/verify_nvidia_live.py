@@ -31,6 +31,7 @@ Requires R24 approval (paid NVIDIA NIM API, pay-per-token) from Shayan.
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 import tempfile
 from pathlib import Path
@@ -86,6 +87,7 @@ def main() -> int:
         getattr(db, init)()
 
     conn = db.get_connection()
+    conn.row_factory = sqlite3.Row  # defensive: encrypted-DB path may skip db.py default
     session_id = _seed_session_and_events(conn)
     conn.close()
 
@@ -95,18 +97,8 @@ def main() -> int:
 
     result = ai.analyse_session_with_ai(session_id)
 
-    failures: list[str] = []
-
-    if result.get("source") != "nvidia_ai":
-        failures.append(f"source == {result.get('source')!r}, expected 'nvidia_ai'")
-    if result.get("ai_available") is not True:
-        failures.append(f"ai_available == {result.get('ai_available')!r}, expected True")
-    if result.get("model") != ai.NVIDIA_MODELS[0]:
-        failures.append(f"model == {result.get('model')!r}, expected {ai.NVIDIA_MODELS[0]}")
-    if result.get("error"):
-        failures.append(f"engine returned error: {result['error']}")
-
     conn = db.get_connection()
+    conn.row_factory = sqlite3.Row
     ai_rows = conn.execute(
         "SELECT text FROM insights WHERE session_id=? AND text LIKE '[AI]%'",
         (session_id,)
@@ -115,6 +107,25 @@ def main() -> int:
         "SELECT model, input_tokens, output_tokens, cost_usd FROM ai_cost_log"
     ).fetchall()
     conn.close()
+
+    return _validate_and_report_results(result, ai_rows, cost_rows, ai.NVIDIA_MODELS[0])
+
+
+def _validate_and_report_results(result: dict, ai_rows: list, cost_rows: list, expected_model: str) -> int:
+    """Validate the engine result + persisted state and print a summary.
+
+    Returns 0 on PASS, 1 on FAIL.
+    """
+    failures: list[str] = []
+
+    if result.get("source") != "nvidia_ai":
+        failures.append(f"source == {result.get('source')!r}, expected 'nvidia_ai'")
+    if result.get("ai_available") is not True:
+        failures.append(f"ai_available == {result.get('ai_available')!r}, expected True")
+    if result.get("model") != expected_model:
+        failures.append(f"model == {result.get('model')!r}, expected {expected_model}")
+    if result.get("error"):
+        failures.append(f"engine returned error: {result['error']}")
 
     if not ai_rows:
         failures.append("no [AI] insights persisted to insights table")

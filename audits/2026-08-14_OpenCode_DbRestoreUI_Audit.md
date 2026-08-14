@@ -91,4 +91,4 @@ The `feat/db-restore-UI` branch went through a multi-round Codacy remediation (P
 
 - Restore requires admin role — matches the W4.8 acceptance bar ("destructive restore requires explicit confirmation").
 - Safety backup is written beside the live DB and reported back to the client; a future enhancement could surface it in the UI.
-- Remaining deferred items (unchanged by this work): C1 async engine migration (WS5.1), B3 live NVIDIA NIM verification (needs R24-approved key), WS3 clean-VM runtime rehearsal (WS7).
+- Remaining deferred items (unchanged by this work): C1 async engine migration (WS5.1), WS3 clean-VM runtime rehearsal (WS7). B3 live NVIDIA NIM verification was resolved separately on 2026-08-14 (see `audits/2026-08-14_OpenCode_B3LiveNvidia_Audit.md`).
