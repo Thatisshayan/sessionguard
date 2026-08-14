@@ -27,6 +27,7 @@ interface OcrResult {
 
 interface VideoJob {
   id:               number
+  job_type:         string
   status:           string
   frames_extracted: number
   frames_ocr_done:  number
@@ -65,7 +66,7 @@ export default function VideoLab() {
         sessionId ? getSessionOcrResults(sessionId).catch(() => []) : Promise.resolve([] as OcrResult[]),
       ])
       return {
-        jobs: (j as VideoJob[]).filter((x: any) => x.job_type === 'video_pipeline'),
+        jobs: (j as VideoJob[]).filter((x: VideoJob) => x.job_type === 'video_pipeline'),
         ocrResults: (ocr ?? []) as OcrResult[],
       }
     },

@@ -41,7 +41,7 @@ export default function Projects() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const projectsQ = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', user?.id],
     queryFn: async () => {
       try {
         return await getProjects() as Project[]
@@ -50,13 +50,17 @@ export default function Projects() {
         throw e
       }
     },
+    enabled: !!user,
   })
   const projects = projectsQ.data ?? []
   const loading = projectsQ.isPending
 
   const selectedQ = useQuery({
     queryKey: ['projects', selectedId],
-    queryFn: async () => await getProject(selectedId!) as Project,
+    queryFn: async () => {
+      if (selectedId == null) throw new Error('No project selected')
+      return await getProject(selectedId) as Project
+    },
     enabled: selectedId != null,
   })
   const selected = selectedQ.data ?? null
@@ -125,7 +129,7 @@ export default function Projects() {
                 placeholder={placeholder} />
             </div>
           ))}
-          <button onClick={createProjectForm} disabled={creating}
+          <button onClick={() => { void createProjectForm() }} disabled={creating}
             style={{ background: 'var(--accent-blue)', border: 'none', color: '#fff', padding: '9px 18px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {creating ? '…' : '+ Create'}
           </button>

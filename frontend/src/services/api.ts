@@ -132,13 +132,10 @@ export const regenerateInsights  = (id: number) => client.post(`/insights/${id}/
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
 export const getAlerts           = (params: any = {}) => client.get('/alerts', { params }).then(r => r.data)
-export const getAlertsSummary    = () => client.get('/alerts/summary').then(r => r.data)
-export const getAlertSummary     = () => client.get('/alerts/summary').then(r => r.data)
 export const acknowledgeAlert    = (id: number) => client.patch(`/alerts/${id}/acknowledge`).then(r => r.data)
 
 // ── Review Queue ──────────────────────────────────────────────────────────────
 export const getReviewQueue      = (params: any = {}) => client.get('/review-queue', { params }).then(r => r.data)
-export const getReviewSummary    = () => client.get('/review-queue/summary').then(r => r.data)
 export const getQueueSummary     = () => client.get('/review-queue/summary').then(r => r.data)
 export const resolveReviewItem   = (id: number, data: any) => client.patch(`/review-queue/${id}/resolve`, data).then(r => r.data)
 
@@ -192,8 +189,9 @@ export const getLiveEvents = (id: number, since_id = 0) => client.get(`/live/${i
 export const getAdminHealth = () => client.get('/admin/health').then(r => r.data)
 export const getAdminStats  = () => client.get('/admin/stats').then(r => r.data)
 export const getAdminUsers  = () => client.get('/admin/users').then(r => r.data)
-export const updateAdminUser= (uid: number, patch: any) => client.patch(`/admin/users/${uid}`, patch).then(r => r.data)
+export const updateAdminUser= (uid: number, patch: Record<string, unknown>) => client.patch(`/admin/users/${uid}`, patch).then(r => r.data)
 export const getAdminAudit  = (limit = 50) => client.get('/admin/audit', { params: { limit } }).then(r => r.data)
+export const downloadDbBackup = () => client.get('/admin/backup', { responseType: 'blob' }).then(r => r.data)
 
 // ── Coach ─────────────────────────────────────────────────────────────────────
 export const getCoachStatus = () => client.get('/coach/coach-status').then(r => r.data)

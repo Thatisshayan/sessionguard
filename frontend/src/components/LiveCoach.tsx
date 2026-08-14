@@ -30,7 +30,7 @@ export default function LiveCoach({ runId, running, style = 'balanced' }: Props)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    getCoachStatus().then(r => setAiActive(r.ai_available)).catch(() => {})
+    getCoachStatus().then(r => { setAiActive(r.ai_available) }).catch(() => { /* backend may be offline */ })
   }, [])
 
   useEffect(() => {

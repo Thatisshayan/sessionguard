@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { getProfile, createProfile, deleteProfile } from '../services/api'
+import { getProfile, createProfile, updateProfile } from '../services/api'
 import { toast } from '../components/Toast'
 
 interface Region { x: number; y: number; w: number; h: number }
@@ -103,9 +103,7 @@ export default function ProfileEditor() {
       if (isNew) {
         await createProfile(payload)
       } else {
-        // patch — use delete+create for simplicity since no PATCH on profiles
-        await deleteProfile(Number(id))
-        await createProfile(payload)
+        await updateProfile(Number(id), payload)
       }
     },
   })

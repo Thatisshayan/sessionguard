@@ -4,8 +4,10 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getHealth, getVideoStatus, getOcrStatus } from '../services/api'
+import { getHealth, getVideoStatus, getOcrStatus, downloadDbBackup } from '../services/api'
+import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
@@ -13,6 +15,27 @@ interface DepRow { label: string; ok: boolean; detail: string; install?: string;
 
 export default function Settings() {
   const { user } = useAuth()
+  const [backingUp, setBackingUp] = useState(false)
+
+  const handleBackup = async () => {
+    setBackingUp(true)
+    try {
+      const blob = await downloadDbBackup()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `sessionguard-backup-${new Date().toISOString().slice(0, 10)}.db`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+      toast.success('Database backup downloaded')
+    } catch {
+      toast.error('Backup download failed')
+    } finally {
+      setBackingUp(false)
+    }
+  }
 
   const rowsQ = useQuery({
     queryKey: ['settings', 'diagnostics', !!user],
@@ -142,13 +165,13 @@ export default function Settings() {
         <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.6 }}>
           Download a consistent SQLite database backup snapshot generated via native <code>VACUUM INTO</code> for safe offline storage or hardware migration.
         </div>
-        <a href={`${BASE}/admin/backup`} target="_blank" rel="noreferrer" style={{
+        <button onClick={handleBackup} disabled={backingUp} style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
           background: 'var(--accent-blue)', color: '#fff', padding: '9px 18px',
-          borderRadius: 'var(--radius-sm)', textDecoration: 'none', fontSize: 13, fontWeight: 600
+          borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600
         }}>
-          💾 Download Database Backup Snapshot
-        </a>
+          {backingUp ? '⏳ Generating…' : '💾 Download Database Backup Snapshot'}
+        </button>
       </div>
 
       {/* Build info */}
