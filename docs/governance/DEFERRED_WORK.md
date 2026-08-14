@@ -20,7 +20,10 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   and packaging-resource tests are structurally complete and locally verified
   (`tests/test_bundled_backend_smoke.py`), but no GitHub Actions run has been
   observed for this branch — resume by watching the workflow on a PR to main —
-  open
+  resolved 2026-08-14: observed on PR #19 CI (run 31785241801) —
+  `test_staged_backend_health_responds`, `test_staged_backend_reports_canonical_version`
+  (test_bundled_backend_smoke.py) and all 4 `test_packaging_resources.py` cases
+  PASSED on GitHub Actions; bundled-backend-smoke workflow run 31785241767 passed.
 - [2026-07-24] C5 DB backup/restore UI (D2 in 1.2): the request-dedup middleware
   half of C5 is implemented and tested (`backend/middleware/request_dedup.py`);
   the backup/restore UI half remains — it is a frontend (React) feature needing
