@@ -2,7 +2,7 @@
 
 C5 (carried from 1.2 B5) asked for a request-dedup middleware. These tests
 pin the contract without wiring it into main.py by default (it's opt-in via
-``SG_DEDUP_ENABLED=1``), so the existing 190-test suite sees zero behavior
+``SG_DEDUP_ENABLED=1``), so the existing 260+ test suite sees zero behavior
 change while the dedup logic itself is regression-locked.
 """
 

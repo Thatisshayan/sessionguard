@@ -17,6 +17,7 @@ Future:   ROI auto-calibration (V8), multi-region per frame (V9).
 
 from __future__ import annotations
 import json
+import logging
 import shutil
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -158,7 +159,7 @@ def extract_frames_chunked(
         try:
             subprocess.run(cmd, capture_output=True, timeout=chunk_seconds + 30)
         except subprocess.TimeoutExpired:
-            pass
+            logging.warning("FFmpeg chunk %d timed out after %ds", chunk_idx, chunk_seconds + 30)
 
         chunk_frames = sorted([
             {"stored_path": str(p), "chunk_index": chunk_idx}
