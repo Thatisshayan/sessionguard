@@ -966,6 +966,43 @@ def init_db_v14():
         conn.close()
 
 
+SCHEMA_V15_SQL = """
+CREATE TRIGGER IF NOT EXISTS sessions_ai AFTER INSERT ON sessions BEGIN
+  INSERT INTO sessions_fts(rowid, name, game_name, platform, notes)
+  VALUES (new.id, new.name, new.game_name, new.platform, new.notes);
+END;
+CREATE TRIGGER IF NOT EXISTS sessions_ad AFTER DELETE ON sessions BEGIN
+  INSERT INTO sessions_fts(sessions_fts, rowid, name, game_name, platform, notes)
+  VALUES ('delete', old.id, old.name, old.game_name, old.platform, old.notes);
+END;
+CREATE TRIGGER IF NOT EXISTS sessions_au AFTER UPDATE ON sessions BEGIN
+  INSERT INTO sessions_fts(sessions_fts, rowid, name, game_name, platform, notes)
+  VALUES ('delete', old.id, old.name, old.game_name, old.platform, old.notes);
+  INSERT INTO sessions_fts(rowid, name, game_name, platform, notes)
+  VALUES (new.id, new.name, new.game_name, new.platform, new.notes);
+END;
+"""
+
+
+def init_db_v15():
+    """Apply V15 FTS5 triggers and backfill existing sessions."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V15_SQL)
+        conn.commit()
+        backfilled = conn.execute("""
+            INSERT INTO sessions_fts(rowid, name, game_name, platform, notes)
+            SELECT id, name, game_name, platform, notes FROM sessions
+            WHERE id NOT IN (SELECT rowid FROM sessions_fts)
+        """).rowcount
+        conn.commit()
+        print(f"[DB] V15 FTS5 triggers created, backfilled {backfilled} sessions.")
+    except Exception as e:
+        print(f"[DB] V15 FTS5: {e}")
+    finally:
+        conn.close()
+
+
 def init_db_v13():
     """Add partial unique index to prevent duplicate active live runs per session."""
     conn = get_connection()

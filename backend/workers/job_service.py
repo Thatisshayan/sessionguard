@@ -17,11 +17,12 @@ Maturity: Enhanced Prototype — thread pool executor, retry with backoff,
 from __future__ import annotations
 import json
 import logging
+import shutil
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, Future
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Callable, Any
 
@@ -389,7 +390,6 @@ def get_worker_health() -> dict:
 
 def cleanup_completed_jobs(max_age_seconds: int = 3600) -> int:
     """Remove completed job futures/metadata older than max_age_seconds."""
-    from datetime import timedelta
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
     removed = 0
     with _LOCK:
@@ -406,3 +406,56 @@ def cleanup_completed_jobs(max_age_seconds: int = 3600) -> int:
             _WORKER_METADATA.pop(job_id, None)
             removed += 1
     return removed
+
+
+def cleanup_video_frames(retention_hours: int = 24) -> dict:
+    """Remove frame directories for video jobs that completed successfully
+    older than retention_hours. Idempotent — skips missing dirs and jobs
+    that are not in a terminal success state."""
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
+    FRAMES_DIR = BASE_DIR / "storage" / "recordings"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, session_id, output_dir, completed_at, status "
+            "FROM video_jobs "
+            "WHERE status = 'complete' AND completed_at != '' AND completed_at < ?",
+            (cutoff.isoformat(),)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    removed_dirs = 0
+    freed_bytes = 0
+    skipped = 0
+
+    for row in rows:
+        output_dir = row["output_dir"]
+        if not output_dir:
+            skipped += 1
+            continue
+
+        frame_path = Path(output_dir)
+        if not frame_path.is_absolute():
+            frame_path = FRAMES_DIR / frame_path
+
+        if frame_path.exists() and frame_path.is_dir():
+            try:
+                for f in frame_path.rglob("*"):
+                    if f.is_file():
+                        freed_bytes += f.stat().st_size
+                shutil.rmtree(frame_path)
+                removed_dirs += 1
+            except Exception:
+                skipped += 1
+        else:
+            skipped += 1
+
+    return {
+        "removed_dirs": removed_dirs,
+        "skipped": skipped,
+        "freed_bytes": freed_bytes,
+        "retention_hours": retention_hours,
+    }

@@ -14,5 +14,6 @@ def test_app_version_matches_config():
 
 def test_health_routes_use_app_version():
     from backend.routes.health import health_check
+    from backend.version import APP_VERSION
 
-    assert health_check()["version"] == "1.5.2"
+    assert health_check()["version"] == APP_VERSION

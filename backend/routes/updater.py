@@ -2,7 +2,10 @@
 backend/routes/updater.py — Auto-update checker.
 Polls GitHub Releases API. No new dependencies.
 """
-import json, logging, re
+import asyncio
+import json
+import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -77,26 +80,28 @@ def _download_url(release):
     return fallback or release.get("html_url")
 
 @router.get("/updater/current-version")
-def current_version():
-    cfg = _read_config()
+async def current_version():
+    cfg = await asyncio.to_thread(_read_config)
     return {"version": _safe(cfg.get("version"), "0.0.0"),
             "build_date": _safe(cfg.get("build_date"), datetime.now(timezone.utc).isoformat()),
             "changelog_url": _safe(cfg.get("changelog_url"))}
 
 @router.get("/updater/check")
-def check_for_update():
-    cfg       = _read_config()
+async def check_for_update():
+    cfg       = await asyncio.to_thread(_read_config)
     current   = _safe(cfg.get("version"), "0.0.0")
-    dismissed = _get_setting(DISMISSED_KEY)
+    dismissed = await asyncio.to_thread(_get_setting, DISMISSED_KEY)
     url       = _github_url(cfg)
     base = {"current_version": current, "latest_version": current, "update_available": False,
             "download_url": None, "release_url": None, "release_notes": "",
             "published_at": None, "dismissed_version": dismissed, "is_dismissed": False}
     if not url: return {**base, "error": "github_config_missing"}
-    try:
+    def _fetch():
         r = requests.get(url, headers={"Accept":"application/vnd.github+json",
             "User-Agent":"SessionGuard-Updater/1.0","X-GitHub-Api-Version":"2022-11-28"}, timeout=10)
-        r.raise_for_status(); data = r.json()
+        r.raise_for_status(); return r.json()
+    try:
+        data = await asyncio.to_thread(_fetch)
         latest = _norm(data.get("tag_name")) or current
         avail  = _is_newer(latest, current)
         is_dismissed = bool(dismissed and _norm(dismissed) == _norm(latest))
@@ -111,8 +116,8 @@ class DismissRequest(BaseModel):
     version: str
 
 @router.post("/updater/dismiss")
-def dismiss_update(payload: DismissRequest):
+async def dismiss_update(payload: DismissRequest):
     version = _norm(payload.version)
     if not version: return {"ok": False, "dismissed_version": None, "error": "missing_version"}
-    saved = _set_setting(DISMISSED_KEY, version)
+    saved = await asyncio.to_thread(_set_setting, DISMISSED_KEY, version)
     return {"ok": saved, "dismissed_version": version if saved else None, "error": None if saved else "save_failed"}

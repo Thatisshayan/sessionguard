@@ -8,6 +8,7 @@ Auto-triggers frame extraction for video files.
 Maturity: Working Prototype → Phase 2 (A8: upload validation with size limits, virus scanning)
 """
 
+import asyncio
 import os
 import shutil
 import structlog
@@ -286,11 +287,11 @@ async def get_upload_status(upload_id: int):
 
 
 @router.get("/template/{format_type}")
-def download_template(format_type: str):
+async def download_template(format_type: str):
     """Download a CSV template. format_type: spin | session"""
     if format_type not in ("spin", "session"):
         raise HTTPException(status_code=400, detail="format_type must be 'spin' or 'session'.")
-    content = generate_csv_template(format_type)
+    content = await asyncio.to_thread(generate_csv_template, format_type)
     return PlainTextResponse(
         content=content,
         headers={"Content-Disposition": f'attachment; filename="sessionguard_{format_type}_template.csv"'},

@@ -23,7 +23,6 @@ async def global_search(
     Search sessions, insights, alerts, and notes in one call.
     Returns grouped results with type labels.
     """
-    term  = f"%{q}%"
     results = []
     current_user = require_current_user(authorization)
 
@@ -43,14 +42,25 @@ async def global_search(
         """
         access_params = [current_user["user_id"], current_user["user_id"]]
 
-    # Sessions — match name, game_name, platform, notes
-    sessions = await async_fetch_all(f"""
-        SELECT s.id, s.name, s.game_name, s.platform, s.date, s.net_result, s.rtp, s.status
-        FROM sessions s
-        WHERE (s.name LIKE ? OR s.game_name LIKE ? OR s.platform LIKE ? OR s.notes LIKE ?)
-        {access_clause}
-        ORDER BY s.date DESC LIMIT ?
-    """, (term, term, term, term, *access_params, limit))
+    # Sessions — use FTS5 index when available, fall back to LIKE
+    try:
+        fts_term = " ".join(q.split())
+        sessions = await async_fetch_all(f"""
+            SELECT s.id, s.name, s.game_name, s.platform, s.date, s.net_result, s.rtp, s.status
+            FROM sessions_fts f
+            JOIN sessions s ON s.id = f.rowid
+            WHERE sessions_fts MATCH ?
+            {access_clause}
+            ORDER BY s.date DESC LIMIT ?
+        """, (fts_term, *access_params, limit))
+    except Exception:
+        sessions = await async_fetch_all(f"""
+            SELECT s.id, s.name, s.game_name, s.platform, s.date, s.net_result, s.rtp, s.status
+            FROM sessions s
+            WHERE (s.name LIKE ? OR s.game_name LIKE ? OR s.platform LIKE ? OR s.notes LIKE ?)
+            {access_clause}
+            ORDER BY s.date DESC LIMIT ?
+        """, (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%", *access_params, limit))
     for r in sessions:
         results.append({
             "type":    "session",
@@ -68,7 +78,7 @@ async def global_search(
         WHERE i.text LIKE ?
         {access_clause}
         ORDER BY i.created_at DESC LIMIT ?
-    """, (term, *access_params, limit))
+    """, (f"%{q}%", *access_params, limit))
     for r in insights:
         results.append({
             "type":    "insight",
@@ -86,7 +96,7 @@ async def global_search(
         WHERE a.message LIKE ?
         {access_clause}
         ORDER BY a.created_at DESC LIMIT ?
-    """, (term, *access_params, limit))
+    """, (f"%{q}%", *access_params, limit))
     for r in alerts:
         results.append({
             "type":    "alert",
@@ -104,7 +114,7 @@ async def global_search(
         WHERE n.note LIKE ?
         {access_clause}
         ORDER BY n.created_at DESC LIMIT ?
-    """, (term, *access_params, limit))
+    """, (f"%{q}%", *access_params, limit))
     for r in notes:
         results.append({
             "type":    "note",
