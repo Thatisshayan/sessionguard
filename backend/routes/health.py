@@ -4,10 +4,30 @@ backend/routes/health.py — Basic + detailed health checks.
 
 from fastapi import APIRouter, Header, HTTPException
 from datetime import datetime, timezone
+from pathlib import Path
+import platform
+import shutil
+import subprocess
 from backend.auth.access import require_admin
 from backend.version import APP_VERSION
 
 router = APIRouter(tags=["health"])
+
+
+def _find_tesseract() -> str | None:
+    """Return the tesseract executable path, checking PATH and standard Windows locations."""
+    path = shutil.which("tesseract")
+    if path:
+        return path
+    if platform.system() == "Windows":
+        candidates = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+        for candidate in candidates:
+            if Path(candidate).exists():
+                return candidate
+    return None
 
 
 @router.get("/health")
@@ -54,7 +74,7 @@ async def health_detailed(authorization: str | None = Header(None, alias="Author
         result["status"] = "degraded"
 
     # Tesseract
-    tess_path = shutil.which("tesseract")
+    tess_path = _find_tesseract()
     if tess_path:
         try:
             r = subprocess.run(["tesseract","--version"], capture_output=True, text=True, timeout=3)
