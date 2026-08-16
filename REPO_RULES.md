@@ -14,7 +14,7 @@ Purpose: Preserve project truth, prevent stale documentation, keep work recovera
 2. `main` is sacred. Nothing reaches it without a branch, a review, green checks, and Shayan's approval.
 3. Documentation is part of the change, not a later cleanup.
 4. If it wasn't run, it wasn't verified. If it wasn't verified, say so.
-5. Recovererability beats heroics. Commit often, branch always, defer explicitly.
+5. Recoverability beats heroics. Commit often, branch always, defer explicitly.
 
 ## 1. Documentation Truth
 
@@ -158,7 +158,7 @@ Example: `agent/hermes-doc-freshness-gate`.
 `main` and long-lived branches are locked against force push. Force push only to your own ephemeral branch with an explicit need.
 
 **R30 — CI Gate Must Be Green to Merge**
-The required status checks — `secret-scan`, `build`, `test`, `doc-freshness`, `deploy-dry` — must all pass. Required checks are defined in `.github/workflows/gate.yml` and in `docs/governance/BRANCH_POLICY.md`.
+The `gate` workflow job (`secret-scan`, `build`, `test`, `doc-freshness`, `deploy-dry`) must pass. Required checks are defined in `.github/workflows/gate.yml` and in `docs/governance/BRANCH_POLICY.md`.
 
 **R32 — Repo-Adaptive Verification**
 Verification matches the repo. Repos with no production deploy run a smoke build / dry-run instead of a real deploy; the gate still requires that smoke to pass. Detection logic lives in `scripts/verify.sh` / `scripts/verify.ps1`.
@@ -231,7 +231,17 @@ GitHub branch protection for `main` (set via Settings → Branches or `gh`):
 - Block force pushes and branch deletion.
 See `docs/governance/BRANCH_POLICY.md`.
 
-## Appendix B — CI Gate Spec
+## Appendix C — Security: Threat Model & Hardening
+
+SessionGuard is designed as a **local-first, single-user desktop application**. Its security posture is optimized for this environment:
+
+1.  **Loopback Binding:** The backend (FastAPI/Uvicorn) and database bind exclusively to `127.0.0.1`. It does not listen on `0.0.0.0` or any external network interface. Exposure is limited to the local machine's loopback interface.
+2.  **Authentication:** Sensitive "write" endpoints (Uploads, Job Control) require JWT authentication.
+3.  **Secret Key Enforcement:** In release builds, the application requires a `SECRET_KEY` environment variable. It will refuse to start with an insecure random fallback unless `SESSIONGUARD_DEV_MODE=true` is set.
+4.  **Local Encryption:** Database encryption uses SQLCipher (PBKDF2-HMAC-SHA256) when enabled via `SG_DB_PASSWORD`.
+5.  **No SaaS/Multi-Tenancy:** The application explicitly does not support multi-tenant RBAC, hosted auth, or public internet exposure. Any attempt to expose the service to a network should be gated by a VPN or SSH tunnel.
+
+## Appendix D — CI Gate Spec
 
 `.github/workflows/gate.yml` runs on PRs to `main` and on pushes to non-main branches.
 Jobs / checks:
@@ -242,13 +252,13 @@ Jobs / checks:
 
 All checks must be green to merge. See `scripts/verify.sh` / `scripts/verify.ps1` for the implementation.
 
-## Appendix C — Doc Freshness Check Details
+## Appendix E — Doc Freshness Check Details
 
 - Baseline captured on first apply into `docs/_baseline.json` (`{"md_count": N}`).
 - Any drop below baseline without an approved deletion (Rule 14) fails CI.
-- Audit age computed from file mtime of the newest `audits/*.md` (excluding `audits/private/`).
+- Audit age computed from the ISO date prefix (`YYYY-MM-DD`) in the newest non-private audit filename, compared against today's UTC date. This is more reliable than file mtime, which can change on checkout.
 
-## Appendix D — Apply Script Usage
+## Appendix F — Apply Script Usage
 
 From the repo root you want to govern:
 
@@ -265,7 +275,7 @@ apply_repo_governance.sh . --pr
 
 The script never pushes to `main`. It creates a branch `agent/hermes-governance-bootstrap`, writes the governance files, seeds an initial audit dated today, commits locally, and (with `--pr`) opens a PR for Shayan's approval.
 
-## Appendix E — Audit Filename Examples
+## Appendix G — Audit Filename Examples
 
 - `2026-07-23_Hermes_GovernanceBootstrap_Audit.md`
 - `2026-08-01_Codex_Security_Audit.md`

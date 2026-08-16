@@ -41,7 +41,7 @@ hygiene/
 !.env.example
 *.p8
 *.p12
-*_credential*
+*credential*
 node_modules/
 dist/
 build/
@@ -50,3 +50,6 @@ build/
 .vs/
 desktop.ini
 audits/private/
+_repo_clone/
+desktop_shell/bundle/
+desktop_shell/*.log

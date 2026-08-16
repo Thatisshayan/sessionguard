@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         if: ${{ hashFiles('package.json') != '' }}
@@ -30,5 +32,101 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install doc-link checker
+        run: npm install -g markdown-link-check
+
       - name: Run governance verification
         run: bash scripts/verify.sh
+
+  dependency-audit:
+    name: dependency vulnerability audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      # pip-audit has no per-severity gate flag, and there are known
+      # unresolved advisories in pinned deps (pillow, pyjwt, starlette, ...)
+      # already tracked by Dependabot PRs. Keep the audit reporting (visible
+      # as a step warning) but non-blocking so it does not red-gate the PR
+      # while those upgrades land. Remove continue-on-error once the deps
+      # are bumped to make this fail-closed.
+      - name: Run pip-audit (report-only)
+        continue-on-error: true
+        run: pip-audit -r requirements.txt --skip-editable
+
+      - name: Setup Node
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Fail-closed for CRITICAL advisories (currently none). This truly
+      # blocks the gate on the highest-severity tier instead of the previous
+      # `|| true` which masked every finding.
+      - name: Run npm audit
+        if: ${{ hashFiles('frontend/package-lock.json') != '' }}
+        run: cd frontend && npm audit --audit-level=critical
+
+  version-parity:
+    name: version-parity check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify version parity
+        run: python -c "
+import json, re, sys
+from pathlib import Path
+
+cfg = json.loads(Path('config/app_config.json').read_text())
+expected = cfg['version']
+
+files = {
+    'desktop_shell/package.json': ('version', True),
+    'desktop_shell/src-tauri/Cargo.toml': ('version', False),
+    'desktop_shell/src-tauri/tauri.conf.json': ('package.version', True),
+}
+
+errors = []
+for path, (key, is_json) in files.items():
+    p = Path(path)
+    if not p.exists():
+        errors.append(f'{path}: missing')
+        continue
+    text = p.read_text()
+    if is_json:
+        data = json.loads(text)
+        parts = key.split('.')
+        val = data
+        for part in parts:
+            val = val.get(part, '') if isinstance(val, dict) else ''
+        actual = str(val) if val else ''
+    else:
+        m = re.search(r'^version\s*=\s*[\"\'](.*?)[\"\']', text, re.MULTILINE)
+        actual = m.group(1) if m else ''
+    if actual != expected:
+        errors.append(f'{path}: {actual} != {expected}')
+
+if errors:
+    print('Version parity failures:')
+    for e in errors:
+        print(f'  - {e}')
+    sys.exit(1)
+print(f'Version parity OK: {expected}')
+"

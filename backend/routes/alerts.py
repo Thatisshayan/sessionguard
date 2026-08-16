@@ -2,70 +2,90 @@
 backend/routes/alerts.py
 -------------------------
 Alert retrieval, acknowledgement, and summary endpoints.
+All routes use async def and wrap sync engine calls with asyncio.to_thread
+so that SQLite I/O does not block the event loop.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+import asyncio
+import json as _json
+
+import structlog
+from fastapi import APIRouter, HTTPException, Query, Header
 from typing import Optional
+
+_log = structlog.get_logger("sessionguard.alerts")
 from engines.alerts_engine import (
     get_alerts,
     acknowledge_alert,
     generate_and_persist_alerts,
     get_alert_summary,
 )
+from backend.auth.access import require_admin, require_session_access
 
 router = APIRouter(tags=["alerts"])
 
 
 @router.get("")
-def list_alerts(
+async def list_alerts(
     session_id:          Optional[int]  = Query(None),
     unacknowledged_only: bool           = Query(False),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """Return alerts. Critical first. Optionally filter by session or status."""
-    return get_alerts(session_id=session_id, unacknowledged_only=unacknowledged_only)
+    if session_id is not None:
+        await require_session_access(session_id, authorization)
+    else:
+        await require_admin(authorization)
+    return await asyncio.to_thread(
+        get_alerts, session_id=session_id, unacknowledged_only=unacknowledged_only
+    )
 
 
 @router.get("/summary")
-def alert_summary():
+async def alert_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return counts by severity for dashboard badges."""
-    return get_alert_summary()
+    await require_admin(authorization)
+    return await asyncio.to_thread(get_alert_summary)
 
 
 @router.patch("/{alert_id}/acknowledge")
-def acknowledge(alert_id: int):
+async def acknowledge(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Mark an alert as acknowledged."""
-    success = acknowledge_alert(alert_id)
+    await require_admin(authorization)
+    success = await asyncio.to_thread(acknowledge_alert, alert_id)
     if not success:
         raise HTTPException(status_code=404, detail="Alert not found.")
     return {"alert_id": alert_id, "acknowledged": True}
 
 
 @router.post("/{session_id}/regenerate")
-def regenerate_alerts(session_id: int):
+async def regenerate_alerts(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Re-run alert rules for a session. Replaces existing alerts."""
-    results = generate_and_persist_alerts(session_id)
+    await require_session_access(session_id, authorization)
+    results = await asyncio.to_thread(generate_and_persist_alerts, session_id)
     if results is None:
         raise HTTPException(status_code=404, detail="Session not found.")
     return {"session_id": session_id, "generated": len(results), "alerts": results}
 
 
 @router.get("/{alert_id}/explain")
-def explain_alert(alert_id: int):
+async def explain_alert(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Return AI-generated root cause explanation for an alert.
     Calls NVIDIA AI or Ollama with session context; falls back to rule-based.
     """
-    from engines.alerts_engine import get_alerts
-    from engines.ai_insights_engine import _build_session_summary, _call_claude, _get_api_key, SYSTEM_PROMPT
-    from engines.offline_ai import is_ollama_available as _ollama_available, call_ollama_json as _ollama_call
+    from engines.alerts_engine import get_alerts as _get_alerts
+    from engines.ai_insights_engine import _build_session_summary, async_call_nvidia, _get_api_key, SYSTEM_PROMPT
+    from engines.offline_ai import async_is_ollama_available, async_call_ollama_json as _ollama_call
 
-    alerts = get_alerts()
-    alert = next((a for a in alerts if a["id"] == alert_id), None)
+    alerts = await asyncio.to_thread(_get_alerts, alert_id=alert_id)
+    alert = alerts[0] if alerts else None
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found.")
 
     session_id = alert["session_id"]
-    summary = _build_session_summary(session_id)
+    await require_session_access(session_id, authorization)
+    summary = await asyncio.to_thread(_build_session_summary, session_id)
 
     explain_prompt = f"""You are a session analyst explaining why an alert fired.
 
@@ -89,20 +109,21 @@ Output JSON only:
 
     if api_key:
         try:
-            raw_text, _ = _call_claude(explain_prompt, api_key, system_prompt=SYSTEM_PROMPT)
-            import json
-            data = json.loads(raw_text)
+            raw_text, _ = await async_call_nvidia(
+                explain_prompt, api_key, system_prompt=SYSTEM_PROMPT
+            )
+            data = _json.loads(raw_text)
             return {"alert_id": alert_id, "source": "nvidia_ai", "explanation": data}
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("nvidia_explain_alert_failed", alert_id=alert_id, error=str(exc))
 
-    if _ollama_available():
+    if await async_is_ollama_available():
         try:
-            result = _ollama_call(explain_prompt)
+            result = await _ollama_call(explain_prompt)
             if result and "error" not in result:
                 return {"alert_id": alert_id, "source": "ollama", "explanation": result}
-        except Exception:
-            pass
+        except Exception as exc:
+            _log.warning("ollama_explain_alert_failed", alert_id=alert_id, error=str(exc))
 
     return {
         "alert_id": alert_id,

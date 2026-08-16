@@ -16,6 +16,8 @@ Future:   EasyOCR fallback (V7), GPU acceleration (V10).
 """
 
 from __future__ import annotations
+import os
+import platform
 import re
 import shutil
 from pathlib import Path
@@ -27,7 +29,6 @@ import pytesseract
 from database.db import get_connection
 
 # ── Windows: hard-set Tesseract path so pytesseract never guesses ─────────────
-import os, platform
 if platform.system() == "Windows":
     _tess_exe = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
@@ -41,11 +42,48 @@ CONFIDENCE_THRESHOLD = 0.75   # below this → flagged for review
 NUMERIC_PATTERN = re.compile(r"[-+]?\d{1,6}(?:[.,]\d{1,2})?")
 
 
+def detect_ocr_anomalies(
+    balance: float | None,
+    bet: float | None,
+    win: float | None,
+    prev_balance: float | None = None
+) -> list[str]:
+    """Flag statistical anomalies in extracted OCR field values."""
+    anomalies = []
+    if balance is not None and balance < 0:
+        anomalies.append("Negative balance detected")
+    if bet is not None and bet < 0:
+        anomalies.append("Negative bet detected")
+    if win is not None and win < 0:
+        anomalies.append("Negative win detected")
+    if prev_balance is not None and balance is not None and prev_balance > 0:
+        ratio = balance / prev_balance
+        if ratio > 10.0 or ratio < 0.05:
+            anomalies.append(f"Unusual balance jump (from ${prev_balance:.2f} to ${balance:.2f})")
+    return anomalies
+
+
 # ── Availability check ────────────────────────────────────────────────────────
+
+def _find_tesseract() -> str | None:
+    """Return the tesseract executable path, checking PATH and standard Windows locations."""
+    path = shutil.which("tesseract")
+    if path:
+        return path
+    if platform.system() == "Windows":
+        candidates = [
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        ]
+        for candidate in candidates:
+            if Path(candidate).exists():
+                return candidate
+    return None
+
 
 def check_ocr_status() -> dict:
     """Return honest status of all OCR backends."""
-    tesseract_path = shutil.which("tesseract")
+    tesseract_path = _find_tesseract()
     tess_ok = False
     tess_version = None
 

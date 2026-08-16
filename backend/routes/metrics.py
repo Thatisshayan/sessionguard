@@ -4,7 +4,10 @@ backend/routes/metrics.py
 Aggregate KPI endpoints. Delegates entirely to analysis_engine.
 """
 
-from fastapi import APIRouter
+import asyncio
+from fastapi import APIRouter, Header
+from typing import Optional
+from backend.auth.access import require_admin
 from engines.analysis_engine import (
     get_global_metrics,
     get_rtp_distribution,
@@ -16,24 +19,28 @@ router = APIRouter(tags=["metrics"])
 
 
 @router.get("")
-def global_metrics():
+async def global_metrics(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Dashboard KPI strip — platform-wide aggregates."""
-    return get_global_metrics()
+    await require_admin(authorization)
+    return await asyncio.to_thread(get_global_metrics)
 
 
 @router.get("/rtp-distribution")
-def rtp_distribution():
+async def rtp_distribution(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Session count bucketed by RTP range. Used for histogram charts."""
-    return get_rtp_distribution()
+    await require_admin(authorization)
+    return await asyncio.to_thread(get_rtp_distribution)
 
 
 @router.get("/net-over-time")
-def net_over_time():
+async def net_over_time(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Cumulative net result by date. Used for line/area charts."""
-    return get_net_result_over_time()
+    await require_admin(authorization)
+    return await asyncio.to_thread(get_net_result_over_time)
 
 
 @router.get("/by-game")
-def performance_by_game():
+async def performance_by_game(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Avg RTP and net result grouped by game name."""
-    return get_performance_by_game()
+    await require_admin(authorization)
+    return await asyncio.to_thread(get_performance_by_game)

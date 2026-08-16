@@ -8,16 +8,20 @@ Auto-triggers frame extraction for video files.
 Maturity: Working Prototype → Phase 2 (A8: upload validation with size limits, virus scanning)
 """
 
+import asyncio
 import os
 import shutil
 import structlog
+import sys
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
+from backend.auth.service import get_current_user_from_token
 from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
+from backend.auth.access import require_session_access
 from backend.middleware.rate_limit import check_rate_limit, rate_limit_headers, get_client_ip
 
 logger = structlog.get_logger(__name__)
@@ -87,14 +91,14 @@ def _scan_file_with_clamav(file_path: Path) -> tuple[bool, str]:
 
 # ── Background tasks ──────────────────────────────────────────────────────────
 
-def _bg_parse_csv(file_path: str, upload_id: int, session_id: int | None):
+def _bg_parse_csv(file_path: str, upload_id: int, session_id: int | None, owner_id: int | None):
     """Run CSV parsing in the background after upload completes."""
     conn = get_connection()
     conn.execute("UPDATE uploads SET status='processing' WHERE id=?", (upload_id,))
     conn.commit()
     conn.close()
 
-    result = parse_csv_file(file_path, upload_id, session_id)
+    result = parse_csv_file(file_path, upload_id, session_id, owner_id=owner_id)
 
     conn2 = get_connection()
     if result["success"]:
@@ -149,6 +153,23 @@ async def upload_file(
     Video files → frame extraction triggered (background task).
     Returns immediately with upload_id and status=processing.
     """
+    # 1. AUTH CHECK
+    auth_header = request.headers.get("authorization")
+    current_user = get_current_user_from_token(auth_header)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    
+    owner_id = current_user["user_id"]
+
+    # 2. SESSION ACCESS CHECK
+    if session_id is not None:
+        try:
+            sid_int = int(session_id)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid session_id format.")
+        await require_session_access(sid_int, auth_header)
+
+    # 3. RATE LIMIT
     limit_result = check_rate_limit(get_client_ip(request), "upload", max_calls=10, window_seconds=60)
     if not limit_result["allowed"]:
         raise HTTPException(
@@ -157,7 +178,7 @@ async def upload_file(
             headers=rate_limit_headers(limit_result),
         )
 
-    # Detect file type
+    # 4. TYPE CHECK
     content_type = (file.content_type or "").split(";")[0].strip()
     file_type = ALLOWED_TYPES.get(content_type)
 
@@ -175,10 +196,11 @@ async def upload_file(
                    f"Accepted: CSV, MP4, MKV, MOV, AVI, PNG, JPEG."
         )
 
+    # 5. STORAGE PREP
     safe_name = _safe_filename(file.filename or "upload")
     dest_path = _unique_path(UPLOADS_DIR / safe_name)
 
-    # Read file content to check size and write to disk
+    # 6. SIZE CHECK & WRITE
     file_size = 0
     chunk_size = 8192  # 8KB chunks
     try:
@@ -198,22 +220,18 @@ async def upload_file(
         dest_path.unlink(missing_ok=True)
         raise
 
-    # Reset file pointer for potential re-use
+    # Reset file pointer
     await file.seek(0)
-
     logger.info(f"File uploaded: {file.filename}, size: {file_size} bytes, type: {file_type}")
 
-    # Virus scan (optional - skip if unavailable)
+    # 7. VIRUS SCAN
     is_clean, scan_message = _scan_file_with_clamav(dest_path)
     if not is_clean:
-        # Delete infected file
         dest_path.unlink(missing_ok=True)
         logger.error(f"Virus scan failed for {file.filename}: {scan_message}")
-        raise HTTPException(
-            status_code=403,
-            detail=f"File rejected by virus scan: {scan_message}"
-        )
+        raise HTTPException(status_code=403, detail=f"File rejected by virus scan: {scan_message}")
 
+    # 8. DB REGISTER
     upload_id = await async_execute(
         "INSERT INTO uploads (session_id, filename, file_type, file_path, status) "
         "VALUES (?, ?, ?, ?, ?)",
@@ -221,9 +239,9 @@ async def upload_file(
          "processing" if file_type in ("csv", "video") else "complete")
     )
 
-    # Trigger background processing
+    # 9. TRIGGER BG
     if file_type == "csv":
-        background_tasks.add_task(_bg_parse_csv, str(dest_path), upload_id, session_id)
+        background_tasks.add_task(_bg_parse_csv, str(dest_path), upload_id, session_id, owner_id)
         processing_note = "CSV file queued for parsing — sessions and events will appear shortly."
     elif file_type == "video":
         background_tasks.add_task(_bg_extract_frames, str(dest_path), upload_id)
@@ -269,11 +287,11 @@ async def get_upload_status(upload_id: int):
 
 
 @router.get("/template/{format_type}")
-def download_template(format_type: str):
+async def download_template(format_type: str):
     """Download a CSV template. format_type: spin | session"""
     if format_type not in ("spin", "session"):
         raise HTTPException(status_code=400, detail="format_type must be 'spin' or 'session'.")
-    content = generate_csv_template(format_type)
+    content = await asyncio.to_thread(generate_csv_template, format_type)
     return PlainTextResponse(
         content=content,
         headers={"Content-Disposition": f'attachment; filename="sessionguard_{format_type}_template.csv"'},

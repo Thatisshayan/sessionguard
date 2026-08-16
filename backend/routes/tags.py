@@ -64,6 +64,38 @@ async def sessions_with_tag(tag: str, limit: int = Query(50, le=200)):
     return {"tag": tag, "sessions": rows}
 
 
+@router.post("/sessions/{session_id}/auto-tag")
+async def auto_tag_session(session_id: int):
+    """Automatically analyze session metrics and apply categorization tags."""
+    session = await async_fetch_one("SELECT * FROM sessions WHERE id=?", (session_id,))
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    auto_tags = []
+    if session["rtp"] < 85.0:
+        auto_tags.append("low_rtp")
+    elif session["rtp"] > 110.0:
+        auto_tags.append("high_rtp")
+
+    if session["net_result"] < -200.0:
+        auto_tags.append("high_loss")
+    elif session["net_result"] > 500.0:
+        auto_tags.append("big_win")
+
+    if session["losing_streak"] >= 10:
+        auto_tags.append("streak_alert")
+
+    if session["total_bets"] / max(session["spins"], 1) > 10.0:
+        auto_tags.append("high_roller")
+
+    added_tags = []
+    for t in auto_tags:
+        await async_execute("INSERT OR IGNORE INTO session_tags (session_id, tag) VALUES (?,?)", (session_id, t))
+        added_tags.append(t)
+
+    return {"session_id": session_id, "applied_tags": added_tags}
+
+
 # ── Comments ──────────────────────────────────────────────────────────────────
 
 class CommentCreate(BaseModel):

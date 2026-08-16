@@ -8,19 +8,26 @@ POST /ocr-calibrate/test-roi   -- test specific ROI coordinates on an image
 POST /ocr-calibrate/auto       -- auto-detect ROI regions from screenshot
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+import asyncio
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Header
 from pathlib import Path
+from typing import Optional
 import tempfile, json, shutil
+from backend.auth.access import require_admin
 
 router = APIRouter(tags=["ocr-calibrate"])
 
 
 @router.post("/ocr-calibrate/scan")
-async def scan_full(file: UploadFile = File(...)):
+async def scan_full(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """
     Scan a full screenshot and return ALL detected text with pixel positions.
     Use this to find the correct ROI coordinates for balance/bet/win fields.
     """
+    await require_admin(authorization)
     suffix = Path(file.filename or 'img.png').suffix or '.png'
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -28,7 +35,7 @@ async def scan_full(file: UploadFile = File(...)):
 
     try:
         from engines.ocr_engine import scan_image
-        result = scan_image(tmp_path)
+        result = await asyncio.to_thread(scan_image, tmp_path)
 
         # Group nearby words into lines for easier reading
         words = result.get('words', [])
@@ -82,11 +89,13 @@ async def test_roi(
     w:       int  = Form(200),
     h:       int  = Form(60),
     scale:   float = Form(2.0),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
     """
     Crop to exact ROI and OCR just that region.
     Use to verify your ROI coordinates hit the right number.
     """
+    await require_admin(authorization)
     suffix = Path(file.filename or 'img.png').suffix or '.png'
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -140,12 +149,16 @@ async def test_roi(
 
 
 @router.post("/ocr-calibrate/auto")
-async def auto_calibrate(file: UploadFile = File(...)):
+async def auto_calibrate(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """
     Auto-detect ROI regions from a game screenshot.
     Uses contour detection + OCR label matching to find balance/bet/win fields.
     Returns a ready-to-use roi_config dict.
     """
+    await require_admin(authorization)
     suffix = Path(file.filename or 'img.png').suffix or '.png'
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -153,7 +166,7 @@ async def auto_calibrate(file: UploadFile = File(...)):
 
     try:
         from engines.roi_calibrator import auto_calibrate_roi
-        result = auto_calibrate_roi(tmp_path)
+        result = await asyncio.to_thread(auto_calibrate_roi, tmp_path)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

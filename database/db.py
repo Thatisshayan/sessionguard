@@ -41,9 +41,13 @@ def get_connection():
             return create_encrypted_connection(db_path_str, password)
 
     # Fallback: plain SQLite
-    conn = sqlite3.connect(db_path_str, check_same_thread=False)
+    conn = sqlite3.connect(db_path_str, check_same_thread=False, timeout=15)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.OperationalError:
+        print("[DB] Warning: WAL mode unavailable; using default rollback journal.")
+    conn.execute("PRAGMA busy_timeout = 15000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -73,17 +77,19 @@ async def get_async_connection():
         password = encryption.get("password") or os.getenv("SG_DB_PASSWORD", "")
         if password:
             # For encrypted DBs, use SQLCipher with aiosqlite
-            conn = await aiosqlite.connect(db_path_str)
+            conn = await aiosqlite.connect(db_path_str, timeout=15)
             await conn.execute("PRAGMA key=?", [password])
             await conn.execute("PRAGMA journal_mode=WAL")
             await conn.execute("PRAGMA foreign_keys=ON")
+            await conn.execute("PRAGMA busy_timeout = 15000")
             conn.row_factory = aiosqlite.Row
             return conn
     
     # Fallback: plain async SQLite
-    conn = await aiosqlite.connect(db_path_str)
+    conn = await aiosqlite.connect(db_path_str, timeout=15)
     await conn.execute("PRAGMA journal_mode=WAL")
     await conn.execute("PRAGMA foreign_keys=ON")
+    await conn.execute("PRAGMA busy_timeout = 15000")
     conn.row_factory = aiosqlite.Row
     return conn
 
@@ -135,6 +141,7 @@ async def async_execute_many(query: str, params_list: list[tuple]) -> int:
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
     name             TEXT    NOT NULL,
     game_name        TEXT    NOT NULL,
     platform         TEXT    NOT NULL,
@@ -373,6 +380,11 @@ def seed_demo_data(force: bool = False):
         """)
 
     random.seed(42)
+    demo_user = conn.execute(
+        "SELECT id FROM users WHERE email=?",
+        ("demo@sessionguard.local",)
+    ).fetchone()
+    demo_owner_id = demo_user["id"] if demo_user else None
 
     # Default profiles
     conn.executemany(
@@ -398,11 +410,12 @@ def seed_demo_data(force: bool = False):
 
     for i in range(12):
         s = _random_session(i)
+        s["owner_id"] = demo_owner_id
         cur = conn.execute(
-            "INSERT INTO sessions (name,game_name,platform,date,duration_minutes,"
+            "INSERT INTO sessions (owner_id,name,game_name,platform,date,duration_minutes,"
             "start_balance,end_balance,total_bets,total_wins,net_result,rtp,spins,"
             "biggest_win,biggest_loss,losing_streak,status,notes) VALUES "
-            "(:name,:game_name,:platform,:date,:duration_minutes,:start_balance,"
+            "(:owner_id,:name,:game_name,:platform,:date,:duration_minutes,:start_balance,"
             ":end_balance,:total_bets,:total_wins,:net_result,:rtp,:spins,"
             ":biggest_win,:biggest_loss,:losing_streak,:status,:notes)", s)
         sid = cur.lastrowid
@@ -602,7 +615,10 @@ def init_db_v3():
 
 
 def seed_demo_user():
-    """Create a demo user for local development."""
+    """Create a demo user for local development when explicitly configured."""
+    demo_password = os.getenv("SESSIONGUARD_DEMO_PASSWORD", "").strip()
+    if not demo_password:
+        return
     from backend.auth.service import hash_password
     conn = get_connection()
     existing = conn.execute("SELECT id FROM users WHERE email=?",
@@ -613,11 +629,11 @@ def seed_demo_user():
     conn.execute(
         "INSERT INTO users (email, username, hashed_password, role) VALUES (?,?,?,?)",
         ("demo@sessionguard.local", "demo",
-         hash_password("demo123"), "admin")
+         hash_password(demo_password), "admin")
     )
     conn.commit()
     conn.close()
-    print("[DB] Demo user created: demo@sessionguard.local / demo123")
+    print("[DB] Demo user created from SESSIONGUARD_DEMO_PASSWORD.")
 
 
 # ── Phase 5 schema additions ──────────────────────────────────────────────────
@@ -878,3 +894,126 @@ def init_db_v11():
         if "duplicate column name" not in str(e).lower():
             print(f"[DB] V11: {e}")
     conn.close()
+
+
+# ── Phase 6 (P0): session ownership metadata ──────────────────────────────────
+
+
+def init_db_v12():
+    """Add session ownership tracking for access control."""
+    conn = get_connection()
+    try:
+        cols = conn.execute("PRAGMA table_info(sessions)").fetchall()
+        if not any(c[1] == 'owner_id' for c in cols):
+            conn.execute("ALTER TABLE sessions ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_owner_id ON sessions(owner_id)")
+        owner_row = conn.execute(
+            "SELECT id FROM users ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END, id LIMIT 1"
+        ).fetchone()
+        if owner_row:
+            conn.execute(
+                "UPDATE sessions SET owner_id=? WHERE owner_id IS NULL",
+                (owner_row["id"],)
+            )
+        conn.commit()
+        print("[DB] V12 session owner column added.")
+    except Exception as e:
+        print(f"[DB] V12: {e}")
+    finally:
+        conn.close()
+
+
+# ── Phase 6b (V13): live_runs atomicity guard ──────────────────────────────────
+def init_db_v13():
+    """Add partial unique index to prevent duplicate active live runs per session."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_live_runs_active
+            ON live_runs(session_id) WHERE status IN ('running','paused')
+        """)
+        conn.commit()
+        print("[DB] V13 live_runs active-run index added.")
+    except Exception as e:
+        print(f"[DB] V13: {e}")
+    finally:
+        conn.close()
+
+
+# ── V14 FTS5 Search ──────────────────────────────────────────────────────────
+SCHEMA_V14_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+    name,
+    game_name,
+    platform,
+    notes,
+    content='sessions',
+    content_rowid='id'
+);
+"""
+
+
+def init_db_v14():
+    """Apply V14 FTS5 search index."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V14_SQL)
+        conn.commit()
+        print("[DB] V14 FTS5 search index initialized.")
+    except Exception as e:
+        print(f"[DB] V14 FTS5: {e}")
+    finally:
+        conn.close()
+
+
+SCHEMA_V15_SQL = """
+CREATE TRIGGER IF NOT EXISTS sessions_ai AFTER INSERT ON sessions BEGIN
+  INSERT INTO sessions_fts(rowid, name, game_name, platform, notes)
+  VALUES (new.id, new.name, new.game_name, new.platform, new.notes);
+END;
+CREATE TRIGGER IF NOT EXISTS sessions_ad AFTER DELETE ON sessions BEGIN
+  INSERT INTO sessions_fts(sessions_fts, rowid, name, game_name, platform, notes)
+  VALUES ('delete', old.id, old.name, old.game_name, old.platform, old.notes);
+END;
+CREATE TRIGGER IF NOT EXISTS sessions_au AFTER UPDATE ON sessions BEGIN
+  INSERT INTO sessions_fts(sessions_fts, rowid, name, game_name, platform, notes)
+  VALUES ('delete', old.id, old.name, old.game_name, old.platform, old.notes);
+  INSERT INTO sessions_fts(rowid, name, game_name, platform, notes)
+  VALUES (new.id, new.name, new.game_name, new.platform, new.notes);
+END;
+"""
+
+
+def init_db_v15():
+    """Apply V15 FTS5 triggers and backfill existing sessions."""
+    conn = get_connection()
+    try:
+        conn.executescript(SCHEMA_V15_SQL)
+        conn.commit()
+        backfilled = conn.execute("""
+            INSERT INTO sessions_fts(rowid, name, game_name, platform, notes)
+            SELECT id, name, game_name, platform, notes FROM sessions
+            WHERE id NOT IN (SELECT rowid FROM sessions_fts)
+        """).rowcount
+        conn.commit()
+        print(f"[DB] V15 FTS5 triggers created, backfilled {backfilled} sessions.")
+    except Exception as e:
+        print(f"[DB] V15 FTS5: {e}")
+    finally:
+        conn.close()
+
+
+def init_db_v13():
+    """Add partial unique index to prevent duplicate active live runs per session."""
+    conn = get_connection()
+    try:
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_live_runs_active
+            ON live_runs(session_id) WHERE status IN ('running','paused')
+        """)
+        conn.commit()
+        print("[DB] V13 live_runs active-run index added.")
+    except Exception as e:
+        print(f"[DB] V13: {e}")
+    finally:
+        conn.close()

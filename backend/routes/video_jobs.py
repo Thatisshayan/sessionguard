@@ -4,25 +4,28 @@ backend/routes/video_jobs.py
 Video job debug endpoints — annotated frame export.
 """
 
+import asyncio
 import io
-import zipfile
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
-from database.db import get_connection, async_fetch_one, async_fetch_all
-from engines.frame_annotator import annotate_frame, create_annotated_zip
+from typing import Optional
+from database.db import async_fetch_one, async_fetch_all
+from backend.auth.access import require_session_access
+from engines.frame_annotator import create_annotated_zip
 from engines.video_pipeline import get_video_job
 
 router = APIRouter(tags=["video-jobs"])
 
 
 @router.get("/{job_id}")
-def get_job(job_id: int):
+async def get_job(job_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Return video job details including chunking progress fields.
     """
-    job = get_video_job(job_id)
+    job = await asyncio.to_thread(get_video_job, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Video job not found.")
+    await require_session_access(job.get("session_id"), authorization)
     return {
         "id":                job.get("id"),
         "session_id":        job.get("session_id"),
@@ -44,7 +47,10 @@ def get_job(job_id: int):
 
 
 @router.get("/{job_id}/annotated-frames")
-async def get_annotated_frames(job_id: int):
+async def get_annotated_frames(
+    job_id: int,
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
     """
     Download annotated frames for a video job as a ZIP.
     Each frame has ROI boxes and OCR text overlay.
@@ -59,6 +65,7 @@ async def get_annotated_frames(job_id: int):
         raise HTTPException(status_code=404, detail="No output directory for this job.")
 
     session_id = job.get("session_id")
+    await require_session_access(session_id, authorization)
     ocr_rows = await async_fetch_all(
         "SELECT frame_path, balance_value, bet_value, win_value, confidence_bal, confidence_bet, confidence_win "
         "FROM ocr_results WHERE session_id=? ORDER BY id",
@@ -83,7 +90,7 @@ async def get_annotated_frames(job_id: int):
     if not frames_data:
         raise HTTPException(status_code=404, detail="No frames found for this job.")
 
-    zip_bytes = create_annotated_zip(frames_data)
+    zip_bytes = await asyncio.to_thread(create_annotated_zip, frames_data)
     return StreamingResponse(
         io.BytesIO(zip_bytes),
         media_type="application/zip",

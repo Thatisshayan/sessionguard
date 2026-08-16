@@ -4,12 +4,17 @@
  * Event summary KPIs + win distribution chart + raw event table.
  */
 
+import { useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer,
 } from 'recharts'
 import { KPI } from './shared'
 
 export function EventsTab({ events, evSummary }: { events: any[]; evSummary: any }) {
+  const [page, setPage] = useState(1)
+  const pageSize = 100
+  const visibleEvents = events.slice(0, page * pageSize)
+
   const wins    = events.filter(e => e.win_amount > 0)
   const buckets = [0, 1, 2, 5, 10, 25, 50, 999]
   const winData = buckets.slice(0, -1).map((low, i) => ({
@@ -48,8 +53,11 @@ export function EventsTab({ events, evSummary }: { events: any[]; evSummary: any
       )}
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--bg-border)', fontSize: 13, fontWeight: 600 }}>
-          Events ({events.length})
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--bg-border)', fontSize: 13, fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Events ({events.length})</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            Showing {visibleEvents.length} of {events.length}
+          </span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -61,7 +69,7 @@ export function EventsTab({ events, evSummary }: { events: any[]; evSummary: any
               </tr>
             </thead>
             <tbody>
-              {events.slice(0, 200).map(ev => (
+              {visibleEvents.map(ev => (
                 <tr key={ev.id} style={{ borderBottom: '1px solid var(--bg-border)' }}>
                   <td style={{ padding: '7px 12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{ev.spin_number}</td>
                   <td style={{ padding: '7px 12px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>{ev.timestamp?.slice(0, 19)}</td>
@@ -79,9 +87,14 @@ export function EventsTab({ events, evSummary }: { events: any[]; evSummary: any
               ))}
             </tbody>
           </table>
-          {events.length > 200 && (
-            <div style={{ padding: '10px 16px', color: 'var(--text-muted)', fontSize: 12, borderTop: '1px solid var(--bg-border)' }}>
-              Showing 200 of {events.length} events. Export to Excel for the full dataset.
+          {visibleEvents.length < events.length && (
+            <div style={{ padding: '12px 16px', textAlign: 'center', borderTop: '1px solid var(--bg-border)', background: 'var(--bg-elevated)' }}>
+              <button onClick={() => setPage(p => p + 1)} style={{
+                background: 'var(--accent-blue)', color: '#fff', border: 'none',
+                padding: '8px 20px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 12, fontWeight: 600
+              }}>
+                Load More Events ({events.length - visibleEvents.length} remaining)
+              </button>
             </div>
           )}
         </div>

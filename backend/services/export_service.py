@@ -490,6 +490,7 @@ def generate_excel(session_id: int | None = None) -> dict:
     if session_id:
         m = get_session_metrics(session_id)
         if not m:
+            conn.close()
             return {"success": False, "file_path": "", "filename": "", "error": "Session not found."}
 
         insights = get_insights(session_id=session_id)

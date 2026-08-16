@@ -136,7 +136,7 @@ sessionguard/
 | Live | `POST /live/start`, `POST /live/{id}/pause`, `POST /live/{id}/resume`, `POST /live/{id}/stop`, `GET /live/{id}/events` |
 | Projects | `GET/POST/DELETE /projects` |
 | Jobs | `GET/POST /jobs`, `GET /jobs/{id}`, `POST /jobs/{id}/cancel`, `GET /jobs/worker/health` |
-| Admin | `GET /admin/system-health`, `GET /admin/system-stats`, `GET /admin/audit-log` |
+| Admin | `GET /admin/health`, `GET /admin/stats`, `GET/PATCH/DELETE /admin/users`, `GET /admin/backup`, `POST /admin/restore`, `GET /admin/audit`, `GET /admin/audit/export` (C5) |
 | Intelligence | `POST /intelligence/clusters/build`, `GET /intelligence/clusters`, `GET /intelligence/anomalies`, `GET /intelligence/dataset-quality` (D10) |
 | AI Analysis | `GET /api/v1/ai/status`, `GET /api/v1/ai/models`, `POST /api/v1/ai/model`, `GET/POST /api/v1/sessions/{id}/ai`, `GET /api/v1/sessions/{id}/ai/stream` — router was unmounted until 2026-07-23, now fixed |
 | Intelligence (AI sub-routes) | `POST /intelligence/ai/compare`, `GET /intelligence/ai/session/{id}`, `GET /intelligence/ai/status` ⚠️ — this router's paths double their own segment under its mount prefix (`/api/v1/intelligence/intelligence/...`); known bug, not yet fixed, see `SESSIONGUARDREVIVAL1.3.md` task A5 |
@@ -184,6 +184,7 @@ sessionguard/
 | Projects/Teams | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Jobs/Queue | ✅ | ✅ | ⚠️ | ✅ | ❌ |
 | Admin Panel | ✅ | ✅ | ❌ | ❌ | ❌ |
+| DB Backup/Restore (C5) | ✅ | ✅ | — | ✅ | ✅ |
 | Parser Benchmark | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Auto-updater | ✅ | ❌ | ⚠️ | ❌ | ⚠️ |
 | CI/CD (GitHub Actions) | ✅ | ✅ | ✅ | ✅ | ✅ |

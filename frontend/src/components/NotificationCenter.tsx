@@ -9,6 +9,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { sendNotification, isPermissionGranted, requestPermission } from '@tauri-apps/api/notification'
+import { useAuth } from '../context/AuthContext'
 
 interface Notification {
   id:        number
@@ -35,6 +36,7 @@ const SEV_COLOR: Record<string, string> = {
 }
 
 export function NotificationCenter() {
+  const { accessToken } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [open,          setOpen]          = useState(false)
   const [wsStatus,      setWsStatus]      = useState<'connecting'|'connected'|'disconnected'>('connecting')
@@ -46,15 +48,23 @@ export function NotificationCenter() {
 
   // ── WebSocket connection ────────────────────────────────────────────────────
   useEffect(() => {
+    if (!accessToken) {
+      setWsStatus('disconnected')
+      return
+    }
+    let cancelled = false
     const connect = () => {
       try {
-        const ws = new WebSocket('ws://127.0.0.1:8000/ws/global')
-        ws.onopen = () => setWsStatus('connected')
+        const url = new URL('ws://127.0.0.1:8000/ws/global')
+        url.searchParams.set('token', accessToken)
+        const ws = new WebSocket(url.toString())
+        ws.onopen = () => { if (!cancelled) setWsStatus('connected') }
         ws.onclose = () => {
+          if (cancelled) return
           setWsStatus('disconnected')
           setTimeout(connect, 5000)
         }
-        ws.onerror = () => ws.close()
+        ws.onerror = () => { if (!cancelled) ws.close() }
         ws.onmessage = (e) => {
           try {
             const msg = JSON.parse(e.data)
@@ -74,13 +84,20 @@ export function NotificationCenter() {
         }
         wsRef.current = ws
       } catch {
-        setWsStatus('disconnected')
-        setTimeout(connect, 5000)
+        if (!cancelled) {
+          setWsStatus('disconnected')
+          setTimeout(connect, 5000)
+        }
       }
     }
     connect()
-    return () => wsRef.current?.close()
-  }, [])
+    return () => {
+      cancelled = true
+      const ws = wsRef.current
+      wsRef.current = null
+      ws?.close()
+    }
+  }, [accessToken])
 
   // ── Native notification permission + firing ─────────────────────────────
   useEffect(() => {

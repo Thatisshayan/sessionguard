@@ -1,4 +1,4 @@
-﻿"""backend/main.py -- SessionGuard v1.2.0"""
+"""backend/main.py -- SessionGuard API"""
 import os, sys, platform
 from pathlib import Path
 
@@ -25,9 +25,22 @@ if platform.system() == "Windows":
     except ImportError:
         pass
 
-from fastapi import FastAPI
+# ── Optional Sentry crash reporting ─────────────────────────────────────────
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(dsn=sentry_dsn, traces_sample_rate=0.2)
+    except ImportError:
+        pass
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, seed_demo_data, seed_demo_user
+from fastapi.middleware.gzip import GZipMiddleware
+from backend.version import APP_VERSION
+from database.db import init_db, init_db_v2, init_db_v3, init_db_v4, init_db_v5, init_db_v6, init_db_v7, init_db_v8, init_db_v9, init_db_v10, init_db_v11, init_db_v12, init_db_v13, init_db_v14, init_db_v15, seed_demo_data, seed_demo_user
+from backend.auth.service import get_current_user_from_token
 from engines.alert_presets import seed_presets
 from backend.middleware.logging import configure_logging, RequestLoggingMiddleware
 
@@ -43,7 +56,8 @@ from backend.routes import (
     dashboard, video_jobs, prompts, dataset_quality, ai_analysis,
 )
 
-app = FastAPI(title="SessionGuard API", version="1.2.0", docs_url="/docs")
+app = FastAPI(title="SessionGuard API", version=APP_VERSION, docs_url="/docs")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 ORIGINS = ["http://localhost:5173","http://127.0.0.1:5173","http://localhost:3000",
            "http://127.0.0.1:3000","http://localhost:1420","http://127.0.0.1:1420"]
@@ -51,21 +65,43 @@ extra = os.getenv("CORS_ORIGINS","")
 if extra: ORIGINS += [o.strip() for o in extra.split(",") if o.strip()]
 
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_credentials=True,
-                   allow_methods=["*"], allow_headers=["*"])
+                   allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+                   allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
 app.add_middleware(RequestLoggingMiddleware)
+
+@app.middleware("http")
+async def require_authenticated_api(request: Request, call_next):
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/v1/"):
+        return await call_next(request)
+    public_prefixes = (
+        "/api/v1/auth",
+        "/api/v1/health",
+    )
+    if path.startswith(public_prefixes):
+        return await call_next(request)
+
+    current_user = get_current_user_from_token(request.headers.get("authorization"))
+    if not current_user:
+        return JSONResponse(status_code=401, content={"detail": "Authentication required."})
+
+    request.state.current_user = current_user
+    return await call_next(request)
 
 @app.on_event("startup")
 def on_startup():
     init_db(); init_db_v2(); init_db_v3(); init_db_v4(); init_db_v5(); init_db_v6(); init_db_v7(); init_db_v8()
-    seed_demo_data(); seed_demo_user(); seed_presets()
+    init_db_v9(); init_db_v10(); init_db_v11()
+    seed_demo_user()
+    init_db_v12(); init_db_v13(); init_db_v14(); init_db_v15()
+    seed_demo_data(); seed_presets()
 
     # Load API key from environment (secure method)
     api_key = os.getenv("NVIDIA_API_KEY", "").strip()
     if api_key:
         os.environ["NVIDIA_API_KEY"] = api_key
 
-    print("[API] SessionGuard v1.2.0 ready -> http://127.0.0.1:8000")
-    print("[API] Login -> demo@sessionguard.local / demo123")
+    print(f"[API] SessionGuard v{APP_VERSION} ready -> http://127.0.0.1:8000")
     print("[API] Coach -> /coach-status | Updater -> /updater/check")
 
 app.include_router(health.router)  # Unversioned

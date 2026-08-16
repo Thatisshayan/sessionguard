@@ -4,7 +4,10 @@ backend/routes/dashboard.py
 Aggregated dashboard endpoint — single call replaces 9 parallel fetches.
 """
 
-from fastapi import APIRouter
+import asyncio
+from fastapi import APIRouter, Header
+from typing import Optional
+from backend.auth.access import require_admin
 from engines.analysis_engine import (
     get_global_metrics,
     get_rtp_distribution,
@@ -19,19 +22,31 @@ router = APIRouter(tags=["dashboard"])
 
 
 @router.get("/summary")
-def dashboard_summary():
+async def dashboard_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """
     Single aggregated response for the Dashboard page.
     Returns all KPIs, charts, insights, alerts, queue, and behavior data.
     """
+    await require_admin(authorization)
+    metrics, net, rtp, insights, alerts, alert_summary, queue, queue_summary, behavior = await asyncio.gather(
+        asyncio.to_thread(get_global_metrics),
+        asyncio.to_thread(get_net_result_over_time),
+        asyncio.to_thread(get_rtp_distribution),
+        asyncio.to_thread(get_insights, limit=50),
+        asyncio.to_thread(get_alerts, unacknowledged_only=True),
+        asyncio.to_thread(get_alert_summary),
+        asyncio.to_thread(get_review_queue, status="pending"),
+        asyncio.to_thread(get_queue_summary),
+        asyncio.to_thread(analyze_behavior_global),
+    )
     return {
-        "metrics":         get_global_metrics(),
-        "net_over_time":   get_net_result_over_time(),
-        "rtp_distribution": get_rtp_distribution(),
-        "insights":        get_insights(limit=50),
-        "alerts":          get_alerts(unacknowledged_only=True),
-        "alert_summary":   get_alert_summary(),
-        "review_queue":    get_review_queue(status="pending"),
-        "queue_summary":   get_queue_summary(),
-        "behavior":        analyze_behavior_global(),
+        "metrics":         metrics,
+        "net_over_time":   net,
+        "rtp_distribution": rtp,
+        "insights":        insights,
+        "alerts":          alerts,
+        "alert_summary":   alert_summary,
+        "review_queue":    queue,
+        "queue_summary":   queue_summary,
+        "behavior":        behavior,
     }

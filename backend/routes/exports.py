@@ -16,13 +16,14 @@ import csv
 import io
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from engines.analysis_engine import get_session_metrics, get_global_metrics
 from backend.services.export_service import generate_pdf, generate_excel
+from backend.auth.access import require_current_user, require_session_access
 
 router = APIRouter(tags=["exports"])
 
@@ -37,15 +38,21 @@ class ExportRequest(BaseModel):
 
 
 @router.post("")
-async def create_export(body: ExportRequest):
+async def create_export(body: ExportRequest, authorization: Optional[str] = Header(None)):
     """
     Generate an export artifact.
     All four formats (JSON, PDF, Excel, CSV) are fully implemented.
     """
+    current_user = require_current_user(authorization)
     fmt = body.format.lower()
     if fmt not in {"json", "pdf", "excel", "csv"}:
         raise HTTPException(status_code=400,
                             detail="Format must be: json | pdf | excel | csv")
+
+    if body.session_id is None and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Global exports require admin access.")
+    if body.session_id is not None:
+        await require_session_access(body.session_id, authorization)
 
     ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
     label = f"session_{body.session_id}" if body.session_id else "global"
@@ -132,26 +139,57 @@ async def create_export(body: ExportRequest):
 
 
 @router.get("")
-async def list_exports(session_id: Optional[int] = None):
+async def list_exports(session_id: Optional[int] = None, authorization: Optional[str] = Header(None)):
     """Return export history."""
+    current_user = require_current_user(authorization)
+    if current_user["role"] == "admin":
+        if session_id:
+            rows = await async_fetch_all(
+                "SELECT * FROM exports WHERE session_id=? ORDER BY created_at DESC",
+                (session_id,)
+            )
+        else:
+            rows = await async_fetch_all(
+                "SELECT * FROM exports ORDER BY created_at DESC LIMIT 200"
+            )
+        return rows
+
     if session_id:
+        await require_session_access(session_id, authorization)
         rows = await async_fetch_all(
             "SELECT * FROM exports WHERE session_id=? ORDER BY created_at DESC",
             (session_id,)
         )
     else:
         rows = await async_fetch_all(
-            "SELECT * FROM exports ORDER BY created_at DESC LIMIT 200"
+            """
+            SELECT DISTINCT e.*
+            FROM exports e
+            LEFT JOIN sessions s ON s.id = e.session_id
+            LEFT JOIN session_projects sp ON sp.session_id = s.id
+            LEFT JOIN project_members pm ON pm.project_id = sp.project_id
+            WHERE s.owner_id = ? OR pm.user_id = ?
+            ORDER BY e.created_at DESC
+            LIMIT 200
+            """,
+            (current_user["user_id"], current_user["user_id"])
         )
     return rows
 
 
 @router.get("/{export_id}/download")
-async def download_export(export_id: int):
+async def download_export(export_id: int, authorization: Optional[str] = Header(None)):
     """Stream the export file directly to the client."""
+    current_user = require_current_user(authorization)
     row = await async_fetch_one("SELECT * FROM exports WHERE id=?", (export_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Export not found.")
+
+    session_id = row["session_id"]
+    if session_id is None and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Global export access requires admin privileges.")
+    if session_id is not None and current_user["role"] != "admin":
+        await require_session_access(int(session_id), authorization)
 
     file_path = Path(row["file_path"])
     if not file_path.exists():

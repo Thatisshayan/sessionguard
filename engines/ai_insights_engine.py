@@ -7,7 +7,7 @@ Replaces rule-based insight text with real AI narrative.
 Uses the NVIDIA API (OpenAI-compatible) directly via urllib (stdlib — no extra deps).
 Falls back to Ollama (offline) then rule-based engine gracefully when no API key is set.
 
-Model: nvidia/llama-3.1-nemotron-70b-instruct  (pricing per NVIDIA NIM)
+Model: nvidia/llama-3.3-nemotron-super-49b-v1  (pricing per NVIDIA NIM)
 Context sent: summarised session data only — never raw events (cost control).
 
 Setup:
@@ -26,8 +26,19 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
+import structlog
+
 from database.db import get_connection
 from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
+from engines.offline_ai import async_http_post
+
+# Targeted observability for AI-layer failure paths (Revival 1.3, D1). The
+# earlier broad `except: pass` blocks silently swallowed real bugs -- the
+# ``_persist_ai_insights`` category bug found in B3 was hidden exactly because
+# ``_log_ai_cost`` swallowed its IntegrityError. These warnings are not user-
+# facing; they surface to stdout (structlog) so an operator running the API can
+# see why AI costs/insights silently stopped being recorded.
+_log = structlog.get_logger("sessionguard.ai")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
@@ -35,6 +46,8 @@ API_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
 MAX_TOKENS   = 1024
 
 NVIDIA_MODELS = [
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5",
     "nvidia/llama-3.1-nemotron-70b-instruct",
     "nvidia/llama-3.3-70b-instruct",
     "nvidia/mistral-large-2-instruct",
@@ -267,6 +280,32 @@ def _call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, mo
         raise RuntimeError(f"NVIDIA API error {e.code}: {error_body}")
 
 
+# @approver-required(shayan) — paid NVIDIA NIM API (pay-per-token)
+async def async_call_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None) -> tuple[str, dict]:
+    """Async HTTP version of _call_nvidia using shared httpx helpers."""
+    messages = []
+    if system_prompt or SYSTEM_PROMPT:
+        messages.append({"role": "system", "content": system_prompt or SYSTEM_PROMPT})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model":       model or MODEL,
+        "max_tokens":  MAX_TOKENS,
+        "temperature": 0.7,
+        "messages":    messages,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept":        "application/json",
+    }
+
+    body = await async_http_post(API_URL, payload, headers=headers, timeout=60.0, service_name="NVIDIA")
+    text = body["choices"][0]["message"]["content"]
+    usage = body.get("usage", {})
+    return text, usage
+
+
 def _stream_nvidia(prompt: str, api_key: str, system_prompt: str | None = None, model: str | None = None):
     """
     Stream API call to NVIDIA NIM (OpenAI-compatible).
@@ -432,6 +471,7 @@ def analyse_session_with_ai(session_id: int) -> dict:
         return analysis
 
     except json.JSONDecodeError as e:
+        _log.warning("ai_parse_failed", session_id=session_id, error=str(e))
         return {
             "source":    "nvidia_ai",
             "ai_available": True,
@@ -440,7 +480,12 @@ def analyse_session_with_ai(session_id: int) -> dict:
             "raw":       raw_text[:500] if 'raw_text' in dir() else "",
         }
     except Exception as e:
-        # Fall back to rule-based on any error
+        # Fall back to rule-based on any error. Log the swallowed error so an
+        # operator can tell the difference between "no API key" (the normal
+        # fallback) and "the AI pipeline blew up silently" (the bug case found
+        # in B3, where a NOT NULL constraint error was being swallowed here).
+        _log.warning("ai_pipeline_fell_back_to_rule_based",
+                     session_id=session_id, error=str(e), error_type=type(e).__name__)
         result = _fallback_analysis(session_id, summary)
         result["session_id"]  = session_id
         result["ai_error"]    = str(e)
@@ -465,6 +510,8 @@ def _is_budget_exceeded_unsafe() -> bool:
 # ── Cost tracking ─────────────────────────────────────────────────────────────
 
 MODEL_PRICING = {
+    "nvidia/llama-3.3-nemotron-super-49b-v1": {"input": 0.10, "output": 0.40},
+    "nvidia/llama-3.3-nemotron-super-49b-v1.5": {"input": 0.10, "output": 0.40},
     "nvidia/llama-3.1-nemotron-70b-instruct": {"input": 0.12, "output": 0.12},
     "nvidia/llama-3.3-70b-instruct":          {"input": 0.12, "output": 0.12},
     "nvidia/mistral-large-2-instruct":        {"input": 0.15, "output": 0.15},
@@ -480,9 +527,13 @@ def _compute_cost(model: str, input_tokens: int, output_tokens: int) -> float:
 
 
 def _log_ai_cost(session_id: int, model: str, usage: dict):
-    """Log AI API cost to the database."""
-    input_tokens = usage.get("input_tokens", 0)
-    output_tokens = usage.get("output_tokens", 0)
+    """Log AI API cost to the database.
+
+    NVIDIA NIM returns OpenAI-style usage keys (``prompt_tokens`` /
+    ``completion_tokens``); normalize to ``input_tokens`` / ``output_tokens``.
+    """
+    input_tokens = usage.get("input_tokens") or usage.get("prompt_tokens") or 0
+    output_tokens = usage.get("output_tokens") or usage.get("completion_tokens") or 0
     cost = _compute_cost(model, input_tokens, output_tokens)
     try:
         conn = get_connection()
@@ -493,8 +544,12 @@ def _log_ai_cost(session_id: int, model: str, usage: dict):
         )
         conn.commit()
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:
+        # Silently swallowing this hid a real schema bug for the entire AI
+        # feature lifetime (the NOT NULL category case fixed in B3). Log a
+        # targeted warning so cost-tracking regressions surface to operators.
+        _log.warning("ai_cost_log_failed", session_id=session_id, model=model,
+                     cost_usd=cost, error=str(exc))
 
 
 def _get_config_budget() -> str:
@@ -549,9 +604,14 @@ def _persist_ai_insights(session_id: int, analysis: dict):
         (session_id,)
     )
     for ins in analysis.get("insights", [])[:5]:
+        # ``category`` is NOT NULL on the insights table; default to "behaviour"
+        # when the AI response omits or empties it so persistence never fails
+        # (which would otherwise silently drop the whole analysis back to the
+        # rule_based fallback path — the exact stale-feature failure mode).
+        category = (ins.get("category") or "behaviour").strip() or "behaviour"
         conn.execute(
-            "INSERT INTO insights (session_id, severity, text) VALUES (?,?,?)",
-            (session_id, ins.get("severity", "info"),
+            "INSERT INTO insights (session_id, category, severity, text) VALUES (?,?,?,?)",
+            (session_id, category, ins.get("severity", "info"),
              f"[AI] {ins.get('text', '')}")
         )
     conn.commit()

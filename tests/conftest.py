@@ -94,15 +94,12 @@ def admin_headers(client: TestClient) -> dict:
     """
     Create an admin user and return authentication headers.
     """
-    import hashlib
+    from backend.auth.service import hash_password
 
     conn = db_module.get_connection()
-    salt = os.urandom(16).hex()
-    password_hash = hashlib.pbkdf2_hmac('sha256', b'adminpassword123', salt.encode(), 260000).hex()
-
     conn.execute(
-        "INSERT INTO users (email, hashed_password, salt, role) VALUES (?, ?, ?, ?)",
-        ("admin@example.com", password_hash, salt, "admin")
+        "INSERT INTO users (email, username, hashed_password, role) VALUES (?, ?, ?, ?)",
+        ("admin@example.com", "adminuser", hash_password("adminpassword123"), "admin")
     )
     conn.commit()
     conn.close()
@@ -127,18 +124,24 @@ def sample_session_data(client: TestClient, auth_headers: dict) -> dict:
     Create a sample session for testing.
     """
     session_data = {
+        "name": "Test Session",
         "game_name": "Test Slot Game",
-        "start_time": "2024-01-01T10:00:00",
-        "end_time": "2024-01-01T11:00:00",
-        "initial_balance": 1000.00,
-        "final_balance": 950.00,
-        "total_spins": 100,
-        "total_wagered": 500.00,
-        "total_won": 450.00
+        "platform": "web",
+        "date": "2024-01-01",
+        "duration_minutes": 60,
+        "start_balance": 1000.00,
+        "end_balance": 950.00,
+        "total_bets": 500.00,
+        "total_wins": 450.00,
+        "spins": 100,
+        "biggest_win": 50.00,
+        "biggest_loss": 25.00,
+        "losing_streak": 5,
+        "notes": ""
     }
 
     response = client.post("/api/v1/sessions", json=session_data, headers=auth_headers)
-    assert response.status_code == 200
+    assert response.status_code == 201
 
     return response.json()
 

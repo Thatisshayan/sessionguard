@@ -36,9 +36,13 @@ def derive_encryption_key(password: str, salt: bytes | None = None) -> tuple[byt
 
 def get_encryption_config() -> dict | None:
     """
-    Get encryption config from app_config.json.
-    Returns None if encryption is not enabled.
+    Get encryption config from app_config.json or SG_DB_PASSWORD env var.
+    Returns config dict or None if encryption is not enabled.
     """
+    env_password = os.getenv("SG_DB_PASSWORD", "").strip()
+    if env_password:
+        return {"enabled": True, "password": env_password}
+
     config_path = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
     try:
         import json
@@ -72,10 +76,14 @@ def create_encrypted_connection(db_path: str, password: str | None = None):
     """
     if not SQLCIPHER_AVAILABLE or password is None:
         import sqlite3
-        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=15)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            pass
         conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout = 15000")
         return conn
 
     # Use pysqlcipher3 for encrypted connection
@@ -85,7 +93,6 @@ def create_encrypted_connection(db_path: str, password: str | None = None):
     conn.row_factory = sqlcipher.Row
 
     # Derive key from password
-    # Check if we have a stored salt
     salt = _load_salt(db_path)
     if salt:
         key, _ = derive_encryption_key(password, salt)
@@ -94,6 +101,7 @@ def create_encrypted_connection(db_path: str, password: str | None = None):
         _save_salt(db_path, salt)
 
     apply_sqlcipher_pragmas(conn, key)
+    conn.execute("PRAGMA busy_timeout = 15000")
 
     # Verify the connection works
     try:

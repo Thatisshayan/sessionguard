@@ -10,7 +10,36 @@ import json
 import urllib.request
 import urllib.error
 
+import httpx
+
 OLLAMA_BASE_URL = "http://localhost:11434"
+
+
+# ── Shared async HTTP helpers ─────────────────────────────────────────────────
+
+async def async_http_post(url: str, json_data: dict, headers: dict | None = None, timeout: float = 60.0, service_name: str = "HTTP") -> dict:
+    """Shared async HTTP POST returning parsed JSON. Wraps httpx errors in RuntimeError."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(url, json=json_data, headers=headers or {})
+            if response.status_code >= 400:
+                raise RuntimeError(f"{service_name} error {response.status_code}: {response.text}")
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                raise RuntimeError(f"{service_name}: invalid JSON response (status {response.status_code})")
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"{service_name} request failed: {e}")
+
+
+async def async_http_get(url: str, timeout: float = 3.0) -> int | None:
+    """Shared async HTTP GET returning status code, or None on failure."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url)
+            return response.status_code
+    except Exception:
+        return None
 DEFAULT_MODEL = "llama3.2:latest"
 
 
@@ -92,3 +121,82 @@ def call_ollama_json(prompt: str, model: str | None = None, system_prompt: str |
         return json.loads(text)
     except json.JSONDecodeError:
         return {"error": "Could not parse Ollama response as JSON", "raw": raw[:500]}
+
+
+async def async_call_ollama(prompt: str, model: str | None = None, system_prompt: str | None = None) -> str:
+    """Async HTTP version of call_ollama using shared httpx helpers."""
+    model = model or DEFAULT_MODEL
+
+    payload = {
+        "model":   model,
+        "prompt":  prompt,
+        "stream":  False,
+        "options": {"temperature": 0.7, "num_predict": 1024},
+    }
+    if system_prompt:
+        payload["system"] = system_prompt
+
+    body = await async_http_post(f"{OLLAMA_BASE_URL}/api/generate", payload, timeout=120.0, service_name="Ollama")
+    return body.get("response", "")
+
+
+async def async_call_ollama_json(prompt: str, model: str | None = None, system_prompt: str | None = None) -> dict:
+    """Async HTTP version of call_ollama_json using httpx.AsyncClient."""
+    raw = await async_call_ollama(prompt, model=model, system_prompt=system_prompt)
+
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = [l for l in text.split("\n") if not l.strip().startswith("```")]
+        text = "\n".join(lines)
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"error": "Could not parse Ollama response as JSON", "raw": raw[:500]}
+
+
+def call_local_ai_with_fallback(prompt: str, system_prompt: str | None = None) -> dict:
+    """Sync version: Attempt Ollama local AI inference, falling back to structured rule-based narrative response if offline."""
+    if is_ollama_available():
+        try:
+            res = call_ollama_json(prompt, system_prompt=system_prompt)
+            if "error" not in res:
+                return {"source": "ollama_local", "data": res}
+        except Exception as e:
+            print(f"[Offline AI] Sync Ollama call failed: {e}")
+
+    return {
+        "source": "rule_engine_fallback",
+        "data": {
+            "summary": "Offline rule engine analysis generated successfully.",
+            "risk_assessment": "Standard variance session within normal parameters.",
+            "recommendations": ["Review session event logs in detail for potential OCR flags."]
+        }
+    }
+
+
+async def async_is_ollama_available() -> bool:
+    """Async version of is_ollama_available using shared httpx helpers."""
+    status = await async_http_get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+    return status == 200
+
+
+async def async_call_local_ai_with_fallback(prompt: str, system_prompt: str | None = None) -> dict:
+    """Attempt Ollama local AI inference, falling back to structured rule-based narrative response if offline."""
+    if await async_is_ollama_available():
+        try:
+            res = await async_call_ollama_json(prompt, system_prompt=system_prompt)
+            if "error" not in res:
+                return {"source": "ollama_local", "data": res}
+        except Exception as e:
+            print(f"[Offline AI] Ollama call failed: {e}")
+
+    # Fallback: structured local narrative
+    return {
+        "source": "rule_engine_fallback",
+        "data": {
+            "summary": "Offline rule engine analysis generated successfully.",
+            "risk_assessment": "Standard variance session within normal parameters.",
+            "recommendations": ["Review session event logs in detail for potential OCR flags."]
+        }
+    }

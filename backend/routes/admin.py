@@ -7,22 +7,21 @@ Maturity: Working Prototype
 Future:   Add system metrics dashboard, quota management, org controls (V14).
 """
 
-from fastapi import APIRouter, HTTPException, Header, Query
+import asyncio
+import shutil
+import sqlite3
+import tempfile
+import time
+from pathlib import Path
+from fastapi import APIRouter, File, HTTPException, Header, Query, UploadFile
 from pydantic import BaseModel
 from typing import Optional
+import database.db as db_module
 from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.auth.service import get_current_user_from_token, hash_password
+from backend.auth.access import require_admin as _require_admin
 
 router = APIRouter(tags=["admin"])
-
-
-def _require_admin(authorization: str | None) -> dict:
-    user = get_current_user_from_token(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required.")
-    return user
 
 
 # ── System health ─────────────────────────────────────────────────────────────
@@ -30,7 +29,7 @@ def _require_admin(authorization: str | None) -> dict:
 @router.get("/health")
 async def system_health(authorization: Optional[str] = Header(None)):
     """Full system health — DB stats, table counts, engine status."""
-    _require_admin(authorization)
+    await _require_admin(authorization)
     tables_row = await async_fetch_all(
         "SELECT name FROM sqlite_master WHERE type='table'"
     )
@@ -46,8 +45,8 @@ async def system_health(authorization: Optional[str] = Header(None)):
 
     from engines.video_pipeline import check_ffmpeg
     from engines.ocr_engine import check_ocr_status
-    ffmpeg = check_ffmpeg()
-    ocr    = check_ocr_status()
+    ffmpeg = await asyncio.to_thread(check_ffmpeg)
+    ocr    = await asyncio.to_thread(check_ocr_status)
 
     return {
         "status":      "ok",
@@ -63,7 +62,7 @@ async def system_health(authorization: Optional[str] = Header(None)):
 @router.get("/stats")
 async def system_stats(authorization: Optional[str] = Header(None)):
     """Platform-wide statistics."""
-    _require_admin(authorization)
+    await _require_admin(authorization)
     r = await async_fetch_one("""
         SELECT
             (SELECT COUNT(*) FROM sessions)      AS sessions,
@@ -85,7 +84,7 @@ async def list_all_users(
     authorization: Optional[str] = Header(None),
     limit: int = Query(100, le=500),
 ):
-    _require_admin(authorization)
+    await _require_admin(authorization)
     rows = await async_fetch_all(
         "SELECT id, email, username, role, is_active, created_at, last_login "
         "FROM users ORDER BY created_at DESC LIMIT ?", (limit,)
@@ -101,7 +100,7 @@ class UserRoleUpdate(BaseModel):
 @router.patch("/users/{user_id}")
 async def update_user(user_id: int, body: UserRoleUpdate,
                 authorization: Optional[str] = Header(None)):
-    admin = _require_admin(authorization)
+    admin = await _require_admin(authorization)
     updates = {k: v for k, v in body.dict().items() if v is not None}
     if not updates:
         return {"message": "Nothing to update."}
@@ -115,7 +114,7 @@ async def update_user(user_id: int, body: UserRoleUpdate,
 
 @router.delete("/users/{user_id}", status_code=204)
 async def delete_user(user_id: int, authorization: Optional[str] = Header(None)):
-    admin = _require_admin(authorization)
+    admin = await _require_admin(authorization)
     if admin["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account.")
     rowcount = await async_execute("DELETE FROM users WHERE id=?", (user_id,))
@@ -132,7 +131,7 @@ async def audit_log(
     action:  Optional[str] = Query(None),
     limit:   int           = Query(100, le=500),
 ):
-    _require_admin(authorization)
+    await _require_admin(authorization)
     filters = []
     params  : list = []
     if user_id: filters.append("a.user_id=?"); params.append(user_id)
@@ -145,3 +144,200 @@ async def audit_log(
         (*params, limit)
     )
     return rows
+
+
+@router.get("/backup")
+async def backup_database(authorization: Optional[str] = Header(None)):
+    """Create a consistent SQLite database backup via VACUUM INTO."""
+    await _require_admin(authorization)
+    import tempfile
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    temp_dir = tempfile.mkdtemp()
+    backup_path = Path(temp_dir) / "sessionguard_backup.db"
+
+    conn = get_connection()
+    try:
+        conn.execute(f"VACUUM INTO '{backup_path}'")
+    finally:
+        conn.close()
+
+    return FileResponse(
+        path=str(backup_path),
+        filename="sessionguard_backup.db",
+        media_type="application/x-sqlite3"
+    )
+
+
+_EXPECTED_TABLES = {
+    "sessions", "events", "users", "projects", "jobs",
+    "live_runs", "ocr_results", "insights", "alerts", "audit_log",
+}
+
+
+def _validate_backup_snapshot(upload_path: Path) -> None:
+    """Validate an uploaded file is a genuine SessionGuard SQLite backup.
+
+    Raises HTTPException(400) with a user-facing message on any failure:
+      1. must be a readable SQLite database,
+      2. must pass an integrity check,
+      3. must contain the expected core tables.
+    """
+    try:
+        conn = sqlite3.connect(str(upload_path))
+        try:
+            integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise HTTPException(status_code=400, detail=f"SQLite integrity check failed: {integrity}")
+            tables = {
+                row[0] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            missing = _EXPECTED_TABLES - tables
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Not a SessionGuard backup — missing tables: {', '.join(sorted(missing))}"
+                )
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid SQLite database.")
+
+
+def _create_safety_backup(db_path: Path) -> Optional[Path]:
+    """Copy a consistent snapshot of the current database alongside it.
+
+    Uses the sqlite3 online-backup API (Connection.backup) rather than SQL,
+    avoiding any VACUUM INTO injection surface. Returns None if the backup
+    could not be created (restore proceeds anyway).
+    """
+    safety = db_path.with_suffix(f".pre-restore-{int(time.time())}.db")
+    try:
+        src = get_connection()
+        try:
+            with sqlite3.connect(str(safety)) as dst:
+                src.backup(dst)
+        finally:
+            src.close()
+    except sqlite3.Error:
+        return None
+    return safety
+
+
+@router.post("/restore")
+async def restore_database(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+):
+    """Restore the database from an uploaded SQLite backup snapshot.
+
+    The uploaded file is validated before any swap happens; if validation
+    passes, the current database is first copied to a safety backup alongside
+    it, then atomically replaced by the uploaded snapshot.
+    """
+    await _require_admin(authorization)
+
+    if not file.filename or not file.filename.lower().endswith(".db"):
+        raise HTTPException(status_code=400, detail="Upload a .db SQLite backup file.")
+
+    # Stream the upload to a temp file so the client is fully consumed before
+    # we touch the live database. TemporaryDirectory removes the staging dir
+    # on success or failure.
+    with tempfile.TemporaryDirectory(prefix="sg_restore_") as tmp_dir:
+        upload_tmp = Path(tmp_dir) / "upload.db"
+        try:
+            with upload_tmp.open("wb") as out:
+                while chunk := await file.read(1024 * 1024):
+                    out.write(chunk)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Failed to read uploaded file.")
+        finally:
+            await file.close()
+
+        if upload_tmp.stat().st_size == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        _validate_backup_snapshot(upload_tmp)
+
+        DB_PATH = db_module.DB_PATH
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        safety = _create_safety_backup(DB_PATH)
+
+        # Atomic swap: copy into place on the same filesystem then replace.
+        staging = DB_PATH.with_suffix(".db.restore-staging")
+        try:
+            shutil.copyfile(upload_tmp, staging)
+            staging.replace(DB_PATH)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Restore failed while replacing database: {exc}")
+
+    # Drop stale WAL/SHM sidecars left by the pre-restore database so they are
+    # not replayed against the restored snapshot.
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(f"{DB_PATH}{suffix}")
+        if sidecar.exists():
+            try:
+                sidecar.unlink()
+            except OSError:
+                pass
+
+    return {
+        "restored": True,
+        "safety_backup": str(safety) if safety else None,
+    }
+
+
+
+import os, hmac, hashlib
+
+def compute_audit_hmac(row: dict) -> str:
+    """Compute HMAC-SHA256 signature for audit log tamper verification."""
+    secret = os.getenv("SECRET_KEY", "sg-audit-signing-key")
+    raw = f"{row.get('id')}:{row.get('user_id')}:{row.get('action')}:{row.get('created_at')}"
+    return hmac.new(secret.encode("utf-8"), raw.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+@router.get("/audit/export")
+async def export_audit_log(
+    format: str = Query("json", pattern="^(json|csv)$"),
+    authorization: Optional[str] = Header(None),
+    limit: int = Query(500, le=5000),
+):
+    """Export security audit log as CSV or JSON with HMAC-SHA256 signatures."""
+    await _require_admin(authorization)
+    raw_rows = await async_fetch_all(
+        "SELECT a.id, a.user_id, u.email, u.username, a.action, a.resource, "
+        "a.detail, a.ip_address, a.created_at "
+        "FROM audit_log a LEFT JOIN users u ON u.id = a.user_id "
+        "ORDER BY a.created_at DESC LIMIT ?", (limit,)
+    )
+
+    signed_rows = []
+    for r in raw_rows:
+        row_dict = dict(r)
+        row_dict["hmac_signature"] = compute_audit_hmac(row_dict)
+        signed_rows.append(row_dict)
+
+    if format == "csv":
+        import io
+        import csv
+        from fastapi.responses import StreamingResponse
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["id", "user_id", "email", "username", "action", "resource", "detail", "ip_address", "created_at", "hmac_signature"])
+        for r in signed_rows:
+            writer.writerow([r["id"], r["user_id"], r["email"], r["username"], r["action"], r["resource"], r["detail"], r["ip_address"], r["created_at"], r["hmac_signature"]])
+
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="security_audit_log.csv"'}
+        )
+
+    return {"count": len(signed_rows), "records": signed_rows}

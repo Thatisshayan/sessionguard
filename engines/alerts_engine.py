@@ -22,9 +22,9 @@ THRESHOLDS = {
 }
 
 
-def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False) -> list:
+def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False, alert_id: int | None = None) -> list:
     """
-    Return alerts from DB. Optionally filter by session or acknowledged state.
+    Return alerts from DB. Optionally filter by session, acknowledged state, or alert id.
     Critical alerts first.
     """
     conn = get_connection()
@@ -33,6 +33,9 @@ def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False)
     filters  = []
     params   = []
 
+    if alert_id:
+        filters.append("a.id = ?")
+        params.append(alert_id)
     if session_id:
         filters.append("a.session_id = ?")
         params.append(session_id)
@@ -151,4 +154,38 @@ def get_alert_summary() -> dict:
         "critical":       row["critical"],
         "warning":        row["warning"],
         "unacknowledged": row["unacknowledged"],
+    }
+
+
+def check_rtp_decay_drift(session_id: int, window_spins: int = 30) -> dict:
+    """
+    Detect real-time RTP decay/drift during a session.
+    Triggers an alert if rolling RTP drops severely over consecutive spins.
+    """
+    conn = get_connection()
+    events = conn.execute(
+        "SELECT bet_amount, win_amount FROM events WHERE session_id=? ORDER BY timestamp",
+        (session_id,)
+    ).fetchall()
+    conn.close()
+
+    if len(events) < window_spins:
+        return {"decay_detected": False, "rolling_rtp": None}
+
+    recent_events = events[-window_spins:]
+    total_bets = sum(e["bet_amount"] or 0 for e in recent_events)
+    total_wins = sum(e["win_amount"] or 0 for e in recent_events)
+
+    if total_bets == 0:
+        return {"decay_detected": False, "rolling_rtp": 0.0}
+
+    rolling_rtp = round((total_wins / total_bets) * 100.0, 2)
+    decay_detected = rolling_rtp < 70.0
+
+    return {
+        "session_id": session_id,
+        "decay_detected": decay_detected,
+        "rolling_rtp": rolling_rtp,
+        "window_spins": window_spins,
+        "severity": "critical" if rolling_rtp < 50.0 else ("warning" if decay_detected else "none")
     }

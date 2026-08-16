@@ -80,6 +80,49 @@ def detect_bet_escalation(events: list[dict]) -> dict:
         severity = "critical" if escalation_ratio > 3.0 else "warning"
 
     return {
+        "detected": detected,
+        "severity": severity,
+        "slope": slope,
+        "escalation_ratio": round(escalation_ratio, 2),
+        "avg_bet": avg_bet,
+        "peak_bet": peak_bet,
+    }
+
+
+def detect_martingale_progression(events: list[dict]) -> dict:
+    """
+    Detect Martingale bet doubling progression after consecutive losses.
+    Returns detected status, multiplier progression, and streak length.
+    """
+    if len(events) < 4:
+        return {"detected": False, "progression": [], "max_double_streak": 0, "severity": "none"}
+
+    max_streak = 0
+    current_streak = 0
+    progression = []
+
+    for i in range(1, len(events)):
+        prev_win = events[i-1].get("win_amount", 0) or 0
+        prev_bet = events[i-1].get("bet_amount", 0) or 0
+        curr_bet = events[i].get("bet_amount", 0) or 0
+
+        if prev_win == 0 and prev_bet > 0 and curr_bet >= prev_bet * 1.8:
+            current_streak += 1
+            progression.append(curr_bet)
+            if current_streak > max_streak:
+                max_streak = current_streak
+        else:
+            current_streak = 0
+
+    detected = max_streak >= 2
+    return {
+        "detected": detected,
+        "max_double_streak": max_streak,
+        "progression": progression,
+        "severity": "critical" if max_streak >= 3 else ("warning" if detected else "none")
+    }
+
+    return {
         "detected":          detected,
         "severity":          severity,
         "slope":             slope,
@@ -272,11 +315,12 @@ def analyze_behavior(session_id: int) -> dict:
         }
 
     patterns = {
-        "bet_escalation":    detect_bet_escalation(events),
-        "session_drift":     detect_session_drift(events),
-        "losing_clusters":   detect_losing_clusters(events),
-        "recovery_chasing":  detect_recovery_chasing(events),
-        "volatility_zones":  detect_volatility_zones(events),
+        "bet_escalation":        detect_bet_escalation(events),
+        "martingale_progression": detect_martingale_progression(events),
+        "session_drift":         detect_session_drift(events),
+        "losing_clusters":       detect_losing_clusters(events),
+        "recovery_chasing":      detect_recovery_chasing(events),
+        "volatility_zones":      detect_volatility_zones(events),
     }
 
     # Composite risk score (0-100)

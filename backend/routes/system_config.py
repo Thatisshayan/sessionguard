@@ -6,10 +6,11 @@ Only admin users can write config. Validates known keys before saving.
 Maturity: Working Prototype
 """
 
+import asyncio
+import json
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional, Any
-import json
 from pathlib import Path
 from backend.auth.service import get_current_user_from_token
 
@@ -61,12 +62,12 @@ def _set_nested(cfg: dict, key: str, value: Any):
 
 
 @router.get("/system-config")
-def get_config(authorization: Optional[str] = Header(None)):
+async def get_config(authorization: Optional[str] = Header(None)):
     """Return the full app_config.json (auth required)."""
-    user = get_current_user_from_token(authorization)
+    user = await asyncio.to_thread(get_current_user_from_token, authorization)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    return _load()
+    return await asyncio.to_thread(_load)
 
 
 class ConfigUpdate(BaseModel):
@@ -75,9 +76,9 @@ class ConfigUpdate(BaseModel):
 
 
 @router.patch("/system-config")
-def update_config(body: ConfigUpdate, authorization: Optional[str] = Header(None)):
+async def update_config(body: ConfigUpdate, authorization: Optional[str] = Header(None)):
     """Update a single config key. Admin only. Only editable keys allowed."""
-    user = get_current_user_from_token(authorization)
+    user = await asyncio.to_thread(get_current_user_from_token, authorization)
     if not user or user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required.")
     if body.key not in EDITABLE_KEYS:
@@ -85,16 +86,21 @@ def update_config(body: ConfigUpdate, authorization: Optional[str] = Header(None
             status_code=400,
             detail=f"Key '{body.key}' is not editable. Allowed: {sorted(EDITABLE_KEYS)}"
         )
-    cfg = _load()
-    _set_nested(cfg, body.key, body.value)
-    _save(cfg)
-    return {"key": body.key, "value": body.value, "saved": True}
+    def _apply():
+        cfg = _load()
+        _set_nested(cfg, body.key, body.value)
+        _save(cfg)
+        return {"key": body.key, "value": body.value, "saved": True}
+    return await asyncio.to_thread(_apply)
 
 
 @router.get("/system-config/editable-keys")
-def editable_keys():
+async def editable_keys(authorization: Optional[str] = Header(None)):
     """Return which keys are allowed to be edited."""
-    cfg     = _load()
+    user = await asyncio.to_thread(get_current_user_from_token, authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    cfg     = await asyncio.to_thread(_load)
     result  = {}
     for key in sorted(EDITABLE_KEYS):
         result[key] = _get_nested(cfg, key)

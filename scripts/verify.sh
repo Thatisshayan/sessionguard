@@ -17,49 +17,66 @@ if command -v gitleaks >/dev/null 2>&1; then
   gitleaks detect --no-banner --redact || error "secret-scan" "gitleaks found secrets"
 else
   # (a) filename-based: private key / credential files must not be committed.
-  #     Exclude dependency / generated dirs (.venv, node_modules, dist, build,
-  #     _repo_clone, .cache, coverage) — library files there are not first-party.
-  bad_files=$(find . -type f \( -name '*.p8' -o -name '*.p12' -o -name '*credential*' \
-    -o -name '*.pem' -o -name '*.key' \) \
-    -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/audits/private/*' \
-    -not -path '*/.venv/*' -not -path '*/_repo_clone/*' -not -path '*/dist/*' \
-    -not -path '*/build/*' -not -path '*/.cache/*' -not -path '*/coverage/*' 2>/dev/null || true)
+  #     Use git-tracked files only — directory-name exclusions cannot hide committed source.
+  tracked=$(git ls-files 2>/dev/null || find . -type f -not -path '*/.git/*')
+  bad_files=$(echo "$tracked" \
+    | grep -E '(\.p8$|\.p12$|credential|\.pem$|\.key$)' \
+    | grep -v '^audits/private/' || true)
   if [ -n "$bad_files" ]; then error "secret-scan" "secret files present: $bad_files"; fi
-  # (b) content-based: only scan first-party code/config, require an ASSIGNED VALUE.
-  #     Exclude dependency / generated dirs so library files don't false-positive.
-  hits=$(grep -rIlE "(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)[[:space:]]*[=:][[:space:]]*[\"']?[A-Za-z0-9/+_-]{8,}" \
-    --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=audits/private \
-    --exclude-dir=.venv --exclude-dir=_repo_clone --exclude-dir=dist --exclude-dir=build \
-    --exclude-dir=.cache --exclude-dir=coverage \
-    --include='*.json' --include='*.env' --include='*.ts' --include='*.js' --include='*.py' \
-    --include='*.yml' --include='*.yaml' --include='*.toml' --include='*.sh' . 2>/dev/null || true)
-  if [ -n "$hits" ]; then error "secret-scan" "possible hardcoded secrets in: $hits"; fi
+  # (b) content-based: scan only git-tracked code/config, require an ASSIGNED VALUE.
+  # Filter hits against .verify/.secret-scan-ignore.json if present
+  raw_hits=$(echo "$tracked" \
+    | grep -E '\.(json|env|ts|js|py|yml|yaml|toml|sh)$' \
+    | xargs grep -lE "(API_KEY|SECRET|PRIVATE_KEY|TOKEN|PASSWORD)[[:space:]]*[=:][[:space:]]*[\"']?[A-Za-z0-9/+_-]{8,}" \
+    2>/dev/null || true)
+  
+  hits=""
+  if [ -f .verify/.secret-scan-ignore.json ]; then
+    for f in $raw_hits; do
+      if ! grep -q "\"file\": \"$f\"" .verify/.secret-scan-ignore.json; then
+        hits="$hits $f"
+      fi
+    done
+  else
+    hits=$raw_hits
+  fi
+  
+  if [ -n "$(echo $hits | xargs)" ]; then error "secret-scan" "possible hardcoded secrets in: $hits"; fi
 fi
 
 # ---------------------------------------------------------------- 2. doc-freshness
 echo "== doc-freshness =="
 [ -f README.md ] || error "doc-freshness" "README.md missing"
-# link integrity (best-effort if tool present)
+# link integrity (mandatory — fail if tool is unavailable)
 if command -v markdown-link-check >/dev/null 2>&1; then
-  find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*' \
-    -not -path './audits/private/*' -print0 2>/dev/null \
-    | xargs -0 -r -n1 markdown-link-check || error "doc-freshness" "broken doc links"
+  MLC_CMD="markdown-link-check"
+elif command -v npx >/dev/null 2>&1; then
+  MLC_CMD="npx markdown-link-check"
+else
+  MLC_CMD=""
 fi
-# audit age (≤ 30 days)
-newest=$(find audits -name '*.md' -not -path '*/private/*' -printf '%T@ %p\n' 2>/dev/null \
-  | sort -n | tail -1 | cut -d' ' -f1)
-if [ -z "$newest" ]; then
+
+if [ -z "$MLC_CMD" ]; then
+  error "doc-freshness" "markdown-link-check not installed (required for doc-link validation)"
+else
+  find . -name '*.md' -not -path './node_modules/*' -not -path './.git/*' \
+    -not -path './audits/private/*' -not -path './desktop_shell/*' -not -path './.venv/*' -print0 2>/dev/null \
+    | xargs -0 -r -n1 $MLC_CMD -c .markdown-link-check.json || error "doc-freshness" "broken doc links"
+fi
+# audit age (≤ 30 days, from ISO date in filename, not mtime)
+newest_audit=$(find audits -name '????-??-??_*.md' -not -path '*/private/*' 2>/dev/null \
+  | sed 's|.*/\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\)_.*|\1|' \
+  | sort -r | head -1)
+if [ -z "$newest_audit" ]; then
   error "doc-freshness" "no audit found under audits/"
 else
-  now=$(date +%s)
-  age=$(( (now - ${newest%.*}) / 86400 ))
-  if [ "$age" -gt 30 ]; then error "doc-freshness" "newest audit is $age days old (>30)"; fi
+  audit_epoch=$(date -d "$newest_audit" +%s 2>/dev/null || date -j -f "%Y-%m-%d" "$newest_audit" +%s)
+  age=$(( ($(date +%s) - audit_epoch) / 86400 ))
+  if [ "$age" -gt 30 ]; then error "doc-freshness" "newest audit ($newest_audit) is $age days old (>30)"; fi
 fi
-# doc baseline
+# doc baseline (must exist — bootstrap creates it; verification only validates)
 if [ ! -f docs/_baseline.json ]; then
-  cnt=$(find docs -name '*.md' 2>/dev/null | wc -l)
-  printf '{"md_count": %s}\n' "$cnt" > docs/_baseline.json
-  notice "doc-freshness" "captured docs baseline md_count=$cnt"
+  error "doc-freshness" "docs/_baseline.json missing — run bootstrap (apply script) first"
 fi
 base=$(grep -o '"md_count": *[0-9]*' docs/_baseline.json | grep -o '[0-9]*$')
 cur=$(find docs -name '*.md' 2>/dev/null | wc -l)
@@ -69,6 +86,13 @@ fi
 
 # ---------------------------------------------------------------- 3. build / test
 echo "== build / test =="
+
+# check frontend if present
+if [ -d frontend ] && [ -f frontend/package.json ]; then
+  echo "-- frontend --"
+  (cd frontend && ([ -d node_modules ] || npm ci) && npx tsc --noEmit && npm run build) || error "frontend" "frontend build/type-check failed"
+fi
+
 # pick the package manager from lockfiles (respect pnpm/yarn, don't assume npm)
 PM=""
 if [ -f pnpm-lock.yaml ]; then PM=pnpm
@@ -90,8 +114,14 @@ if [ -n "$PM" ]; then
     npm)  run_with_timeout 300 build npm ci ;;
   esac
   if [ $FAIL -eq 0 ]; then
-    (npm run build --if-present || pnpm run build --if-present || yarn build) >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
-    (npm test --if-present || pnpm test --if-present || yarn test) >/dev/null 2>&1 && notice test "test ok" || error test "test failed"
+    case "$PM" in
+      npm)  npm run build --if-present >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+            npm test --if-present >/dev/null 2>&1 && notice test "test ok" || error test "test failed" ;;
+      pnpm) pnpm run build --if-present >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+            pnpm test --if-present >/dev/null 2>&1 && notice test "test ok" || error test "test failed" ;;
+      yarn) yarn build >/dev/null 2>&1 && notice build "build ok" || error build "build failed"
+            yarn test >/dev/null 2>&1 && notice test "test ok" || error test "test failed" ;;
+    esac
   fi
 elif [ -f pyproject.toml ] || [ -f requirements.txt ]; then
   pip install -q -r requirements.txt 2>/dev/null || true
@@ -103,7 +133,39 @@ else
   notice "build" "no build system detected; docs/static repo — skipping build/test"
 fi
 
-# ---------------------------------------------------------------- 4. deploy-dry
+# ---------------------------------------------------------------- 4. desktop-bundle smoke
+echo "== desktop-bundle smoke =="
+if [ -f desktop_shell/stage-backend.js ]; then
+  echo "-- staging bundled backend --"
+  node desktop_shell/stage-backend.js || error "bundle" "staging script failed"
+  
+  if [ -d desktop_shell/src-tauri/bundled_app ]; then
+    # check for residue
+    residue=$(find desktop_shell/src-tauri/bundled_app -name "__pycache__" -o -name "*.db" 2>/dev/null)
+    if [ -n "$residue" ]; then
+      error "bundle" "staging contains runtime residue: $residue"
+    fi
+    # minimal startup smoke
+    echo "-- backend smoke --"
+    SMOKE_LOG=$(mktemp)
+    trap "rm -f $SMOKE_LOG" EXIT
+    OLD_PWD=$(pwd)
+    cd desktop_shell/src-tauri/bundled_app
+    SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > "$SMOKE_LOG" 2>&1 &
+    PID=$!
+    cd "$OLD_PWD"
+    sleep 3
+    if curl -fsS http://127.0.0.1:8011/health >/dev/null 2>&1; then
+      notice "bundle" "bundled backend smoke ok"
+    else
+      error "bundle" "bundled backend smoke failed (check $SMOKE_LOG)"
+      tail -20 "$SMOKE_LOG"
+    fi
+    kill $PID || true
+  fi
+fi
+
+# ---------------------------------------------------------------- 5. deploy-dry
 echo "== deploy-dry =="
 if [ -f vercel.json ]; then
   vercel build --dry-run >/dev/null 2>&1 || error "deploy" "vercel dry-run failed"

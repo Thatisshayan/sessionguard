@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  sessionguard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sessionguard
+    ports:
+      - "8000:8000"
+    environment:
+      - SESSIONGUARD_DEV_MODE=true
+      - SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    volumes:
+      - ./storage:/app/storage
+      - ./config:/app/config
+    restart: unless-stopped
