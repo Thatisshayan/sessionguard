@@ -56,7 +56,7 @@ pyclamd==0.4.0              # ClamAV virus scanning (optional - skip if unavaila
 structlog==24.1.0
 
 # ── Environment (Phase 2: A3 .env support) ────────────────────────────────────
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 
 # ── Future / SaaS (uncomment when needed) ────────────────────────────────────
 # redis==5.0.4            # Job queue broker
