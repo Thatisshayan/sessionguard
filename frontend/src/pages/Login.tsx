@@ -79,7 +79,7 @@ export default function Login() {
             <span style={{ color: 'var(--text-primary)' }}>Guard</span>
           </div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Session Intelligence Platform · v0.6
+            Session Intelligence Platform · v1.5.3
           </div>
         </div>
 

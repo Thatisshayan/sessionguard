@@ -4,6 +4,8 @@
 )]
 
 use std::{
+    env,
+    path::PathBuf,
     process::{Child, Command},
     sync::{Arc, Mutex},
     thread,
@@ -60,9 +62,12 @@ fn find_python() -> String {
     // Check bundled Python first (for distributed builds that embed one)
     if let Some(exe) = std::env::current_exe().ok() {
         if let Some(dir) = exe.parent() {
-            let bundled = dir.join("resources").join("bundled_app").join("python").join("python.exe");
-            if bundled.exists() {
-                return bundled.to_string_lossy().to_string();
+            let bundled_root = dir.join("resources").join("bundled_app");
+            for folder in ["python", "python_win"] {
+                let bundled = bundled_root.join(folder).join("python.exe");
+                if bundled.exists() {
+                    return bundled.to_string_lossy().to_string();
+                }
             }
         }
     }
@@ -108,20 +113,49 @@ fn start_backend(app: &AppHandle) -> Option<Child> {
     };
 
     log_line(&format!("[Tauri] Starting backend from: {}", root));
+    let root_path = PathBuf::from(&root);
 
     #[cfg(windows)]
-    let result = Command::new(&python)
-        .args([
-            "-m", "uvicorn",
-            "backend.main:app",
-            "--host", "127.0.0.1",
-            "--port", "8000",
-            "--no-access-log",
-        ])
-        .current_dir(&root)
-        .env("PYTHONPATH", &root)
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn();
+    let result = {
+        let mut cmd = Command::new(&python);
+        cmd.args([
+                "-m", "uvicorn",
+                "backend.main:app",
+                "--host", "127.0.0.1",
+                "--port", "8000",
+                "--no-access-log",
+            ])
+            .current_dir(&root)
+            .env("PYTHONPATH", &root);
+
+        let mut extra_paths: Vec<String> = Vec::new();
+        for folder in ["ffmpeg_win", "tesseract_win"] {
+            let candidate = root_path.join(folder);
+            if candidate.exists() {
+                extra_paths.push(candidate.to_string_lossy().to_string());
+            }
+        }
+        if !extra_paths.is_empty() {
+            let current_path = env::var("PATH").unwrap_or_default();
+            let mut combined = extra_paths.join(";");
+            if !current_path.is_empty() {
+                combined.push(';');
+                combined.push_str(&current_path);
+            }
+            cmd.env("PATH", combined);
+        }
+
+        let tess_exe = root_path.join("tesseract_win").join("tesseract.exe");
+        if tess_exe.exists() {
+            cmd.env("SESSIONGUARD_TESSERACT_CMD", tess_exe.to_string_lossy().to_string());
+        }
+        let tessdata = root_path.join("tesseract_win").join("tessdata");
+        if tessdata.exists() {
+            cmd.env("TESSDATA_PREFIX", tessdata.to_string_lossy().to_string());
+        }
+
+        cmd.creation_flags(CREATE_NO_WINDOW).spawn()
+    };
 
     #[cfg(not(windows))]
     let result = Command::new(&python)

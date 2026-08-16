@@ -1,5 +1,5 @@
 @echo off
-:: run_all.bat — Launch backend, frontend, and desktop shell together.
+:: run_all.bat — Launch backend, frontend, and Tauri desktop shell together.
 :: Opens each in its own window so logs are visible separately.
 
 setlocal
@@ -9,7 +9,7 @@ echo [SessionGuard] Launching all services...
 echo.
 echo   Backend  -> http://127.0.0.1:8000
 echo   Frontend -> http://localhost:5173
-echo   Desktop  -> PySide6 window
+echo   Desktop  -> Tauri window
 echo.
 
 start "SessionGuard Backend"  cmd /k ""%ROOT%run_backend.bat""

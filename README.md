@@ -1,4 +1,4 @@
-# SessionGuard v1.5.2 — Local-First Session Intelligence Platform
+# SessionGuard v1.5.3 — Local-First Session Intelligence Platform
 
 Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (NVIDIA NIM + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
 
@@ -34,7 +34,7 @@ bash scripts/run_all.sh
 |---------|-----|
 | Dashboard | http://localhost:5173 |
 | API Docs | http://127.0.0.1:8000/docs |
-| Desktop App | Launched by run_all |
+| Desktop App | Launched by run_all (Tauri shell, `desktop_shell/`) |
 
 ---
 
@@ -139,7 +139,7 @@ sessionguard/
 | Admin | `GET /admin/health`, `GET /admin/stats`, `GET/PATCH/DELETE /admin/users`, `GET /admin/backup`, `POST /admin/restore`, `GET /admin/audit`, `GET /admin/audit/export` (C5) |
 | Intelligence | `POST /intelligence/clusters/build`, `GET /intelligence/clusters`, `GET /intelligence/anomalies`, `GET /intelligence/dataset-quality` (D10) |
 | AI Analysis | `GET /api/v1/ai/status`, `GET /api/v1/ai/models`, `POST /api/v1/ai/model`, `GET/POST /api/v1/sessions/{id}/ai`, `GET /api/v1/sessions/{id}/ai/stream` — router was unmounted until 2026-07-23, now fixed |
-| Intelligence (AI sub-routes) | `POST /intelligence/ai/compare`, `GET /intelligence/ai/session/{id}`, `GET /intelligence/ai/status` ⚠️ — this router's paths double their own segment under its mount prefix (`/api/v1/intelligence/intelligence/...`); known bug, not yet fixed, see `SESSIONGUARDREVIVAL1.3.md` task A5 |
+| Intelligence (AI sub-routes) | `POST /intelligence/ai/compare`, `GET /intelligence/ai/session/{id}`, `GET /intelligence/ai/status` — the doubled-prefix mount bug (`/api/v1/intelligence/intelligence/...`) tracked as `SESSIONGUARDREVIVAL1.3.md` task A5 was fixed 2026-07-23 |
 | AI Cost | `GET /api/v1/ai-cost/usage` (D6 — token usage + budget tracking) |
 | Prompts | `GET/POST /api/v1/prompts` (D3 — prompt versioning + A/B) |
 | OCR Calibrate | `POST /ocr/process`, `POST /ocr/calibrate`, `POST /ocr-calibrate/auto` (C2), `GET /ocr/status` |
@@ -191,7 +191,9 @@ sessionguard/
 
 **Legend**: ✅ Complete | ⚠️ Partial/WIP | ❌ Missing
 
-> **AI Narrative note (2026-07-23)**: this row was previously all-✅. It was wrong — the router serving every one of these endpoints (`backend/routes/ai_analysis.py`) was never mounted in `main.py`, so the feature 404'd end-to-end despite tests passing at the unit level. Now fixed (router mounted, live curl confirms the model list endpoint works) but downgraded to ⚠️ because it has still never been exercised against a real NVIDIA NIM API key end-to-end — see `SESSIONGUARDREVIVAL1.3.md` task B3.
+> **API-only features (Frontend ❌)**: Alert Explanations, AI Cost Tracking, Prompt Versioning, Evidence Package, Clustering, and Dataset Quality Report all have complete, tested backend endpoints but no routed frontend page in `frontend/src/App.tsx` — they're reachable via `frontend/src/services/api.ts` helper functions but not from the UI nav. Treat these as API-only until a page is added; see `audits/2026-08-16_Codex_LocalReadiness_Audit.md` finding 4.
+
+> **AI Narrative note (2026-07-23, updated 2026-08-16)**: this row was previously all-✅. It was wrong — the router serving every one of these endpoints (`backend/routes/ai_analysis.py`) was never mounted in `main.py`, so the feature 404'd end-to-end despite tests passing at the unit level. Now fixed (router mounted, live curl confirms the model list endpoint works). The real-NVIDIA-key gap (`SESSIONGUARDREVIVAL1.3.md` task B3) is also resolved — `scripts/verify_nvidia_live.py` passed against the live NVIDIA NIM API on 2026-08-14. `pwsh -File scripts/verify.ps1` is confirmed green as of 2026-08-16 (264 passed, 2 skipped) after `engines/live_coach_engine.py` was given a `RULE_FIRST_TRIGGERS` set so critical rule-engine triggers (martingale, RTP decay, etc.) always win over the AI tiers regardless of ambient Ollama availability. Row is kept at ⚠️ rather than ✅ only because Live Monitor (screen) and Auth (desktop) below still have open gaps — see `docs/governance/DEFERRED_WORK.md` for current status.
 
 ---
 
@@ -204,6 +206,7 @@ Read in this order if you're new to the repo:
 | [`SessionGuardRevival.md`](SessionGuardRevival.md) | **Phase history** (0–5 + NVIDIA migration, complete) + session log — read first |
 | [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) | **Active sprint plan** as of 2026-07-23 — full findings from the CI/desktop-repair session + forward task board. Read second, before assuming anything is done or broken |
 | [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) | Dedicated future sprint — full embeddable-runtime bundling (Python + Tesseract + FFmpeg). Not started; read to understand what's deliberately deferred |
+| [`SESSIONGUARDREVIVAL1.5.md`](SESSIONGUARDREVIVAL1.5.md) | **Newest audit-remediation plan** (2026-08-14) — folds 1.4's remaining scope into its backlog; read to see what's since been fixed vs. still open |
 | [`SESSIONGUARDREVIVAL1.2.md`](SESSIONGUARDREVIVAL1.2.md) | Superseded by 1.3, kept for history (Sprint 1–2 detail) |
 | [`10072026auditbytopencode.md`](10072026auditbytopencode.md) | Point-in-time deep codebase audit, dated 2026-07-10 — stale, superseded by the above |
 
@@ -240,7 +243,7 @@ See [`SessionGuardRevival.md`](SessionGuardRevival.md) for phase history and [`S
 | 1.4 | Full embeddable-runtime bundling (Python + Tesseract + FFmpeg) — true zero-dependency installers | ⏳ Not started — dedicated future sprint, see `SESSIONGUARDREVIVAL1.4.md` |
 | 6 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
 
-**Current version**: `v1.5.2`. Production-local-desktop-app readiness is close but not there yet — read `SESSIONGUARDREVIVAL1.3.md`'s findings before assuming any given feature works end-to-end; several "done" claims in earlier phases turned out to be wrong on 2026-07-23. Phase 6 (SaaS) requires a committed business decision that hasn't been made.
+**Current version**: `v1.5.3` (canonical source: `config/app_config.json` → `version`). Production-local-desktop-app readiness is close but not there yet — read `SESSIONGUARDREVIVAL1.3.md`'s findings and `docs/governance/DEFERRED_WORK.md`'s current open items before assuming any given feature works end-to-end; several "done" claims in earlier phases (and in the 2026-08-12 launch-readiness audit) turned out to be time-bound or wrong on later re-verification. Phase 6 (SaaS) requires a committed business decision that hasn't been made.
 
 ---
 

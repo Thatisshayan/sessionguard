@@ -10,6 +10,15 @@ cd "$REPO_ROOT"
 FAIL=0
 notice() { echo "::notice title=$1::$2"; }
 error()  { echo "::error title=$1::$2"; FAIL=1; }
+get_free_loopback_port() {
+  python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+}
 
 # ---------------------------------------------------------------- 1. secret-scan
 echo "== secret-scan =="
@@ -147,15 +156,23 @@ if [ -f desktop_shell/stage-backend.js ]; then
     fi
     # minimal startup smoke
     echo "-- backend smoke --"
+    SMOKE_PORT=$(get_free_loopback_port)
     SMOKE_LOG=$(mktemp)
     trap "rm -f $SMOKE_LOG" EXIT
     OLD_PWD=$(pwd)
     cd desktop_shell/src-tauri/bundled_app
-    SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8011 --no-access-log > "$SMOKE_LOG" 2>&1 &
+    SESSIONGUARD_DEV_MODE=true python3 -m uvicorn backend.main:app --host 127.0.0.1 --port "$SMOKE_PORT" --no-access-log > "$SMOKE_LOG" 2>&1 &
     PID=$!
     cd "$OLD_PWD"
-    sleep 3
-    if curl -fsS http://127.0.0.1:8011/health >/dev/null 2>&1; then
+    bundle_ready=0
+    for _ in $(seq 1 15); do
+      sleep 1
+      if curl -fsS "http://127.0.0.1:${SMOKE_PORT}/health" >/dev/null 2>&1; then
+        bundle_ready=1
+        break
+      fi
+    done
+    if [ "$bundle_ready" -eq 1 ]; then
       notice "bundle" "bundled backend smoke ok"
     else
       error "bundle" "bundled backend smoke failed (check $SMOKE_LOG)"

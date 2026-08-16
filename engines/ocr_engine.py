@@ -28,14 +28,38 @@ import pytesseract
 
 from database.db import get_connection
 
-# ── Windows: hard-set Tesseract path so pytesseract never guesses ─────────────
-if platform.system() == "Windows":
-    _tess_exe = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
-    if os.path.exists(_tess_exe):
-        pytesseract.pytesseract.tesseract_cmd = _tess_exe
-    if os.path.exists(_tess_data):
-        os.environ["TESSDATA_PREFIX"] = _tess_data
+
+def _configure_tesseract():
+    """Prefer explicit/bundled Tesseract paths before system defaults."""
+    tess_exe = os.getenv("SESSIONGUARD_TESSERACT_CMD")
+    tess_data = os.getenv("TESSDATA_PREFIX")
+
+    if platform.system() == "Windows":
+        bundled_root = Path(__file__).resolve().parent.parent / "tesseract_win"
+        if not tess_exe:
+            bundled_exe = bundled_root / "tesseract.exe"
+            system_exe = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+            system_exe_x86 = Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe")
+            for candidate in (bundled_exe, system_exe, system_exe_x86):
+                if candidate.exists():
+                    tess_exe = str(candidate)
+                    break
+        if not tess_data:
+            bundled_data = bundled_root / "tessdata"
+            system_data = Path(r"C:\Program Files\Tesseract-OCR\tessdata")
+            system_data_x86 = Path(r"C:\Program Files (x86)\Tesseract-OCR\tessdata")
+            for candidate in (bundled_data, system_data, system_data_x86):
+                if candidate.exists():
+                    tess_data = str(candidate)
+                    break
+
+    if tess_exe and Path(tess_exe).exists():
+        pytesseract.pytesseract.tesseract_cmd = tess_exe
+    if tess_data and Path(tess_data).exists():
+        os.environ["TESSDATA_PREFIX"] = tess_data
+
+
+_configure_tesseract()
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 CONFIDENCE_THRESHOLD = 0.75   # below this → flagged for review
@@ -67,11 +91,15 @@ def detect_ocr_anomalies(
 
 def _find_tesseract() -> str | None:
     """Return the tesseract executable path, checking PATH and standard Windows locations."""
+    env_path = os.getenv("SESSIONGUARD_TESSERACT_CMD")
+    if env_path and Path(env_path).exists():
+        return env_path
     path = shutil.which("tesseract")
     if path:
         return path
     if platform.system() == "Windows":
         candidates = [
+            str(Path(__file__).resolve().parent.parent / "tesseract_win" / "tesseract.exe"),
             r"C:\Program Files\Tesseract-OCR\tesseract.exe",
             r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
         ]
@@ -91,7 +119,7 @@ def check_ocr_status() -> dict:
         try:
             import subprocess
             r = subprocess.run(
-                ["tesseract", "--version"],
+                [tesseract_path, "--version"],
                 capture_output=True, text=True, timeout=5
             )
             tess_version = r.stdout.splitlines()[0] if r.stdout else r.stderr.splitlines()[0]

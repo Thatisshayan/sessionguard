@@ -7,10 +7,12 @@
 
 ---
 
+> **Staleness note (added 2026-08-16)**: the "100% GREEN" / "100% launch-ready" verdict below was accurate on 2026-08-12 but is **time-bound, not a permanent guarantee** — `scripts/verify.ps1` went red again on 2026-08-16 (see `audits/2026-08-16_Codex_LocalReadiness_Audit.md` and `docs/governance/DEFERRED_WORK.md`) due to a live-coach test/AI-tier ordering regression, and was fixed the same day. Kept here as a historical record; do not cite this file's verdict as current status — check `docs/governance/DEFERRED_WORK.md` for the live picture.
+
 ## Executive Summary
 All launch-blocking findings identified across `audits/2026-08-12_LaunchReadiness_Plan.md` and previous full-spectrum audits have been systematically resolved and verified against strict CI gates.
 
-Verification status (`scripts/verify.ps1` / `scripts/verify.sh`): **100% GREEN (PASSED)**
+Verification status (`scripts/verify.ps1` / `scripts/verify.sh`): **100% GREEN (PASSED)** *(as of 2026-08-12 — see staleness note above)*
 
 ---
 
