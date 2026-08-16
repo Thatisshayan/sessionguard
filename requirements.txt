@@ -7,7 +7,7 @@ uvicorn[standard]==0.29.0
 python-multipart==0.0.9
 
 # ── Auth (v1.2.0) ──────────────────────────────────────────────────────────────
-PyJWT==2.7.0
+PyJWT==2.13.0
 # Password hashing via stdlib hashlib.pbkdf2_hmac — no passlib/bcrypt needed
 
 # ── Data / Validation ─────────────────────────────────────────────────────────
