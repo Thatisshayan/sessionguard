@@ -12,18 +12,43 @@ try:
 except ImportError:
     pass
 
-# ── Windows: pin Tesseract paths before any engine imports pytesseract ────────
-if platform.system() == "Windows":
-    _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
-    _tess_exe  = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if Path(_tess_data).exists():
-        os.environ["TESSDATA_PREFIX"] = _tess_data
+def _configure_windows_tesseract():
+    """Prefer explicit/bundled Tesseract paths before falling back to system install."""
+    if platform.system() != "Windows":
+        return
+
+    bundled_root = ROOT / "tesseract_win"
+    tess_exe = os.getenv("SESSIONGUARD_TESSERACT_CMD")
+    tess_data = os.getenv("TESSDATA_PREFIX")
+
+    if not tess_exe:
+        bundled_exe = bundled_root / "tesseract.exe"
+        system_exe = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+        if bundled_exe.exists():
+            tess_exe = str(bundled_exe)
+        elif system_exe.exists():
+            tess_exe = str(system_exe)
+
+    if not tess_data:
+        bundled_data = bundled_root / "tessdata"
+        system_data = Path(r"C:\Program Files\Tesseract-OCR\tessdata")
+        if bundled_data.exists():
+            tess_data = str(bundled_data)
+        elif system_data.exists():
+            tess_data = str(system_data)
+
+    if tess_data:
+        os.environ["TESSDATA_PREFIX"] = tess_data
+
     try:
         import pytesseract
-        if Path(_tess_exe).exists():
-            pytesseract.pytesseract.tesseract_cmd = _tess_exe
+        if tess_exe and Path(tess_exe).exists():
+            pytesseract.pytesseract.tesseract_cmd = tess_exe
     except ImportError:
         pass
+
+
+_configure_windows_tesseract()
 
 # ── Optional Sentry crash reporting ─────────────────────────────────────────
 sentry_dsn = os.getenv("SENTRY_DSN")

@@ -8,6 +8,15 @@ Set-Location $RepoRoot
 $failed = $false
 function Notice($t,$m){ Write-Host "::notice title=$t::$m" }
 function Err($t,$m){ Write-Host "::error title=$t::$m"; $script:failed = $true }
+function Get-FreeLoopbackPort() {
+  $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), 0)
+  $listener.Start()
+  try {
+    return ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+  } finally {
+    $listener.Stop()
+  }
+}
 
 # ---------------------------------------------------------------- 1. secret-scan
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -162,21 +171,27 @@ if (Test-Path (Join-Path $RepoRoot 'desktop_shell\stage-backend.js')) {
     }
     # minimal startup smoke
     Write-Host "-- backend smoke --"
+    $smokePort = Get-FreeLoopbackPort
     $smokeLog = Join-Path $env:TEMP "sg-smoke.log"
     $smokeErr = Join-Path $env:TEMP "sg-smoke-err.log"
-    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port 8012 --no-access-log" -WorkingDirectory $dest -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeErr -Environment @{SESSIONGUARD_DEV_MODE='true'}
-    Start-Sleep -Seconds 3
-    try {
-      $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8012/health" -UseBasicParsing -ErrorAction Stop
-      if ($resp.StatusCode -eq 200) {
-        Notice "bundle" "bundled backend smoke ok"
-      } else {
-        Err "bundle" "bundled backend smoke failed"
-        if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
-        if (Test-Path $smokeErr) { Get-Content $smokeErr | Select-Object -Last 10 }
+    $p = Start-Process -FilePath "python" -ArgumentList "-m uvicorn backend.main:app --host 127.0.0.1 --port $smokePort --no-access-log" -WorkingDirectory $dest -NoNewWindow -PassThru -RedirectStandardOutput $smokeLog -RedirectStandardError $smokeErr -Environment @{SESSIONGUARD_DEV_MODE='true'}
+    $bundleReady = $false
+    for ($attempt = 0; $attempt -lt 15; $attempt++) {
+      Start-Sleep -Seconds 1
+      try {
+        $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$smokePort/health" -UseBasicParsing -ErrorAction Stop
+        if ($resp.StatusCode -eq 200) {
+          $bundleReady = $true
+          break
+        }
+      } catch {
+        # Keep polling until the retry budget is exhausted.
       }
-    } catch {
-      Err "bundle" "bundled backend smoke failed: $($_.Exception.Message)"
+    }
+    if ($bundleReady) {
+      Notice "bundle" "bundled backend smoke ok"
+    } else {
+      Err "bundle" "bundled backend smoke failed"
       if (Test-Path $smokeLog) { Get-Content $smokeLog | Select-Object -Last 10 }
       if (Test-Path $smokeErr) { Get-Content $smokeErr | Select-Object -Last 10 }
     }

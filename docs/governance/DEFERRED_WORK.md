@@ -47,3 +47,55 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   across all engine files, then remove `asyncio.to_thread()` wrappers — open
 - [2026-07-25] test_check_repo_drift flaky test: resolved 2026-08-12: fixed race conditions in test_check_repo_drift.py.
 - [2026-08-11] full-spectrum production-local-desktop readiness: resolved 2026-08-12: WS1-WS4 executed, verification gates green, runtime bundling scripts added, App.tsx polished.
+- [2026-08-16] local verify truth: `pwsh -File scripts/verify.ps1` is red again
+  on 2026-08-16 because `tests/test_live_coach.py` expects deterministic rule
+  triggers (`martingale`, `rtp_decay`) while `engines/live_coach_engine.py`
+  prefers NVIDIA/Ollama coaching before rule fallback when AI is available —
+  resume hint: either make the tests explicitly disable AI/Ollama or make the
+  coach expose a deterministic test mode so local pass/fail does not depend on
+  ambient Ollama availability — resolved 2026-08-16: added `RULE_FIRST_TRIGGERS`
+  set (`martingale`, `rtp_decay`, `rage_spiral`, `critical_streak`,
+  `tilt_betting`) in `engines/live_coach_engine.py` so those triggers always
+  return the deterministic rule message before the AI tiers run, plus a
+  `SESSIONGUARD_DISABLE_COACH_AI` env-var escape hatch; `tests/test_live_coach.py`
+  now passes 3/3 regardless of ambient Ollama state; full `pwsh -File
+  scripts/verify.ps1` confirmed green (264 passed, 2 skipped).
+- [2026-08-16] Tauri bundled-runtime path mismatch: `desktop_shell/stage-backend.js`
+  stages runtimes into `bundled_app/python_win`, `tesseract_win`, and
+  `ffmpeg_win`, but `desktop_shell/src-tauri/src/main.rs` only checks for
+  bundled Python under `resources/bundled_app/python/python.exe` before
+  falling back to system PATH — resume hint: normalize the runtime folder
+  contract across staging + launcher + docs, then verify packaged-desktop
+  startup uses bundled binaries end-to-end — resolved 2026-08-16: verified
+  `main.rs::find_python()` already checks both `resources/bundled_app/python/`
+  and `resources/bundled_app/python_win/` folder names, matching
+  `stage-backend.js`'s `python_win` staging target; `pwsh -File
+  scripts/verify.ps1`'s desktop-bundle smoke step confirms all three runtimes
+  (`python_win`, `tesseract_win`, `ffmpeg_win`) stage correctly into
+  `desktop_shell/src-tauri/bundled_app/` and the bundled backend smoke passes.
+- [2026-08-16] local launch/docs drift: quick-start desktop scripts still launch
+  the legacy PySide6 shell (`scripts/run_desktop.bat`) and `scripts/setup.bat`
+  still prints `v0.5`, while the repo positions Tauri as the primary desktop
+  target; README and the 2026-08-12 launch-readiness audit also overstate the
+  current verified state — resume hint: choose one primary local desktop path,
+  align `run_all`/`run_desktop`/README to it, and remove stale “100% ready”
+  wording once re-verified — resolved 2026-08-16: `scripts/run_desktop.bat`
+  now `cd`s into `desktop_shell/` and runs `npm run tauri:dev`;
+  `scripts/run_all.bat` launches the Tauri window (not PySide6) and
+  `scripts/setup.bat` prints `v1.5.3`; version string reconciled to `v1.5.3`
+  (canonical source `config/app_config.json`) across `README.md` and
+  `frontend/src/pages/Login.tsx` (was `v0.6`); `README.md` intelligence
+  doubled-prefix bug claim (line 142) removed — confirmed fixed by reading
+  `backend/routes/intelligence.py` (no doubled segment); AI Narrative note and
+  Documentation index updated to reference `SESSIONGUARDREVIVAL1.5.md`; the
+  2026-08-12 audit's "100% GREEN" claim annotated as time-bound, not current
+  status.
+- [2026-08-16] frontend UI coverage for API-only backend features: evidence
+  package management, clustering, dataset summary/anomalies, and AI
+  compare/review-suggestion endpoints exist and are tested in the backend
+  (`frontend/src/services/api.ts` has typed helpers) but have no routed page
+  in `frontend/src/App.tsx` — resume hint: add routed pages for these under
+  `frontend/src/pages/` and wire nav entries, or keep deliberately API-only —
+  documented as API-only in `README.md`'s Feature Completeness section
+  2026-08-16; still open (no UI added this pass, scope was doc-accuracy +
+  the two code fixes above, not new feature build).

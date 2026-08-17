@@ -272,6 +272,13 @@ _lock = threading.Lock()
 _last_n = 0
 _log: list[dict] = []
 FIRE_EVERY = 3
+RULE_FIRST_TRIGGERS = {
+    'martingale',
+    'rtp_decay',
+    'rage_spiral',
+    'critical_streak',
+    'tilt_betting',
+}
 
 
 def get_coaching_message(events, style='balanced', force=False):
@@ -293,17 +300,21 @@ def get_coaching_message(events, style='balanced', force=False):
                stats.get('martingale', {}).get('detected', False) or
                stats.get('rtp_decay', False))
     
-    msg=None
-    if has_issue:
-        # Tier 1: NVIDIA NIM Cloud LLM
-        msg = _nvidia_coach(stats, style)
+    rule_msg = _detect_patterns(stats, style)
+    if rule_msg and rule_msg.trigger in RULE_FIRST_TRIGGERS:
+        msg = rule_msg
+    else:
+        msg = None
+        if has_issue and os.getenv("SESSIONGUARD_DISABLE_COACH_AI", "").lower() not in {"1", "true", "yes"}:
+            # Tier 1: NVIDIA NIM Cloud LLM
+            msg = _nvidia_coach(stats, style)
+            if not msg:
+                # Tier 2: Local Ollama Offline LLM
+                msg = _local_ollama_coach(stats, style)
+
         if not msg:
-            # Tier 2: Local Ollama Offline LLM
-            msg = _local_ollama_coach(stats, style)
-            
-    if not msg:
-        # Tier 3: Local Deterministic Rule-Engine
-        msg = _detect_patterns(stats, style)
+            # Tier 3: Local Deterministic Rule-Engine
+            msg = rule_msg
 
     if msg:
         d=msg.to_dict()
