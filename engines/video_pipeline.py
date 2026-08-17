@@ -138,6 +138,7 @@ def extract_frames_chunked(
         return [], total_chunks
 
     all_frames = []
+    timed_out_chunks = []
 
     for chunk_idx in range(start_chunk, total_chunks):
         chunk_start = chunk_idx * chunk_seconds
@@ -159,7 +160,14 @@ def extract_frames_chunked(
         try:
             subprocess.run(cmd, capture_output=True, timeout=chunk_seconds + 30)
         except subprocess.TimeoutExpired:
-            logging.warning("FFmpeg chunk %d timed out after %ds", chunk_idx, chunk_seconds + 30)
+            # Skip this chunk entirely — its output is incomplete/unusable —
+            # and record the failure so the job is not reported successful.
+            logging.warning(
+                "FFmpeg chunk %d timed out after %ds — skipping chunk",
+                chunk_idx, chunk_seconds + 30,
+            )
+            timed_out_chunks.append(chunk_idx)
+            continue
 
         chunk_frames = sorted([
             {"stored_path": str(p), "chunk_index": chunk_idx}
@@ -174,6 +182,14 @@ def extract_frames_chunked(
             ) + chunk_start
 
         all_frames.extend(chunk_frames)
+
+    if timed_out_chunks:
+        # Propagate the failure — a timed-out extraction must not be reported
+        # as a successful job. The caller marks the job errored on exception.
+        raise RuntimeError(
+            f"FFmpeg extraction timed out on chunk(s) {timed_out_chunks} "
+            f"after {chunk_seconds + 30}s each"
+        )
 
     return all_frames, total_chunks
 

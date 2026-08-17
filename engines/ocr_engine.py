@@ -19,7 +19,6 @@ from __future__ import annotations
 import os
 import platform
 import re
-import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -27,13 +26,15 @@ from PIL import Image, ImageFilter, ImageEnhance
 import pytesseract
 
 from database.db import get_connection
+from engines.tesseract_utils import find_tesseract
 
-# ── Windows: hard-set Tesseract path so pytesseract never guesses ─────────────
+# ── Pin the resolved Tesseract exe so pytesseract never guesses ───────────────
+_tess_exe = find_tesseract()
+if _tess_exe:
+    pytesseract.pytesseract.tesseract_cmd = _tess_exe
+# Windows: point Tesseract at its bundled tessdata directory
 if platform.system() == "Windows":
-    _tess_exe = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     _tess_data = r"C:\Program Files\Tesseract-OCR\tessdata"
-    if os.path.exists(_tess_exe):
-        pytesseract.pytesseract.tesseract_cmd = _tess_exe
     if os.path.exists(_tess_data):
         os.environ["TESSDATA_PREFIX"] = _tess_data
 
@@ -65,25 +66,9 @@ def detect_ocr_anomalies(
 
 # ── Availability check ────────────────────────────────────────────────────────
 
-def _find_tesseract() -> str | None:
-    """Return the tesseract executable path, checking PATH and standard Windows locations."""
-    path = shutil.which("tesseract")
-    if path:
-        return path
-    if platform.system() == "Windows":
-        candidates = [
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        ]
-        for candidate in candidates:
-            if Path(candidate).exists():
-                return candidate
-    return None
-
-
 def check_ocr_status() -> dict:
     """Return honest status of all OCR backends."""
-    tesseract_path = _find_tesseract()
+    tesseract_path = find_tesseract()
     tess_ok = False
     tess_version = None
 
@@ -91,7 +76,7 @@ def check_ocr_status() -> dict:
         try:
             import subprocess
             r = subprocess.run(
-                ["tesseract", "--version"],
+                [tesseract_path, "--version"],
                 capture_output=True, text=True, timeout=5
             )
             tess_version = r.stdout.splitlines()[0] if r.stdout else r.stderr.splitlines()[0]

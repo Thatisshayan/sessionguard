@@ -54,7 +54,7 @@
 - CI passes (lint, typecheck, unit tests)
 - Staging deploy works
 
-**Status (2026-07-22)**: **Phases 0–5 all complete.** Phase 5 (all 14 tasks: C8–C10, D4–D10, E6–E10) done and pushed — 260+ tests passing (most recent verified: 260 passed, 6 skipped), 0 TS errors. Phase 4 (C5–C7, D1, D3, E4–E5) done; D2 deferred (SaaS-gated). Phase 3 backend (C1–C4) all done; E2 auto-updater + E3 hotkeys done; E1 Tauri v2 migration deferred (v1 shell functional). Phase 2 (A7–A10, B4–B6) all done. Phase 1 (A3–A6, B1–B3) all done. Phase 0 hardening done.
+**Status (2026-07-22)**: **Phases 0–5 all complete.** Phase 5 (all 14 tasks: C8–C10, D4–D10, E6–E10) done and pushed — 260+ tests passing (most recent verified: 260 passed, 6 skipped), 0 NEW TS errors (3 pre-existing unrelated errors remain, see B2). Phase 4 (C5–C7, D1, D3, E4–E5) done; D2 deferred (SaaS-gated). Phase 3 backend (C1–C4) all done; E2 auto-updater + E3 hotkeys done; E1 Tauri v2 migration deferred (v1 shell functional). Phase 2 (A7–A10, B4–B6) all done. Phase 1 (A3–A6, B1–B3) all done. Phase 0 hardening done.
 - This document updated with all phase results through Phase 5
 
 ---
