@@ -82,7 +82,8 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   wording once re-verified — resolved 2026-08-16: `scripts/run_desktop.bat`
   now `cd`s into `desktop_shell/` and runs `npm run tauri:dev`;
   `scripts/run_all.bat` launches the Tauri window (not PySide6) and
-  `scripts/setup.bat` prints `v1.5.3`; version string reconciled to `v1.5.3`
+  `scripts/setup.bat` printed `v1.5.3`; version string was reconciled in that
+  pass and is now `v1.5.4`
   (canonical source `config/app_config.json`) across `README.md` and
   `frontend/src/pages/Login.tsx` (was `v0.6`); `README.md` intelligence
   doubled-prefix bug claim (line 142) removed — confirmed fixed by reading
@@ -99,3 +100,14 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   documented as API-only in `README.md`'s Feature Completeness section
   2026-08-16; still open (no UI added this pass, scope was doc-accuracy +
   the two code fixes above, not new feature build).
+- [2026-08-17] tagged GitHub release automation/docs drift: the desktop build
+  workflow published against a literal `v__VERSION__` placeholder instead of
+  the pushed tag name, while top-level docs still framed Windows installer and
+  bundled-runtime readiness as mostly future work even after local verify and
+  GitHub packaging had passed — resume hint: switch the workflow to
+  `${{ github.ref_name }}`-driven release metadata, publish from a real `v*`
+  tag, and reconcile README/docs with the current desktop release path —
+  resolved 2026-08-17: `.github/workflows/build.yml` now publishes on the real
+  tag name with non-draft releases, version strings were bumped to `v1.5.4`,
+  and `README.md`/`docs/README.md` were updated to describe the current local
+  run + GitHub release flow.

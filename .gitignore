@@ -53,3 +53,4 @@ audits/private/
 _repo_clone/
 desktop_shell/bundle/
 desktop_shell/*.log
+.gstack/
