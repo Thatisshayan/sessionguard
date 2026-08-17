@@ -4,7 +4,7 @@ setlocal
 set "ROOT=%~dp0.."
 cd /d "%ROOT%"
 echo ============================================
-echo  SessionGuard v1.5.3 - First Time Setup
+echo  SessionGuard v1.5.4 - First Time Setup
 echo ============================================
 echo.
 echo [1/5] Checking Python...
