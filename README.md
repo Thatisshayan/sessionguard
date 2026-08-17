@@ -1,8 +1,8 @@
-# SessionGuard v1.5.3 — Local-First Session Intelligence Platform
+# SessionGuard v1.5.4 — Local-First Session Intelligence Platform
 
 Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (NVIDIA NIM + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
 
-> **Current project status**: Phases 0–5 and the NVIDIA NIM migration are complete, but a 2026-07-23 audit + CI/desktop-repair session found and fixed several severe bugs hiding behind "done" status — a broken CI pipeline (every workflow failing), a desktop installer that silently ran six-phases-stale code instead of crashing, and an entire AI-insights API router that was never mounted (404 on every call). **Read [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) first** — it has the full findings list and the active task board. [`SessionGuardRevival.md`](SessionGuardRevival.md) has the phase history and session log; [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) is a dedicated future sprint for full runtime bundling (Python/Tesseract/FFmpeg — not started). [`10072026auditbytopencode.md`](10072026auditbytopencode.md) is a 2026-07-10 point-in-time audit, superseded by the above.
+> **Current project status as of August 17, 2026**: local verify is green on `main`, the GitHub desktop packaging workflows are green, and tagged releases publish installers. The major recovery work from July 23, 2026 is now merged, including the desktop launch/runtime fixes and the AI router mount fix. Remaining gaps are mostly feature-surface completeness, warning cleanup, and release-rehearsal rigor rather than “app does not run locally.” Read [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) for the recovery history, [`SESSIONGUARDREVIVAL1.5.md`](SESSIONGUARDREVIVAL1.5.md) for the follow-on task board, and [`docs/governance/DEFERRED_WORK.md`](docs/governance/DEFERRED_WORK.md) for the live open-items register.
 
 ---
 
@@ -35,6 +35,19 @@ bash scripts/run_all.sh
 | Dashboard | http://localhost:5173 |
 | API Docs | http://127.0.0.1:8000/docs |
 | Desktop App | Launched by run_all (Tauri shell, `desktop_shell/`) |
+
+### 4. Release Installers
+
+Tagged GitHub releases publish desktop installers automatically.
+
+Windows assets:
+- `*.exe` via NSIS
+- `*.msi` via MSI
+
+Tag flow:
+- push a `v*` tag from a merged `main`
+- GitHub Actions builds Windows, macOS, and Linux bundles
+- the release is published under the same tag name
 
 ---
 
@@ -107,7 +120,7 @@ sessionguard/
 │   ├── src/store/appStore.ts     # Zustand-like store (error, loading, user, sessions)
 │   └── src/components/           # 8 shared components
 ├── desktop_app/                  # PySide6 embedded browser shell (legacy)
-├── desktop_shell/                # Tauri v1 (Rust) native build — primary desktop target; v2 migration not started (see SESSIONGUARDREVIVAL1.3.md, Track C2). Bundles its own backend source as of 2026-07-23 (desktop_shell/stage-backend.js); full runtime (Python/Tesseract/FFmpeg) bundling is future work (SESSIONGUARDREVIVAL1.4.md)
+├── desktop_shell/                # Tauri v1 (Rust) native build — primary desktop target. Stages backend source plus bundled Python/Tesseract/FFmpeg runtime assets for packaged desktop smoke and tagged-release installers.
 ├── database/                     # SQLite + 5 schema migrations (15 tables)
 │   └── db.py                     # WAL mode, FK enforcement, versioned init_db_vN()
 ├── config/                       # app_config.json + per-game OCR profiles
@@ -205,7 +218,7 @@ Read in this order if you're new to the repo:
 |----------|-------------|
 | [`SessionGuardRevival.md`](SessionGuardRevival.md) | **Phase history** (0–5 + NVIDIA migration, complete) + session log — read first |
 | [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) | **Active sprint plan** as of 2026-07-23 — full findings from the CI/desktop-repair session + forward task board. Read second, before assuming anything is done or broken |
-| [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) | Dedicated future sprint — full embeddable-runtime bundling (Python + Tesseract + FFmpeg). Not started; read to understand what's deliberately deferred |
+| [`SESSIONGUARDREVIVAL1.4.md`](SESSIONGUARDREVIVAL1.4.md) | Historical runtime-bundling plan. Read for design intent and deferred follow-ups, not as the current source of truth |
 | [`SESSIONGUARDREVIVAL1.5.md`](SESSIONGUARDREVIVAL1.5.md) | **Newest audit-remediation plan** (2026-08-14) — folds 1.4's remaining scope into its backlog; read to see what's since been fixed vs. still open |
 | [`SESSIONGUARDREVIVAL1.2.md`](SESSIONGUARDREVIVAL1.2.md) | Superseded by 1.3, kept for history (Sprint 1–2 detail) |
 | [`10072026auditbytopencode.md`](10072026auditbytopencode.md) | Point-in-time deep codebase audit, dated 2026-07-10 — stale, superseded by the above |
@@ -239,11 +252,11 @@ See [`SessionGuardRevival.md`](SessionGuardRevival.md) for phase history and [`S
 | 4 | AI Intelligence + Distribution — Structured AI outputs, prompt versioning, bundled deps, SQLCipher, event validation | ⚠️ Mostly done, but "bundled deps" (E4) was a false claim — corrected 2026-07-23, see below (D2 pgvector still deferred) |
 | 5 | Advanced AI + Desktop Polish — Multi-region OCR, HDBSCAN, alert explanations, cost tracking, offline AI (Ollama), Coach, evidence packages, native notif, Sentry, portable mode, code signing, CI/CD | ✅ Done (2026-07-22), though CI itself was found broken on every push as of 2026-07-23 and has since been repaired |
 | 1.2 | Async DB, AI streaming, toast notifications | ⚠️ Landed with documented gaps — see `SESSIONGUARDREVIVAL1.2.md` (superseded) |
-| **1.3** | **Trust & verification sprint — active.** CI repair, desktop-installer bundling fix, AI router mount fix, plus a forward task board prioritizing "actually run it" verification over new features | 🟡 Active — see `SESSIONGUARDREVIVAL1.3.md` |
-| 1.4 | Full embeddable-runtime bundling (Python + Tesseract + FFmpeg) — true zero-dependency installers | ⏳ Not started — dedicated future sprint, see `SESSIONGUARDREVIVAL1.4.md` |
+| **1.3** | **Trust & verification sprint.** CI repair, desktop-installer/runtime fix, AI router mount fix, and end-to-end re-verification | ✅ Core recovery work merged to `main`; read for history and rationale |
+| 1.4 | Runtime-bundling follow-through and release hardening | ⚠️ Partially absorbed into `main`; remaining polish and rehearsal work lives in deferred-work / newer plans |
 | 6 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
 
-**Current version**: `v1.5.3` (canonical source: `config/app_config.json` → `version`). Production-local-desktop-app readiness is close but not there yet — read `SESSIONGUARDREVIVAL1.3.md`'s findings and `docs/governance/DEFERRED_WORK.md`'s current open items before assuming any given feature works end-to-end; several "done" claims in earlier phases (and in the 2026-08-12 launch-readiness audit) turned out to be time-bound or wrong on later re-verification. Phase 6 (SaaS) requires a committed business decision that hasn't been made.
+**Current version**: `v1.5.4` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified on `main`, Windows installers are published from tagged GitHub releases, and the remaining work is primarily around UI coverage for API-only features, warning cleanup, and stricter release rehearsal on clean machines. Phase 6 (SaaS) still requires a separate business decision.
 
 ---
 
