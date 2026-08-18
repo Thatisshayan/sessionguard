@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Any
 
 import structlog
-from database.db import get_connection
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection
 
 log = structlog.get_logger()
 
@@ -412,8 +412,7 @@ def cleanup_video_frames(retention_hours: int = 24) -> dict:
     """Remove frame directories for video jobs that completed successfully
     older than retention_hours. Idempotent — skips missing dirs and jobs
     that are not in a terminal success state."""
-    BASE_DIR = Path(__file__).resolve().parent.parent.parent
-    FRAMES_DIR = BASE_DIR / "storage" / "recordings"
+    FRAMES_DIR = APP_BASE_DIR / "storage" / "recordings"
     cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
 
     conn = get_connection()

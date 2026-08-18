@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form, BackgroundTasks, Request
 from fastapi.responses import PlainTextResponse
 from typing import Optional
-from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection, async_fetch_one, async_fetch_all, async_execute
 from backend.auth.service import get_current_user_from_token
 from backend.services.csv_parser import parse_csv_file, generate_csv_template
 from engines.video_pipeline import extract_frames
@@ -28,8 +28,7 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["upload"])
 
-BASE_DIR    = Path(__file__).resolve().parent.parent.parent
-UPLOADS_DIR = BASE_DIR / "storage" / "uploads"
+UPLOADS_DIR = APP_BASE_DIR / "storage" / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Configuration

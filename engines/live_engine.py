@@ -25,10 +25,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from database.db import get_connection
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection
 
-BASE_DIR  = Path(__file__).resolve().parent.parent
-LIVE_DIR  = BASE_DIR / "storage" / "recordings" / "live"
+LIVE_DIR  = APP_BASE_DIR / "storage" / "recordings" / "live"
 LIVE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── In-memory run registry (cleared on server restart) ────────────────────────

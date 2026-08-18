@@ -8,7 +8,7 @@ Place the following in this directory before building the Tauri app:
 
 ### Python Runtime
 - `python/python.exe` — Python 3.12 (embeddable package from python.org)
-- `python/Lib/site-packages/` — pre-installed dependencies (use `pip install -t`)
+- `python/Lib/sg_site_packages/` — pre-installed dependencies (use `pip install -t`)
 
 ### Tesseract OCR
 - `tesseract/tesseract.exe` — Tesseract 5.x
@@ -21,7 +21,7 @@ Place the following in this directory before building the Tauri app:
 
 1. Download Python embeddable: https://www.python.org/ftp/python/3.12.4/python-3.12.4-embed-amd64.zip
 2. Extract to `python/`
-3. Install deps: `python/python.exe -m pip install -t python/Lib/site-packages -r ../../requirements.txt`
+3. Install deps: `python/python.exe -m pip install -t python/Lib/sg_site_packages -r ../../requirements.txt`
 4. Download Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
 5. Extract to `tesseract/`
 6. Download FFmpeg: https://www.gyan.dev/ffmpeg/builds/

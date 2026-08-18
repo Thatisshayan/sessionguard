@@ -30,15 +30,16 @@ if ($pthFile) {
     Write-Host "Configuring $($pthFile.Name) for site-packages..."
     $content = Get-Content $pthFile.FullName
     $content = $content -replace '#import site', 'import site'
-    # Add site-packages to path explicitly just in case
-    $content += "Lib/site-packages"
+    # Point the embeddable runtime at a clean bundled dependency tree
+    $content += ".."
+    $content += "Lib/sg_site_packages"
     $content | Set-Content $pthFile.FullName
 }
 
 # 4. Install dependencies
 Write-Host "Installing requirements from backend/requirements.txt ..."
 $ReqFile = Resolve-Path (Join-Path $PSScriptRoot "../../requirements.txt")
-$SitePackages = Join-Path $TargetDir "Lib/site-packages"
+$SitePackages = Join-Path $TargetDir "Lib/sg_site_packages"
 
 if (-not (Test-Path $SitePackages)) {
     New-Item -ItemType Directory -Path $SitePackages -Force

@@ -666,16 +666,7 @@ def init_db_v4():
 
 def get_db_path() -> str:
     """Return the absolute path to the SQLite database file."""
-    import json
-    from pathlib import Path
-    config_path = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
-    try:
-        cfg = json.loads(config_path.read_text())
-        rel = cfg.get("database", {}).get("path", "config/sessionguard.db")
-        db  = Path(__file__).resolve().parent.parent / rel
-        return str(db)
-    except Exception:
-        return str(Path(__file__).resolve().parent.parent / "config" / "sessionguard.db")
+    return str(DB_PATH)
 
 
 # ── V11 + V12 schema ─────────────────────────────────────────────────────────

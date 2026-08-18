@@ -49,8 +49,8 @@ copy .env.example .env
 Then edit `.env` and set at least:
 
 ```text
-SECRET_KEY=replace-with-a-long-random-hex-string
-NVIDIA_API_KEY=nvapi-your-key-here
+SECRET_KEY=<generate-this-locally>
+NVIDIA_API_KEY=<paste-your-nvidia-key-here>
 ```
 
 Notes:
