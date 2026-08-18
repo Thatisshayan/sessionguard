@@ -36,6 +36,8 @@ bash scripts/run_all.sh
 | API Docs | http://127.0.0.1:8000/docs |
 | Desktop App | Launched by run_all (Tauri shell, `desktop_shell/`) |
 
+`run_all` is the development workflow: it starts the backend, frontend, and Tauri shell as separate local processes. The installed Tauri app is intended to start its own backend automatically rather than depending on a separately launched dev server.
+
 ### 4. Release Installers
 
 Tagged GitHub releases publish desktop installers automatically.
@@ -74,7 +76,9 @@ Tag flow:
 | `SG_DB_PASSWORD` | — | SQLCipher encryption password (if encryption enabled) |
 | `VITE_SENTRY_DSN` | — | Sentry DSN for frontend crash reporting |
 | `SENTRY_DSN` | — | Sentry DSN for desktop (Tauri/Rust) crash reporting |
-| `SECRET_KEY` | random | JWT signing secret — set explicitly for production |
+| `SECRET_KEY` | — | JWT signing secret. Required for normal non-test startup unless you are explicitly using `SESSIONGUARD_DEV_MODE=true` or a legacy config fallback. |
+
+For local setup, copy `.env.example` to `.env` in the repo root and set `SECRET_KEY` there before starting the backend. Put `NVIDIA_API_KEY` in that same `.env` file if you want NVIDIA-backed AI instead of fallback behavior.
 
 ---
 

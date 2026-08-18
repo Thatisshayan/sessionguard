@@ -4,6 +4,7 @@ Index of project documentation. Every important doc must have an inbound link he
 
 - Governance: [../REPO_RULES.md](../REPO_RULES.md)
 - Product status / local run / release notes: [../README.md](../README.md)
+- End-user usage guide: [HOW_TO_USE_SESSIONGUARD.md](HOW_TO_USE_SESSIONGUARD.md)
 - Branch & CI policy: [governance/BRANCH_POLICY.md](governance/BRANCH_POLICY.md)
 - Deferred work register: [governance/DEFERRED_WORK.md](governance/DEFERRED_WORK.md)
 - Audits: [../audits/](../audits/)
