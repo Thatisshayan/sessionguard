@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Historical rotated secrets tracked before governance hardening; keep visible in config/docs but do not block current verification."
+commits = [
+  "2cecaed244d075de73f6e1022fe2f5f7319fc7f4",
+  "fd797d74b139487cf3fbe148be2dac3ea0eaaf21",
+]

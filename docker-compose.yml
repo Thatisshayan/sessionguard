@@ -10,7 +10,7 @@ services:
       - "8000:8000"
     environment:
       - SESSIONGUARD_DEV_MODE=true
-      - SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - SECRET_KEY=<set-a-local-secret-key>
     volumes:
       - ./storage:/app/storage
       - ./config:/app/config

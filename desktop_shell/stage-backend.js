@@ -11,6 +11,26 @@ const dest = path.resolve(__dirname, "src-tauri", "bundled_app");
 const SKIP_DIRS = new Set(["__pycache__", ".pytest_cache", ".venv", "storage"]);
 const SKIP_FILE_SUFFIXES = [".db", ".db-wal", ".db-shm"];
 
+function removeResidue(dir) {
+  if (!fs.existsSync(dir)) {
+    return;
+  }
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        continue;
+      }
+      removeResidue(fullPath);
+      continue;
+    }
+    if (SKIP_FILE_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))) {
+      fs.rmSync(fullPath, { force: true });
+    }
+  }
+}
+
 function copyDir(src, dst) {
   if (process.platform === "win32") {
     const args = [
@@ -97,6 +117,10 @@ function getMissingBundledPythonModules(pythonRoot) {
   const res = spawnSync(pythonExe, ["-c", probe], {
     cwd: pythonRoot,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      PYTHONDONTWRITEBYTECODE: "1",
+    },
   });
   const output = (res.stdout || res.stderr || "").trim();
   if (res.status === 0) {
@@ -143,6 +167,7 @@ for (const runtime of ["python_win", "tesseract_win", "ffmpeg_win"]) {
   }
 }
 
+removeResidue(dest);
 verifyBundledPython(dest);
 
 console.log(`[stage-backend] staged backend sources into ${dest}`);
