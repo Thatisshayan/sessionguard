@@ -5,12 +5,14 @@
 
 use std::{
     env,
+    fs,
     path::PathBuf,
     process::{Child, Command},
     sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
+use rand::RngCore;
 use sentry::{init, types::Dsn, Level};
 use tauri::{
     AppHandle, CustomMenuItem, GlobalShortcutManager, Manager, SystemTray, SystemTrayEvent,
@@ -30,7 +32,7 @@ fn setup_sentry() {
     }
 
     let dsn: Dsn = dsn_str.parse().expect("Invalid Sentry DSN");
-    init(dsn);
+    let _ = init(dsn);
 
     println!("[Sentry] Crash reporting enabled — DSN: {}", dsn_str.split('@').last().unwrap_or("***"));
 }
@@ -58,21 +60,72 @@ fn show_fatal_error(app: &AppHandle, msg: &str) {
     }
 }
 
-fn find_python() -> String {
-    // Check bundled Python first (for distributed builds that embed one)
-    if let Some(exe) = std::env::current_exe().ok() {
-        if let Some(dir) = exe.parent() {
-            let bundled_root = dir.join("resources").join("bundled_app");
-            for folder in ["python", "python_win"] {
-                let bundled = bundled_root.join(folder).join("python.exe");
-                if bundled.exists() {
-                    return bundled.to_string_lossy().to_string();
-                }
-            }
+fn resolve_bundled_app_root(app: &AppHandle) -> Option<PathBuf> {
+    app.path_resolver().resolve_resource("bundled_app")
+}
+
+fn find_bundled_python(app: &AppHandle) -> Option<PathBuf> {
+    let bundled_root = resolve_bundled_app_root(app)?;
+    for folder in ["python_win", "python"] {
+        let candidate = bundled_root.join(folder).join("python.exe");
+        if candidate.exists() {
+            return Some(candidate);
         }
     }
-    log_line("[Tauri] No bundled Python found — relying on system `python` from PATH");
-    "python".to_string()
+    None
+}
+
+fn resolve_data_dir(app: &AppHandle, portable_mode: bool) -> Result<PathBuf, String> {
+    if portable_mode {
+        let exe = std::env::current_exe().map_err(|e| format!("current_exe failed: {e}"))?;
+        let dir = exe
+            .parent()
+            .ok_or_else(|| "failed to resolve executable directory".to_string())?;
+        return Ok(dir.join("data"));
+    }
+
+    app.path_resolver()
+        .app_local_data_dir()
+        .or_else(|| app.path_resolver().app_data_dir())
+        .ok_or_else(|| "failed to resolve app data directory".to_string())
+}
+
+fn generate_secret_key() -> String {
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn ensure_secret_key(data_dir: &std::path::Path) -> Result<String, String> {
+    if let Ok(secret) = std::env::var("SECRET_KEY") {
+        let trimmed = secret.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    let config_dir = data_dir.join("config");
+    fs::create_dir_all(&config_dir)
+        .map_err(|e| format!("failed to create config directory {}: {e}", config_dir.display()))?;
+    let secret_path = config_dir.join("sessionguard.secret");
+
+    if secret_path.exists() {
+        let existing = fs::read_to_string(&secret_path)
+            .map_err(|e| format!("failed to read {}: {e}", secret_path.display()))?;
+        let trimmed = existing.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+    }
+
+    let generated = generate_secret_key();
+    fs::write(&secret_path, format!("{generated}\n"))
+        .map_err(|e| format!("failed to write {}: {e}", secret_path.display()))?;
+    log_line(&format!(
+        "[Tauri] Generated local SECRET_KEY at {}",
+        secret_path.display()
+    ));
+    Ok(generated)
 }
 
 /// Resolves the backend source directory. Checks, in order: the resources
@@ -82,10 +135,14 @@ fn find_python() -> String {
 /// contain the backend — silently running the wrong code is worse than
 /// failing loudly.
 fn find_project_root(app: &AppHandle) -> Option<String> {
-    if let Some(resource_path) = app.path_resolver().resolve_resource("bundled_app") {
+    if let Some(resource_path) = resolve_bundled_app_root(app) {
         if resource_path.join("backend").join("main.py").exists() {
             return Some(resource_path.to_string_lossy().to_string());
         }
+        log_line(&format!(
+            "[Tauri] bundled_app resolved to {} but backend/main.py is missing",
+            resource_path.display()
+        ));
     }
 
     if let Ok(dev_root) = std::env::var("SESSIONGUARD_ROOT") {
@@ -100,7 +157,6 @@ fn find_project_root(app: &AppHandle) -> Option<String> {
 }
 
 fn start_backend(app: &AppHandle) -> Option<Child> {
-    let python = find_python();
     let root = match find_project_root(app) {
         Some(r) => r,
         None => {
@@ -114,6 +170,48 @@ fn start_backend(app: &AppHandle) -> Option<Child> {
 
     log_line(&format!("[Tauri] Starting backend from: {}", root));
     let root_path = PathBuf::from(&root);
+    let bundled_root = resolve_bundled_app_root(app);
+    let using_bundled_backend = bundled_root
+        .as_ref()
+        .map(|p| p == &root_path)
+        .unwrap_or(false);
+    let portable_mode = std::env::args().any(|a| a == "--portable");
+
+    let data_dir = match resolve_data_dir(app, portable_mode) {
+        Ok(path) => path,
+        Err(err) => {
+            show_fatal_error(app, &format!("Failed to resolve writable app data directory: {err}"));
+            return None;
+        }
+    };
+    if let Err(err) = fs::create_dir_all(&data_dir) {
+        show_fatal_error(app, &format!("Failed to create app data directory {}: {err}", data_dir.display()));
+        return None;
+    }
+
+    let secret_key = match ensure_secret_key(&data_dir) {
+        Ok(secret) => secret,
+        Err(err) => {
+            show_fatal_error(app, &format!("Failed to provision local SECRET_KEY: {err}"));
+            return None;
+        }
+    };
+
+    let python = if using_bundled_backend {
+        match find_bundled_python(app) {
+            Some(path) => path.to_string_lossy().to_string(),
+            None => {
+                show_fatal_error(
+                    app,
+                    "Bundled Python runtime is missing from the installed app. Reinstall the app or rebuild the installer with desktop_shell/bundle/python_win staged.",
+                );
+                return None;
+            }
+        }
+    } else {
+        log_line("[Tauri] No bundled Python found for this launch context — relying on system `python` from PATH");
+        "python".to_string()
+    };
 
     #[cfg(windows)]
     let result = {
@@ -126,7 +224,9 @@ fn start_backend(app: &AppHandle) -> Option<Child> {
                 "--no-access-log",
             ])
             .current_dir(&root)
-            .env("PYTHONPATH", &root);
+            .env("PYTHONPATH", &root)
+            .env("SG_DATA_DIR", &data_dir)
+            .env("SECRET_KEY", &secret_key);
 
         let mut extra_paths: Vec<String> = Vec::new();
         for folder in ["ffmpeg_win", "tesseract_win"] {
@@ -168,10 +268,20 @@ fn start_backend(app: &AppHandle) -> Option<Child> {
         ])
         .current_dir(&root)
         .env("PYTHONPATH", &root)
+        .env("SG_DATA_DIR", &data_dir)
+        .env("SECRET_KEY", &secret_key)
         .spawn();
 
     match result {
-        Ok(child) => { log_line(&format!("[Tauri] Backend PID {}", child.id())); Some(child) }
+        Ok(child) => {
+            log_line(&format!(
+                "[Tauri] Backend PID {} | data dir {}{}",
+                child.id(),
+                data_dir.display(),
+                if portable_mode { " (portable)" } else { "" }
+            ));
+            Some(child)
+        }
         Err(e) => {
             show_fatal_error(app, &format!("Backend failed to start: {e}. Is Python installed and on PATH?"));
             None
@@ -269,13 +379,7 @@ fn main() {
     let portable_mode = args.iter().any(|a| a == "--portable");
 
     if portable_mode {
-        if let Some(exe_path) = std::env::current_exe().ok() {
-            if let Some(exe_dir) = exe_path.parent() {
-                let data_dir = exe_dir.join("data");
-                std::env::set_var("SG_DATA_DIR", data_dir.to_string_lossy().to_string());
-                println!("[Tauri] Portable mode ON — data at: {}", data_dir.display());
-            }
-        }
+        println!("[Tauri] Portable mode requested.");
     }
 
     // ── Sentry (after portable mode, before backend) ─────────────────────────
@@ -299,8 +403,9 @@ fn main() {
             *guard = start_backend(&handle);
             drop(guard);
 
-            // Wait up to 12 seconds for backend
-            wait_for_backend(&handle, 12);
+            // First-run bundled backends can take noticeably longer to import
+            // and initialize than dev-mode host Python launches.
+            wait_for_backend(&handle, 60);
 
             // Register global shortcuts
             let mut gs = handle.global_shortcut_manager();

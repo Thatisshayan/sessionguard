@@ -111,3 +111,10 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   tag name with non-draft releases, version strings were bumped to `v1.5.4`,
   and `README.md`/`docs/README.md` were updated to describe the current local
   run + GitHub release flow.
+- [2026-08-19] non-Windows packaged desktop releases: the current desktop
+  runtime contract is Windows-specific (`python_win`, `tesseract_win`,
+  `ffmpeg_win`) and GitHub CI can only build a valid installer after hydrating
+  Windows embeddable Python in the workflow; macOS/Linux packaged releases are
+  therefore deferred rather than pretending they are supported — resume hint:
+  introduce platform-native runtime hydration/bundling for macOS/Linux and then
+  restore those jobs in `.github/workflows/build.yml` — open

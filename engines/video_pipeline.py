@@ -27,15 +27,14 @@ from typing import Callable, Optional
 import cv2
 import numpy as np
 
-from database.db import get_connection
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection
 from engines.ocr_engine import (
     extract_fields_from_image,
     persist_ocr_result,
     CONFIDENCE_THRESHOLD,
 )
 
-BASE_DIR    = Path(__file__).resolve().parent.parent
-STORAGE_DIR = BASE_DIR / "storage"
+STORAGE_DIR = APP_BASE_DIR / "storage"
 FRAMES_DIR  = STORAGE_DIR / "recordings"
 
 

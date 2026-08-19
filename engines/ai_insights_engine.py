@@ -29,6 +29,7 @@ from pathlib import Path
 import structlog
 
 from database.db import get_connection
+from backend.runtime_config import get_config_path, load_config, save_config
 from engines.offline_ai import is_ollama_available, call_ollama_json, list_available_models
 from engines.offline_ai import async_http_post
 
@@ -41,9 +42,9 @@ from engines.offline_ai import async_http_post
 _log = structlog.get_logger("sessionguard.ai")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "app_config.json"
 API_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
 MAX_TOKENS   = 1024
+_CONFIG_PATH = get_config_path()
 
 NVIDIA_MODELS = [
     "nvidia/llama-3.3-nemotron-super-49b-v1",
@@ -55,13 +56,31 @@ NVIDIA_MODELS = [
     "mistralai/mistral-large-2-instruct",
 ]
 
+
+def _load_ai_config() -> dict:
+    """Load config, preserving `_CONFIG_PATH` monkeypatchability for tests."""
+    try:
+        if _CONFIG_PATH == get_config_path():
+            return load_config()
+        return json.loads(Path(_CONFIG_PATH).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_ai_config(cfg: dict) -> None:
+    """Persist config, preserving `_CONFIG_PATH` monkeypatchability for tests."""
+    if _CONFIG_PATH == get_config_path():
+        save_config(cfg)
+        return
+    Path(_CONFIG_PATH).write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
 def _get_model() -> str:
     """Resolve active model: env → config → default."""
     m = os.getenv("NVIDIA_MODEL", "").strip()
     if m:
         return m
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text())
+        cfg = _load_ai_config()
         return cfg.get("ai", {}).get("nvidia_model", "").strip() or NVIDIA_MODELS[0]
     except Exception:
         return NVIDIA_MODELS[0]
@@ -75,7 +94,7 @@ def _get_api_key() -> str | None:
     if key:
         return key
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text())
+        cfg = _load_ai_config()
         return cfg.get("ai", {}).get("nvidia_api_key", "").strip() or None
     except Exception:
         return None
@@ -555,7 +574,7 @@ def _log_ai_cost(session_id: int, model: str, usage: dict):
 def _get_config_budget() -> str:
     """Read AI budget from config file as fallback for env var."""
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text())
+        cfg = _load_ai_config()
         return str(cfg.get("ai", {}).get("budget_usd", 10.0))
     except Exception:
         return "10.0"
@@ -718,9 +737,9 @@ def set_model(model_id: str) -> dict:
         return {"error": f"Unknown model: {model_id}", "available": NVIDIA_MODELS}
     MODEL = model_id
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text())
+        cfg = _load_ai_config()
         cfg.setdefault("ai", {})["nvidia_model"] = model_id
-        _CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+        _save_ai_config(cfg)
     except Exception:
         pass
     return {"model": MODEL, "message": f"Switched to {MODEL}"}

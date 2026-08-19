@@ -10,6 +10,27 @@ const dest = path.resolve(__dirname, "src-tauri", "bundled_app");
 
 const SKIP_DIRS = new Set(["__pycache__", ".pytest_cache", ".venv", "storage"]);
 const SKIP_FILE_SUFFIXES = [".db", ".db-wal", ".db-shm"];
+const REQUIRE_BUNDLED_PYTHON = process.env.SESSIONGUARD_REQUIRE_BUNDLED_PYTHON === "1";
+
+function removeResidue(dir) {
+  if (!fs.existsSync(dir)) {
+    return;
+  }
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) {
+        fs.rmSync(fullPath, { recursive: true, force: true });
+        continue;
+      }
+      removeResidue(fullPath);
+      continue;
+    }
+    if (SKIP_FILE_SUFFIXES.some((suffix) => entry.name.endsWith(suffix))) {
+      fs.rmSync(fullPath, { force: true });
+    }
+  }
+}
 
 function copyDir(src, dst) {
   if (process.platform === "win32") {
@@ -70,20 +91,105 @@ const RUNTIME_CHECKS = {
   ffmpeg_win: "ffmpeg.exe",
 };
 
+function hasRequiredRuntimeBinary(runtime, dir) {
+  const checkFile = RUNTIME_CHECKS[runtime];
+  if (!checkFile) {
+    return false;
+  }
+  return fs.existsSync(path.join(dir, checkFile));
+}
+
+function getRuntimeCheckPath(runtime, dir) {
+  if (!fs.existsSync(dir)) {
+    return null;
+  }
+  if (runtime === "python_win") {
+    const pth = fs.readdirSync(dir).find((name) => name.endsWith("._pth"));
+    if (pth) {
+      return path.join(dir, pth);
+    }
+  }
+  const checkFile = RUNTIME_CHECKS[runtime];
+  return checkFile ? path.join(dir, checkFile) : null;
+}
+
+function getMissingBundledPythonModules(pythonRoot) {
+  const pythonExe = path.join(pythonRoot, "python.exe");
+  if (!fs.existsSync(pythonExe)) {
+    return ["python.exe"];
+  }
+  const probe = [
+    "import importlib.util, sys",
+    "mods = ['uvicorn','fastapi','multipart','jwt','structlog','dotenv','cv2','numpy','pandas','openpyxl','reportlab','pytesseract','aiosqlite','httpx']",
+    "missing = [m for m in mods if importlib.util.find_spec(m) is None]",
+    "print(','.join(missing))",
+    "sys.exit(1 if missing else 0)",
+  ].join("; ");
+
+  const res = spawnSync(pythonExe, ["-c", probe], {
+    cwd: pythonRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PYTHONDONTWRITEBYTECODE: "1",
+    },
+  });
+  const output = (res.stdout || res.stderr || "").trim();
+  if (res.status === 0) {
+    return [];
+  }
+  return output ? output.split(",").filter(Boolean) : ["unknown"];
+}
+
+function verifyBundledPython(destRoot) {
+  const pythonRoot = path.join(destRoot, "python_win");
+  if (!hasRequiredRuntimeBinary("python_win", pythonRoot)) {
+    if (REQUIRE_BUNDLED_PYTHON) {
+      throw new Error(
+        "bundled python runtime is missing required modules: python.exe. " +
+        "Re-stage desktop_shell/bundle/python_win with all backend dependencies before building."
+      );
+    }
+    console.warn(
+      "[stage-backend] bundled python runtime is incomplete or absent; " +
+      "staged backend will rely on host Python in smoke/dev contexts."
+    );
+    return;
+  }
+
+  const missing = getMissingBundledPythonModules(pythonRoot);
+  if (!missing.length) {
+    return;
+  }
+  throw new Error(
+    `bundled python runtime is missing required modules: ${missing.join(",")}. ` +
+    `Re-stage desktop_shell/bundle/python_win with all backend dependencies before building.`
+  );
+}
+
 for (const runtime of ["python_win", "tesseract_win", "ffmpeg_win"]) {
   const srcDir = path.join(root, "desktop_shell", "bundle", runtime);
   const dstDir = path.join(dest, runtime);
-  const checkFile = RUNTIME_CHECKS[runtime];
 
   if (fs.existsSync(srcDir) && fs.readdirSync(srcDir).length > 0) {
-    const srcCheck = checkFile ? path.join(srcDir, checkFile) : null;
-    const dstCheck = checkFile ? path.join(dstDir, checkFile) : null;
+    if (!hasRequiredRuntimeBinary(runtime, srcDir)) {
+      console.warn(
+        `[stage-backend] runtime ${runtime} is present in source but incomplete; skipping staged copy.`
+      );
+      continue;
+    }
+    const srcCheck = getRuntimeCheckPath(runtime, srcDir);
+    const dstCheck = getRuntimeCheckPath(runtime, dstDir);
+    const pythonDstMissing = runtime === "python_win"
+      ? getMissingBundledPythonModules(dstDir)
+      : [];
 
     if (
       srcCheck &&
       dstCheck &&
       fs.existsSync(dstCheck) &&
       fs.existsSync(srcCheck) &&
+      pythonDstMissing.length === 0 &&
       fs.statSync(srcCheck).mtimeMs <= fs.statSync(dstCheck).mtimeMs
     ) {
       console.log(`[stage-backend] runtime ${runtime} is up-to-date in ${dstDir}, skipping full re-copy.`);
@@ -93,5 +199,8 @@ for (const runtime of ["python_win", "tesseract_win", "ffmpeg_win"]) {
     copyDir(srcDir, dstDir);
   }
 }
+
+removeResidue(dest);
+verifyBundledPython(dest);
 
 console.log(`[stage-backend] staged backend sources into ${dest}`);

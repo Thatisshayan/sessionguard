@@ -7,18 +7,19 @@ Maturity: Working Prototype
 """
 
 import asyncio
-import json
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional, Any
-from pathlib import Path
 from backend.auth.service import get_current_user_from_token
+from backend.runtime_config import load_config, save_config
 
 router  = APIRouter(tags=["system-config"])
-CONFIG  = Path(__file__).resolve().parent.parent.parent / "config" / "app_config.json"
 
 # Keys users are allowed to change — protect secret_key and database path
 EDITABLE_KEYS = {
+    "ai.nvidia_api_key",
+    "ai.nvidia_model",
+    "ai.budget_usd",
     "auth.access_token_expire_minutes",
     "thresholds.rtp_warning",
     "thresholds.rtp_critical",
@@ -33,14 +34,11 @@ EDITABLE_KEYS = {
 
 
 def _load() -> dict:
-    try:
-        return json.loads(CONFIG.read_text())
-    except Exception:
-        return {}
+    return load_config()
 
 
 def _save(cfg: dict):
-    CONFIG.write_text(json.dumps(cfg, indent=2))
+    save_config(cfg)
 
 
 def _get_nested(cfg: dict, key: str) -> Any:

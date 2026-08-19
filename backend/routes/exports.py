@@ -20,15 +20,14 @@ from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
-from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection, async_fetch_one, async_fetch_all, async_execute
 from engines.analysis_engine import get_session_metrics, get_global_metrics
 from backend.services.export_service import generate_pdf, generate_excel
 from backend.auth.access import require_current_user, require_session_access
 
 router = APIRouter(tags=["exports"])
 
-BASE_DIR    = Path(__file__).resolve().parent.parent.parent
-EXPORTS_DIR = BASE_DIR / "storage" / "exports"
+EXPORTS_DIR = APP_BASE_DIR / "storage" / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 

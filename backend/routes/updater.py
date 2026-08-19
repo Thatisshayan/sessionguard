@@ -3,26 +3,22 @@ backend/routes/updater.py — Auto-update checker.
 Polls GitHub Releases API. No new dependencies.
 """
 import asyncio
-import json
 import logging
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, Optional
 import requests
 from fastapi import APIRouter
 from pydantic import BaseModel
 from database.db import get_connection
+from backend.runtime_config import load_config
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["updater"])
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_PATH  = PROJECT_ROOT / "config" / "app_config.json"
 DISMISSED_KEY = "dismissed_update_version"
 
 def _read_config():
-    try: return json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
-    except: return {}
+    return load_config()
 
 def _safe(v, d=""): return str(v) if v is not None else d
 

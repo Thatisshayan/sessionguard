@@ -206,7 +206,7 @@ export function AiAnalysisPanel({ sessionId }: Props) {
               {[
                 ['Windows (Command Prompt)', 'set NVIDIA_API_KEY=nvapi-your-key-here'],
                 ['Mac / Linux (Terminal)',   'export NVIDIA_API_KEY=nvapi-your-key-here'],
-                ['Config file',              'config/app_config.json → ai.nvidia_api_key'],
+                ['Config file',              'runtime app_config.json → ai.nvidia_api_key'],
               ].map(([label, cmd]) => (
                 <div key={label}>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}:</div>

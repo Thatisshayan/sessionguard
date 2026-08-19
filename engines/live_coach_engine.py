@@ -6,6 +6,7 @@ from __future__ import annotations
 import json, os, threading, time
 from dataclasses import dataclass, asdict
 from typing import Optional
+from backend.runtime_config import load_config
 
 @dataclass
 class CoachMessage:
@@ -202,8 +203,7 @@ def _api_key():
     k=os.getenv('NVIDIA_API_KEY','')
     if k: return k
     try:
-        from pathlib import Path
-        cfg=json.loads((Path(__file__).resolve().parent.parent/'config'/'app_config.json').read_text())
+        cfg=load_config()
         return cfg.get('ai',{}).get('nvidia_api_key','')
     except: return ''
 

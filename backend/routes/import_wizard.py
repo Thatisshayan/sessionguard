@@ -9,15 +9,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from fastapi import APIRouter, File, HTTPException, UploadFile, Request
 from pydantic import BaseModel, Field
-from database.db import get_connection, async_fetch_one, async_fetch_all, async_execute
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection, async_fetch_one, async_fetch_all, async_execute
 from engines.csv_import_engine import import_csv, preview_csv
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/import", tags=["import-wizard"])
 
-PROJECT_ROOT     = Path(__file__).resolve().parents[2]
-IMPORT_STORAGE   = PROJECT_ROOT / "storage" / "imports"
+IMPORT_STORAGE   = APP_BASE_DIR / "storage" / "imports"
 MANIFEST_PATH    = IMPORT_STORAGE / "manifest.json"
 
 

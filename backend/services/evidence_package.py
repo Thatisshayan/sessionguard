@@ -23,14 +23,13 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from database.db import get_connection
+from database.db import BASE_DIR as APP_BASE_DIR, get_connection
 from engines.analysis_engine import get_session_metrics
 from engines.insights_engine import get_insights
 from engines.alerts_engine import get_alerts
 from engines.review_queue_engine import get_review_queue
 
-BASE_DIR    = Path(__file__).resolve().parent.parent.parent
-EXPORTS_DIR = BASE_DIR / "storage" / "exports"
+EXPORTS_DIR = APP_BASE_DIR / "storage" / "exports"
 EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 

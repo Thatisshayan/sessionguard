@@ -25,16 +25,14 @@ from pathlib import Path
 import jwt
 
 from database.db import get_connection
+from backend.runtime_config import load_config
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "app_config.json"
-
 def _load_secret_from_config() -> str:
     """Legacy fallback only — prefer SECRET_KEY env var. Never write real
     secrets to app_config.json going forward (see P0.1 incident)."""
     try:
-        with open(_CONFIG_PATH) as f:
-            cfg = json.load(f)
+        cfg = load_config()
         return cfg.get("auth", {}).get("secret_key", "")
     except Exception:
         return ""
