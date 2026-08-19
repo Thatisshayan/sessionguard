@@ -328,6 +328,10 @@ If you need a reliable local fallback while debugging the packaged app, use the 
 - `scripts\run_all.bat`
 - then open `http://localhost:5173` or the Tauri dev shell
 
+Current packaged-release scope:
+- Windows installers are the supported packaged desktop target right now.
+- macOS/Linux packaged releases are deferred until those platforms have their own bundled-runtime path.
+
 ## Where To Start If You Just Want To Use It
 
 If you want the shortest path:

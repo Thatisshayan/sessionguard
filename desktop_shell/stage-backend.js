@@ -10,6 +10,7 @@ const dest = path.resolve(__dirname, "src-tauri", "bundled_app");
 
 const SKIP_DIRS = new Set(["__pycache__", ".pytest_cache", ".venv", "storage"]);
 const SKIP_FILE_SUFFIXES = [".db", ".db-wal", ".db-shm"];
+const REQUIRE_BUNDLED_PYTHON = process.env.SESSIONGUARD_REQUIRE_BUNDLED_PYTHON === "1";
 
 function removeResidue(dir) {
   if (!fs.existsSync(dir)) {
@@ -90,6 +91,14 @@ const RUNTIME_CHECKS = {
   ffmpeg_win: "ffmpeg.exe",
 };
 
+function hasRequiredRuntimeBinary(runtime, dir) {
+  const checkFile = RUNTIME_CHECKS[runtime];
+  if (!checkFile) {
+    return false;
+  }
+  return fs.existsSync(path.join(dir, checkFile));
+}
+
 function getRuntimeCheckPath(runtime, dir) {
   if (!fs.existsSync(dir)) {
     return null;
@@ -133,7 +142,22 @@ function getMissingBundledPythonModules(pythonRoot) {
 }
 
 function verifyBundledPython(destRoot) {
-  const missing = getMissingBundledPythonModules(path.join(destRoot, "python_win"));
+  const pythonRoot = path.join(destRoot, "python_win");
+  if (!hasRequiredRuntimeBinary("python_win", pythonRoot)) {
+    if (REQUIRE_BUNDLED_PYTHON) {
+      throw new Error(
+        "bundled python runtime is missing required modules: python.exe. " +
+        "Re-stage desktop_shell/bundle/python_win with all backend dependencies before building."
+      );
+    }
+    console.warn(
+      "[stage-backend] bundled python runtime is incomplete or absent; " +
+      "staged backend will rely on host Python in smoke/dev contexts."
+    );
+    return;
+  }
+
+  const missing = getMissingBundledPythonModules(pythonRoot);
   if (!missing.length) {
     return;
   }
@@ -148,6 +172,12 @@ for (const runtime of ["python_win", "tesseract_win", "ffmpeg_win"]) {
   const dstDir = path.join(dest, runtime);
 
   if (fs.existsSync(srcDir) && fs.readdirSync(srcDir).length > 0) {
+    if (!hasRequiredRuntimeBinary(runtime, srcDir)) {
+      console.warn(
+        `[stage-backend] runtime ${runtime} is present in source but incomplete; skipping staged copy.`
+      );
+      continue;
+    }
     const srcCheck = getRuntimeCheckPath(runtime, srcDir);
     const dstCheck = getRuntimeCheckPath(runtime, dstDir);
     const pythonDstMissing = runtime === "python_win"

@@ -1,35 +1,49 @@
 # Bundle Directory
 
-This directory contains bundled dependencies for the SessionGuard desktop app.
+This directory holds optional desktop runtime assets that are staged into
+`desktop_shell/src-tauri/bundled_app/` before packaging.
 
-## Required Files (for distribution builds)
+Current packaged-release support is Windows-only. The release workflow hydrates
+the Windows Python runtime in CI, and local builds can do the same with the
+PowerShell scripts in `scripts/bundle/`.
 
-Place the following in this directory before building the Tauri app:
+## Runtime Folder Contract
 
-### Python Runtime
-- `python/python.exe` — Python 3.12 (embeddable package from python.org)
-- `python/Lib/sg_site_packages/` — pre-installed dependencies (use `pip install -t`)
+The desktop launcher and staging script currently recognize these folders:
 
-### Tesseract OCR
-- `tesseract/tesseract.exe` — Tesseract 5.x
-- `tesseract/tessdata/` — language data files
+- `python_win/`
+- `tesseract_win/`
+- `ffmpeg_win/`
 
-### FFmpeg
-- `ffmpeg/ffmpeg.exe` — FFmpeg binary
+Required entrypoints inside those folders:
 
-## Building with Bundled Dependencies
+- `python_win/python.exe`
+- `tesseract_win/tesseract.exe`
+- `ffmpeg_win/ffmpeg.exe`
 
-1. Download Python embeddable: https://www.python.org/ftp/python/3.12.4/python-3.12.4-embed-amd64.zip
-2. Extract to `python/`
-3. Install deps: `python/python.exe -m pip install -t python/Lib/sg_site_packages -r ../../requirements.txt`
-4. Download Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
-5. Extract to `tesseract/`
-6. Download FFmpeg: https://www.gyan.dev/ffmpeg/builds/
-7. Extract to `ffmpeg/`
-8. Run `cargo tauri build` from the desktop_shell directory
+## Local Windows Bundling
 
-## Notes
+From the repo root:
 
-- Total bundled size target: < 50MB compressed
-- Python embeddable is ~10MB, Tesseract ~5MB, FFmpeg ~10MB
-- The app will fall back to system-installed versions if bundled versions are not found
+```powershell
+pwsh -File scripts/bundle/bundle_python_win.ps1
+pwsh -File scripts/bundle/bundle_tesseract_win.ps1
+pwsh -File scripts/bundle/bundle_tessdata.ps1
+pwsh -File scripts/bundle/bundle_ffmpeg_win.ps1
+```
+
+Then build the installer:
+
+```powershell
+cd desktop_shell
+$env:SESSIONGUARD_REQUIRE_BUNDLED_PYTHON = "1"
+npm run tauri:build
+```
+
+## CI Behavior
+
+- Windows release builds require a valid bundled Python runtime.
+- Smoke/dev paths can stage backend sources without a bundled Python runtime and
+  rely on host `python` instead.
+- macOS/Linux packaged releases are deferred until native runtime bundling is
+  implemented for those platforms.

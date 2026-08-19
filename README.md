@@ -2,7 +2,7 @@
 
 Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (NVIDIA NIM + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
 
-> **Current project status as of August 17, 2026**: local verify is green on `main`, the GitHub desktop packaging workflows are green, and tagged releases publish installers. The major recovery work from July 23, 2026 is now merged, including the desktop launch/runtime fixes and the AI router mount fix. Remaining gaps are mostly feature-surface completeness, warning cleanup, and release-rehearsal rigor rather than “app does not run locally.” Read [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) for the recovery history, [`SESSIONGUARDREVIVAL1.5.md`](SESSIONGUARDREVIVAL1.5.md) for the follow-on task board, and [`docs/governance/DEFERRED_WORK.md`](docs/governance/DEFERRED_WORK.md) for the live open-items register.
+> **Current project status as of August 19, 2026**: local verify is green on this branch, the desktop startup/runtime fixes are in place, and the GitHub release flow is being normalized around the repo's actual support boundary: Windows packaged builds. The major recovery work from July 23, 2026 is merged, including the desktop launch/runtime fixes and the AI router mount fix. Remaining gaps are feature-surface completeness, warning cleanup, and cross-platform desktop packaging rather than “the app cannot run at all.” Read [`SESSIONGUARDREVIVAL1.3.md`](SESSIONGUARDREVIVAL1.3.md) for the recovery history, [`SESSIONGUARDREVIVAL1.5.md`](SESSIONGUARDREVIVAL1.5.md) for the follow-on task board, and [`docs/governance/DEFERRED_WORK.md`](docs/governance/DEFERRED_WORK.md) for the live open-items register.
 
 ---
 
@@ -42,14 +42,16 @@ bash scripts/run_all.sh
 
 Tagged GitHub releases publish desktop installers automatically.
 
-Windows assets:
+Current packaged target:
 - `*.exe` via NSIS
 - `*.msi` via MSI
 
 Tag flow:
 - push a `v*` tag from a merged `main`
-- GitHub Actions builds Windows, macOS, and Linux bundles
+- GitHub Actions builds the Windows bundles and attaches them to the GitHub release
 - the release is published under the same tag name
+
+macOS/Linux packaged releases are currently deferred until those platforms have a real bundled-runtime path instead of inheriting the Windows-only `python_win` asset model.
 
 ---
 
@@ -262,7 +264,7 @@ See [`SessionGuardRevival.md`](SessionGuardRevival.md) for phase history and [`S
 | 1.4 | Runtime-bundling follow-through and release hardening | ⚠️ Partially absorbed into `main`; remaining polish and rehearsal work lives in deferred-work / newer plans |
 | 6 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
 
-**Current version**: `v1.5.5` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified on `main`, Windows installers are published from tagged GitHub releases, and the remaining work is primarily around UI coverage for API-only features, warning cleanup, and stricter release rehearsal on clean machines. Phase 6 (SaaS) still requires a separate business decision.
+**Current version**: `v1.5.5` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified, Windows installers publish from tagged GitHub releases, and the remaining work is primarily around UI coverage for API-only features, warning cleanup, stricter release rehearsal on clean machines, and future non-Windows packaging. Phase 6 (SaaS) still requires a separate business decision.
 
 ---
 
