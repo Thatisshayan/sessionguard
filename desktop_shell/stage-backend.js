@@ -91,6 +91,9 @@ const RUNTIME_CHECKS = {
 };
 
 function getRuntimeCheckPath(runtime, dir) {
+  if (!fs.existsSync(dir)) {
+    return null;
+  }
   if (runtime === "python_win") {
     const pth = fs.readdirSync(dir).find((name) => name.endsWith("._pth"));
     if (pth) {
