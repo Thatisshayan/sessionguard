@@ -1,6 +1,6 @@
 {
   "app_name": "SessionGuard",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "environment": "local",
   "backend": {
     "host": "127.0.0.1",

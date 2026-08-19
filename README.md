@@ -1,4 +1,4 @@
-# SessionGuard v1.5.4 — Local-First Session Intelligence Platform
+# SessionGuard v1.5.5 — Local-First Session Intelligence Platform
 
 Universal session intelligence for casino/slot analysis. Real OCR (Tesseract 5), behavior pattern detection (scikit-learn), live screen monitoring, video→event pipelines, AI narrative insights (NVIDIA NIM + Ollama offline fallback), multi-format exports, evidence packages with hash manifests. Desktop + Web.
 
@@ -262,7 +262,7 @@ See [`SessionGuardRevival.md`](SessionGuardRevival.md) for phase history and [`S
 | 1.4 | Runtime-bundling follow-through and release hardening | ⚠️ Partially absorbed into `main`; remaining polish and rehearsal work lives in deferred-work / newer plans |
 | 6 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
 
-**Current version**: `v1.5.4` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified on `main`, Windows installers are published from tagged GitHub releases, and the remaining work is primarily around UI coverage for API-only features, warning cleanup, and stricter release rehearsal on clean machines. Phase 6 (SaaS) still requires a separate business decision.
+**Current version**: `v1.5.5` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified on `main`, Windows installers are published from tagged GitHub releases, and the remaining work is primarily around UI coverage for API-only features, warning cleanup, and stricter release rehearsal on clean machines. Phase 6 (SaaS) still requires a separate business decision.
 
 ---
 
