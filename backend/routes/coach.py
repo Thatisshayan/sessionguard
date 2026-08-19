@@ -5,8 +5,8 @@ from typing import Optional
 from engines.live_coach_engine import get_coaching_message, reset_coach
 from database.db import get_connection, async_fetch_all
 from backend.auth.access import require_admin, require_session_access
-import os, json
-from pathlib import Path
+from backend.runtime_config import load_config
+import os
 
 router = APIRouter(tags=["coach"])
 
@@ -17,7 +17,7 @@ def coach_status():
     has_key = bool(os.getenv('NVIDIA_API_KEY', ''))
     if not has_key:
         try:
-            cfg = json.loads((Path(__file__).resolve().parent.parent.parent / 'config' / 'app_config.json').read_text())
+            cfg = load_config()
             has_key = bool(cfg.get('ai', {}).get('nvidia_api_key', ''))
         except Exception:
             pass

@@ -57,6 +57,7 @@ Notes:
 - `SECRET_KEY` is required for normal non-test app startup. Generate one with `python -c "import secrets; print(secrets.token_hex(32))"`.
 - `NVIDIA_API_KEY` is optional. If unset, SessionGuard falls back to Ollama or rule-based analysis instead of NVIDIA AI.
 - Environment variables are the preferred source of truth. The repo still has some legacy config-file fallbacks, but `.env` is the correct user-facing setup path.
+- For the installed desktop app, the writable runtime config is more important than the repo-root `.env`. On first launch the app copies `config/app_config.json` into its local data directory and can read `ai.nvidia_api_key` from that runtime copy.
 
 ## First-Time Setup
 
@@ -274,6 +275,10 @@ If you want NVIDIA-backed AI insights instead of fallback behavior:
 3. Restart the backend
 4. Open a session detail page and use the AI analysis panel
 
+For the installed desktop app, use one of these instead:
+- set a Windows user or machine environment variable named `NVIDIA_API_KEY`
+- or edit the runtime `app_config.json` created in the app's writable local data directory and set `ai.nvidia_api_key`
+
 If AI still shows as unavailable:
 - confirm the backend was restarted after editing `.env`
 - confirm `NVIDIA_API_KEY` is present in the repo-root `.env`
@@ -316,6 +321,7 @@ Check:
 Check:
 - whether the installed app started its own backend successfully
 - whether Python and bundled runtime assets were packaged correctly for that build
+- whether the runtime config in the app's local data directory contains `ai.nvidia_api_key` if you are not using an environment variable
 - whether `sessionguard.log` exists next to the desktop executable and contains backend startup errors
 
 If you need a reliable local fallback while debugging the packaged app, use the repo dev flow:

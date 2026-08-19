@@ -78,7 +78,9 @@ Tag flow:
 | `SENTRY_DSN` | — | Sentry DSN for desktop (Tauri/Rust) crash reporting |
 | `SECRET_KEY` | — | JWT signing secret. Required for normal non-test startup unless you are explicitly using `SESSIONGUARD_DEV_MODE=true` or a legacy config fallback. |
 
-For local setup, copy `.env.example` to `.env` in the repo root and set `SECRET_KEY` there before starting the backend. Put `NVIDIA_API_KEY` in that same `.env` file if you want NVIDIA-backed AI instead of fallback behavior.
+For local repo setup, copy `.env.example` to `.env` in the repo root and set `SECRET_KEY` there before starting the backend. Put `NVIDIA_API_KEY` in that same `.env` file if you want NVIDIA-backed AI instead of fallback behavior.
+
+For the installed desktop app, you do not need a repo-root `.env`. The packaged app now copies `config/app_config.json` into its writable local data directory on first launch and reads `ai.nvidia_api_key` from there if `NVIDIA_API_KEY` is not present in the process environment.
 
 ---
 

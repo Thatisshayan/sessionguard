@@ -6,8 +6,6 @@ Maturity: Working Prototype — enhanced with thread-pool worker health
 """
 
 import asyncio
-import json
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -16,6 +14,7 @@ from backend.workers.job_service import (
     get_worker_health, cleanup_completed_jobs, cleanup_video_frames
 )
 from backend.auth.service import get_current_user_from_token
+from backend.runtime_config import load_config
 
 router = APIRouter(tags=["jobs"])
 
@@ -115,16 +114,13 @@ async def worker_health():
     return await asyncio.to_thread(get_worker_health)
 
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "app_config.json"
-
-
 def _frame_retention_hours(default: int = 24) -> int:
     """Read frame cleanup retention from app_config.json, falling back to default."""
     try:
-        cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = load_config()
         value = cfg.get("storage", {}).get("frame_cleanup_retention_hours", default)
         return int(value)
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+    except (ValueError, TypeError, AttributeError):
         return default
 
 
