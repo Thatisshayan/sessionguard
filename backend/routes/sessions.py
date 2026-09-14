@@ -129,8 +129,8 @@ async def create_session(body: SessionCreate, request: Request):
     )
 
     # Auto-generate insights and alerts for new session
-    await asyncio.to_thread(generate_and_persist_insights, session_id)
-    await asyncio.to_thread(generate_and_persist_alerts, session_id)
+    await generate_and_persist_insights(session_id)
+    await generate_and_persist_alerts(session_id)
 
     return {"id": session_id, "message": "Session created.", **data}
 

@@ -8,35 +8,37 @@ Maturity: Working Prototype
 Future:   Replace rule text with LLM-generated narrative summaries (V13).
 """
 
-from database.db import get_connection
+from database.db import get_async_connection
 
 
-def get_insights(session_id: int | None = None, limit: int = 50) -> list:
+async def get_insights(session_id: int | None = None, limit: int = 50) -> list:
     """
     Return persisted insights. If session_id given, filter to that session.
     Ordered by severity: critical first, then warning, then info.
     """
-    conn = get_connection()
+    conn = await get_async_connection()
 
     severity_order = "CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END"
 
-    if session_id:
-        rows = conn.execute(
-            f"SELECT i.*, s.name AS session_name, s.game_name "
-            f"FROM insights i JOIN sessions s ON s.id = i.session_id "
-            f"WHERE i.session_id = ? "
-            f"ORDER BY {severity_order}, i.created_at DESC LIMIT ?",
-            (session_id, limit)
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            f"SELECT i.*, s.name AS session_name, s.game_name "
-            f"FROM insights i JOIN sessions s ON s.id = i.session_id "
-            f"ORDER BY {severity_order}, i.created_at DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
-
-    conn.close()
+    try:
+        if session_id:
+            cursor = await conn.execute(
+                f"SELECT i.*, s.name AS session_name, s.game_name "
+                f"FROM insights i JOIN sessions s ON s.id = i.session_id "
+                f"WHERE i.session_id = ? "
+                f"ORDER BY {severity_order}, i.created_at DESC LIMIT ?",
+                (session_id, limit)
+            )
+        else:
+            cursor = await conn.execute(
+                f"SELECT i.*, s.name AS session_name, s.game_name "
+                f"FROM insights i JOIN sessions s ON s.id = i.session_id "
+                f"ORDER BY {severity_order}, i.created_at DESC LIMIT ?",
+                (limit,)
+            )
+        rows = await cursor.fetchall()
+    finally:
+        await conn.close()
 
     return [
         {
@@ -53,21 +55,8 @@ def get_insights(session_id: int | None = None, limit: int = 50) -> list:
     ]
 
 
-def generate_and_persist_insights(session_id: int) -> list:
-    """
-    Re-run insight rules for a session and persist results.
-    Clears existing insights for session first to avoid duplication.
-    Called after a new session is created or updated.
-    """
-    conn = get_connection()
-
-    s = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
-    if not s:
-        conn.close()
-        return []
-
-    conn.execute("DELETE FROM insights WHERE session_id = ?", (session_id,))
-
+def _build_insights(session_id: int, s) -> list:
+    """Pure rule evaluation for one session row - no DB access."""
     new_insights = []
 
     # ── RTP classification ────────────────────────────────────────────────────
@@ -113,12 +102,31 @@ def generate_and_persist_insights(session_id: int) -> list:
             text=f"Large loss (${abs(s['net_result']):.2f}) in a short {s['duration_minutes']}-minute "
                  f"session may indicate impulsive play or high bet sizing."))
 
-    # ── Persist ───────────────────────────────────────────────────────────────
-    for ins in new_insights:
-        conn.execute(
-            "INSERT INTO insights (session_id, category, severity, text) "
-            "VALUES (:session_id, :category, :severity, :text)", ins)
-
-    conn.commit()
-    conn.close()
     return new_insights
+
+
+async def generate_and_persist_insights(session_id: int) -> list:
+    """
+    Re-run insight rules for a session and persist results.
+    Clears existing insights for session first to avoid duplication.
+    Called after a new session is created or updated.
+    """
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
+        s = await cursor.fetchone()
+        if not s:
+            return []
+
+        await conn.execute("DELETE FROM insights WHERE session_id = ?", (session_id,))
+        new_insights = _build_insights(session_id, s)
+
+        for ins in new_insights:
+            await conn.execute(
+                "INSERT INTO insights (session_id, category, severity, text) "
+                "VALUES (:session_id, :category, :severity, :text)", ins)
+
+        await conn.commit()
+        return new_insights
+    finally:
+        await conn.close()

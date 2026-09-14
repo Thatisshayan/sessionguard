@@ -2,8 +2,9 @@
 backend/routes/alerts.py
 -------------------------
 Alert retrieval, acknowledgement, and summary endpoints.
-All routes use async def and wrap sync engine calls with asyncio.to_thread
-so that SQLite I/O does not block the event loop.
+Engine calls (engines.alerts_engine) are natively async (aiosqlite) and
+awaited directly. AI-explanation helpers from engines.ai_insights_engine
+are still sync and stay wrapped in asyncio.to_thread.
 """
 
 import asyncio
@@ -36,23 +37,21 @@ async def list_alerts(
         await require_session_access(session_id, authorization)
     else:
         await require_admin(authorization)
-    return await asyncio.to_thread(
-        get_alerts, session_id=session_id, unacknowledged_only=unacknowledged_only
-    )
+    return await get_alerts(session_id=session_id, unacknowledged_only=unacknowledged_only)
 
 
 @router.get("/summary")
 async def alert_summary(authorization: Optional[str] = Header(None, alias="Authorization")):
     """Return counts by severity for dashboard badges."""
     await require_admin(authorization)
-    return await asyncio.to_thread(get_alert_summary)
+    return await get_alert_summary()
 
 
 @router.patch("/{alert_id}/acknowledge")
 async def acknowledge(alert_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Mark an alert as acknowledged."""
     await require_admin(authorization)
-    success = await asyncio.to_thread(acknowledge_alert, alert_id)
+    success = await acknowledge_alert(alert_id)
     if not success:
         raise HTTPException(status_code=404, detail="Alert not found.")
     return {"alert_id": alert_id, "acknowledged": True}
@@ -62,7 +61,7 @@ async def acknowledge(alert_id: int, authorization: Optional[str] = Header(None,
 async def regenerate_alerts(session_id: int, authorization: Optional[str] = Header(None, alias="Authorization")):
     """Re-run alert rules for a session. Replaces existing alerts."""
     await require_session_access(session_id, authorization)
-    results = await asyncio.to_thread(generate_and_persist_alerts, session_id)
+    results = await generate_and_persist_alerts(session_id)
     if results is None:
         raise HTTPException(status_code=404, detail="Session not found.")
     return {"session_id": session_id, "generated": len(results), "alerts": results}
@@ -78,7 +77,7 @@ async def explain_alert(alert_id: int, authorization: Optional[str] = Header(Non
     from engines.ai_insights_engine import _build_session_summary, async_call_nvidia, _get_api_key, SYSTEM_PROMPT
     from engines.offline_ai import async_is_ollama_available, async_call_ollama_json as _ollama_call
 
-    alerts = await asyncio.to_thread(_get_alerts, alert_id=alert_id)
+    alerts = await _get_alerts(alert_id=alert_id)
     alert = alerts[0] if alerts else None
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found.")

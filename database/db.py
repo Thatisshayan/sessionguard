@@ -76,14 +76,21 @@ async def get_async_connection():
     if encryption and SQLCIPHER_AVAILABLE:
         password = encryption.get("password") or os.getenv("SG_DB_PASSWORD", "")
         if password:
-            # For encrypted DBs, use SQLCipher with aiosqlite
-            conn = await aiosqlite.connect(db_path_str, timeout=15)
-            await conn.execute("PRAGMA key=?", [password])
-            await conn.execute("PRAGMA journal_mode=WAL")
-            await conn.execute("PRAGMA foreign_keys=ON")
-            await conn.execute("PRAGMA busy_timeout = 15000")
-            conn.row_factory = aiosqlite.Row
-            return conn
+            # aiosqlite wraps the stdlib sqlite3 module, which cannot open a
+            # SQLCipher-encrypted database (pysqlcipher3, used by the sync
+            # get_connection()/create_encrypted_connection() path, is its own
+            # separate sync-only driver with no async equivalent). Trying
+            # `PRAGMA key=?` here against plain aiosqlite doesn't work - it
+            # either errors confusingly deep inside aiosqlite or silently
+            # fails to actually decrypt anything. Fail loudly and specifically
+            # instead of guessing: async DB access isn't implemented for
+            # encrypted databases yet.
+            raise NotImplementedError(
+                "SQLCipher-encrypted databases are not supported via "
+                "get_async_connection() - pysqlcipher3 has no async driver. "
+                "Use the sync get_connection() for encrypted-DB code paths, "
+                "or wrap it in asyncio.to_thread()."
+            )
     
     # Fallback: plain async SQLite
     conn = await aiosqlite.connect(db_path_str, timeout=15)

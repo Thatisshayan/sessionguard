@@ -15,6 +15,7 @@ Maturity: Enhanced Prototype — thread pool executor, retry with backoff,
           WebSocket progress, cooperative cancellation, worker health.
 """
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import shutil
@@ -236,9 +237,9 @@ def _run_regenerate(job_id: int, job: dict):
                    completed_at=datetime.now(timezone.utc).isoformat())
         return
     update_job(job_id, progress=30)
-    ins = generate_and_persist_insights(sid)
+    ins = asyncio.run(generate_and_persist_insights(sid))
     update_job(job_id, progress=70)
-    al  = generate_and_persist_alerts(sid)
+    al  = asyncio.run(generate_and_persist_alerts(sid))
     update_job(job_id,
                status="complete", progress=100,
                result=json.dumps({"insights": len(ins), "alerts": len(al)}),

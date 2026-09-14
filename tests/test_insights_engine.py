@@ -1,20 +1,19 @@
-"""Tests for insights_engine — rule-based insights (uses in-memory DB)."""
+"""Tests for insights_engine — rule-based insights (async, uses a temp-file DB).
+
+insights_engine is natively async (aiosqlite) as of TASK-031's async engine
+hardening. See tests/test_alerts_engine.py for why a temp file is used
+instead of :memory: or mocking.
+"""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import unittest
-from unittest.mock import patch
 import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
 
+import database.db as db_module
 from database.db import SCHEMA_SQL, SCHEMA_V3_SQL
-
-
-def _in_memory_db():
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA_SQL)
-    conn.executescript(SCHEMA_V3_SQL)
-    return conn
 
 
 def _seed_session(conn, **kwargs):
@@ -38,40 +37,44 @@ def _seed_session(conn, **kwargs):
     return cur.lastrowid
 
 
-class TestInsights(unittest.TestCase):
+class TestInsights(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.conn = _in_memory_db()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._orig_db_path = db_module.DB_PATH
+        db_module.DB_PATH = Path(self._tmpdir.name) / "test.db"
 
-    @patch("engines.insights_engine.get_connection")
-    def test_generate_insights_low_rtp(self, mock_conn):
-        mock_conn.return_value = self.conn
+        self.conn = sqlite3.connect(str(db_module.DB_PATH))
+        self.conn.row_factory = sqlite3.Row
+        self.conn.executescript(SCHEMA_SQL)
+        self.conn.executescript(SCHEMA_V3_SQL)
+
+    def tearDown(self):
+        self.conn.close()
+        db_module.DB_PATH = self._orig_db_path
+        self._tmpdir.cleanup()
+
+    async def test_generate_insights_low_rtp(self):
         sid = _seed_session(self.conn, rtp=80.0, losing_streak=20)
         from engines.insights_engine import generate_and_persist_insights
-        insights = generate_and_persist_insights(sid)
+        insights = await generate_and_persist_insights(sid)
         self.assertGreater(len(insights), 0)
         severities = [i["severity"] for i in insights]
         self.assertIn("critical", severities)
 
-    @patch("engines.insights_engine.get_connection")
-    def test_generate_insights_good_session(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_generate_insights_good_session(self):
         sid = _seed_session(self.conn, rtp=105.0, losing_streak=1)
         from engines.insights_engine import generate_and_persist_insights
-        insights = generate_and_persist_insights(sid)
+        insights = await generate_and_persist_insights(sid)
         self.assertIsInstance(insights, list)
 
-    @patch("engines.insights_engine.get_connection")
-    def test_get_insights_empty(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_get_insights_empty(self):
         from engines.insights_engine import get_insights
-        insights = get_insights()
+        insights = await get_insights()
         self.assertIsInstance(insights, list)
 
-    @patch("engines.insights_engine.get_connection")
-    def test_session_not_found(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_session_not_found(self):
         from engines.insights_engine import generate_and_persist_insights
-        insights = generate_and_persist_insights(9999)
+        insights = await generate_and_persist_insights(9999)
         self.assertEqual(insights, [])
 
 

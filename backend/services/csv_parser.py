@@ -19,6 +19,7 @@ Maturity: Working Prototype
 Future:   Add profile-based column mapping (V7), OCR-assisted repair (V8).
 """
 
+import asyncio
 import csv
 import io
 import json
@@ -280,8 +281,11 @@ def _parse_spin_level(
     result["events_created"] = event_count
 
     # ── Generate insights + alerts ────────────────────────────────────────────
-    generate_and_persist_insights(s_id)
-    generate_and_persist_alerts(s_id)
+    # This function runs in a worker thread (job_service ThreadPoolExecutor /
+    # FastAPI's asyncio.to_thread), never inside a live event loop, so a
+    # nested asyncio.run() to call the now-async engine functions is safe.
+    asyncio.run(generate_and_persist_insights(s_id))
+    asyncio.run(generate_and_persist_alerts(s_id))
 
     result["success"] = True
     return result
@@ -339,12 +343,17 @@ def _parse_session_level(
         result["sessions_created"] += 1
         result["session_ids"].append(s_id)
 
-        generate_and_persist_insights(s_id)
-        generate_and_persist_alerts(s_id)
-
     conn.execute("UPDATE uploads SET status = 'complete' WHERE id = ?", (upload_id,))
     conn.commit()
     conn.close()
+
+    # ── Generate insights + alerts ────────────────────────────────────────────
+    # Must run after the batch above is committed and the sync connection is
+    # closed: these open separate async (aiosqlite) connections, which can't
+    # see uncommitted rows from a still-open sync transaction.
+    for s_id in result["session_ids"]:
+        asyncio.run(generate_and_persist_insights(s_id))
+        asyncio.run(generate_and_persist_alerts(s_id))
 
     result["success"] = True
     return result
