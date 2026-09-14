@@ -95,6 +95,8 @@ async def generate_and_persist_alerts(session_id: int) -> list:
         if not s:
             return []
 
+        await conn.execute("DELETE FROM alerts WHERE session_id = ?", (session_id,))
+
         new_alerts = []
 
         if s["rtp"] < THRESHOLDS["rtp_critical"]:
@@ -145,15 +147,15 @@ async def generate_and_persist_alerts(session_id: int) -> list:
 async def get_alert_summary() -> dict:
     """Return counts by severity for dashboard badge display."""
     conn = await get_async_connection()
-    cursor = await conn.execute("""
-        SELECT
-            COUNT(*) AS total,
-            COUNT(CASE WHEN severity='critical' AND acknowledged=0 THEN 1 END) AS critical,
-            COUNT(CASE WHEN severity='warning'  AND acknowledged=0 THEN 1 END) AS warning,
-            COUNT(CASE WHEN acknowledged=0 THEN 1 END) AS unacknowledged
-        FROM alerts
-    """)
     try:
+        cursor = await conn.execute("""
+            SELECT
+                COUNT(*) AS total,
+                COUNT(CASE WHEN severity='critical' AND acknowledged=0 THEN 1 END) AS critical,
+                COUNT(CASE WHEN severity='warning'  AND acknowledged=0 THEN 1 END) AS warning,
+                COUNT(CASE WHEN acknowledged=0 THEN 1 END) AS unacknowledged
+            FROM alerts
+        """)
         row = await cursor.fetchone()
     finally:
         await conn.close()

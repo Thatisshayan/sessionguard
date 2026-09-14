@@ -64,6 +64,14 @@ class TestGetAlerts(unittest.IsolatedAsyncioTestCase):
         severities = [a["severity"] for a in alerts]
         self.assertIn("critical", severities)
 
+    async def test_regenerate_replaces_not_duplicates(self):
+        """Regenerating alerts for the same session must not accumulate duplicates."""
+        from engines.alerts_engine import generate_and_persist_alerts, get_alerts
+        await generate_and_persist_alerts(self.sid)
+        second = await generate_and_persist_alerts(self.sid)
+        all_alerts = await get_alerts(session_id=self.sid)
+        self.assertEqual(len(all_alerts), len(second))
+
     async def test_acknowledge_nonexistent(self):
         from engines.alerts_engine import acknowledge_alert
         result = await acknowledge_alert(9999)

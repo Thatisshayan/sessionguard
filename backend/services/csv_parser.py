@@ -343,12 +343,17 @@ def _parse_session_level(
         result["sessions_created"] += 1
         result["session_ids"].append(s_id)
 
-        asyncio.run(generate_and_persist_insights(s_id))
-        asyncio.run(generate_and_persist_alerts(s_id))
-
     conn.execute("UPDATE uploads SET status = 'complete' WHERE id = ?", (upload_id,))
     conn.commit()
     conn.close()
+
+    # ── Generate insights + alerts ────────────────────────────────────────────
+    # Must run after the batch above is committed and the sync connection is
+    # closed: these open separate async (aiosqlite) connections, which can't
+    # see uncommitted rows from a still-open sync transaction.
+    for s_id in result["session_ids"]:
+        asyncio.run(generate_and_persist_insights(s_id))
+        asyncio.run(generate_and_persist_alerts(s_id))
 
     result["success"] = True
     return result
