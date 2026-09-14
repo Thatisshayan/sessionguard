@@ -185,18 +185,18 @@ sessionguard/
 | Live Coach (real-time intervention) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Review Queue | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Alerts + Acknowledgement | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Alert Explanations (LLM root cause) | ✅ | ❌ | — | ✅ | ✅ |
+| Alert Explanations (LLM root cause) | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Insights (rule-based) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | AI Narrative (NVIDIA NIM + Ollama fallback) | ⚠️ | ✅ | ✅ | ⚠️ | ⚠️ |
-| AI Cost Tracking + Budget | ✅ | ❌ | — | ✅ | ✅ |
-| Prompt Versioning + A/B | ✅ | ❌ | — | ✅ | ✅ |
+| AI Cost Tracking + Budget | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Prompt Versioning + A/B | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Compare Sessions | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Exports (PDF/Excel) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Evidence Package (hash manifest + AI) | ✅ | ❌ | — | ✅ | ✅ |
+| Evidence Package (hash manifest + AI) | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Profiles (OCR config) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Clustering (HDBSCAN/cosine) | ✅ | ❌ | — | ✅ | ✅ |
-| Dataset Quality Report | ✅ | ❌ | — | ✅ | ✅ |
-| Event Validation (z-score) | ✅ | ❌ | — | ✅ | ✅ |
+| Clustering (HDBSCAN/cosine) | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Dataset Quality Report | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Event Validation (z-score) | ✅ | ✅ | ❌ | ✅ | ✅ |
 | Native Notifications (Tauri) | — | ✅ | ✅ | ❌ | ✅ |
 | Sentry Crash Reporting | — | ✅ | ✅ | ❌ | ✅ |
 | Portable Mode (--portable) | — | — | ✅ | ❌ | ✅ |
@@ -212,7 +212,7 @@ sessionguard/
 
 **Legend**: ✅ Complete | ⚠️ Partial/WIP | ❌ Missing
 
-> **API-only features (Frontend ❌)**: Alert Explanations, AI Cost Tracking, Prompt Versioning, Evidence Package, Clustering, and Dataset Quality Report all have complete, tested backend endpoints but no routed frontend page in `frontend/src/App.tsx` — they're reachable via `frontend/src/services/api.ts` helper functions but not from the UI nav. Treat these as API-only until a page is added; see `audits/2026-08-16_Codex_LocalReadiness_Audit.md` finding 4.
+> **Resolved 2026-09-14**: Alert Explanations, AI Cost Tracking, Prompt Versioning, Evidence Package, Clustering, Dataset Quality Report, and Event Validation all now have routed frontend pages (`Clusters.tsx`, `DatasetQuality.tsx`, `Prompts.tsx` under Admin; Alert Explanations/Event Validation/Evidence Package embedded in `SessionDetail.tsx`'s Overview/Events/Exports tabs; AI Cost Tracking in `Settings.tsx`) — closing the gap flagged in `audits/2026-08-16_Codex_LocalReadiness_Audit.md` finding 4. None have been verified in the packaged desktop (Tauri) shell yet, hence Desktop ❌ above.
 
 > **AI Narrative note (2026-07-23, updated 2026-08-16)**: this row was previously all-✅. It was wrong — the router serving every one of these endpoints (`backend/routes/ai_analysis.py`) was never mounted in `main.py`, so the feature 404'd end-to-end despite tests passing at the unit level. Now fixed (router mounted, live curl confirms the model list endpoint works). The real-NVIDIA-key gap (`SESSIONGUARDREVIVAL1.3.md` task B3) is also resolved — `scripts/verify_nvidia_live.py` passed against the live NVIDIA NIM API on 2026-08-14. `pwsh -File scripts/verify.ps1` is confirmed green as of 2026-08-16 (264 passed, 2 skipped) after `engines/live_coach_engine.py` was given a `RULE_FIRST_TRIGGERS` set so critical rule-engine triggers (martingale, RTP decay, etc.) always win over the AI tiers regardless of ambient Ollama availability. Row is kept at ⚠️ rather than ✅ only because Live Monitor (screen) and Auth (desktop) below still have open gaps — see `docs/governance/DEFERRED_WORK.md` for current status.
 
@@ -264,7 +264,7 @@ See [`SessionGuardRevival.md`](SessionGuardRevival.md) for phase history and [`S
 | 1.4 | Runtime-bundling follow-through and release hardening | ⚠️ Partially absorbed into `main`; remaining polish and rehearsal work lives in deferred-work / newer plans |
 | 6 | SaaS Foundations + Launch — Multi-tenant (RLS), Stripe Billing, SSO/SCIM, audit export, public API, data residency, feature flags, SOC2 prep | ⚠️ Deferred (business-gated) |
 
-**Current version**: `v1.5.5` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified, Windows installers publish from tagged GitHub releases, and the remaining work is primarily around UI coverage for API-only features, warning cleanup, stricter release rehearsal on clean machines, and future non-Windows packaging. Phase 6 (SaaS) still requires a separate business decision.
+**Current version**: `v1.5.5` (canonical source: `config/app_config.json` → `version`). Local desktop/web use is verified, Windows installers publish from tagged GitHub releases, and the remaining work is primarily around desktop-shell verification of the newly-added frontend pages, warning cleanup, stricter release rehearsal on clean machines, and future non-Windows packaging. Phase 6 (SaaS) still requires a separate business decision.
 
 ---
 

@@ -13,6 +13,7 @@ import {
   getSessionEvents, getEventsSummary, getSessionBehavior,
   acknowledgeAlert, resolveReviewItem, createExport, getExports,
   startLiveRun, getLiveRun, stopLiveRun,
+  createEvidence, verifyEvidence, validateSessionEvents, explainAlert,
 } from '../../services/api'
 import { toast } from '../Toast'
 
@@ -73,6 +74,31 @@ export function useSessionDetailData(sessionId: number) {
     mutationFn: (runId: number) => stopLiveRun(runId),
   })
 
+  const evidenceMutation = useMutation({
+    mutationFn: () => createEvidence(sessionId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: keys.exports(sessionId) }); toast.success('Evidence package generated') },
+    onError: () => { toast.error('Evidence package generation failed') },
+  })
+
+  const verifyEvidenceMutation = useMutation({
+    mutationFn: () => verifyEvidence(sessionId),
+    onSuccess: (r: any) => {
+      const tampered = r?.manifest_verified?.tampered?.length
+      toast[tampered ? 'error' : 'success'](tampered ? `Manifest check found ${tampered} tampered file(s)` : 'Manifest verified — all files intact')
+    },
+    onError: () => { toast.error('Manifest verification failed') },
+  })
+
+  const validateEventsMutation = useMutation({
+    mutationFn: () => validateSessionEvents(sessionId),
+    onError: () => { toast.error('Event validation failed') },
+  })
+
+  const explainAlertMutation = useMutation({
+    mutationFn: (alertId: number) => explainAlert(alertId),
+    onError: () => { toast.error('Failed to generate alert explanation') },
+  })
+
   const loading = enabled && [session, insights, alerts, queue, events, evSummary, exports_].some(q => q.isPending)
   const error = [session, insights, alerts, queue, events, evSummary, exports_]
     .map(q => q.error)
@@ -89,5 +115,14 @@ export function useSessionDetailData(sessionId: number) {
     exporting:     exportMutation.isPending ? (exportMutation.variables ?? '') : '',
     startLive:     startLiveMutation.mutateAsync,
     stopLive:      stopLiveMutation.mutateAsync,
+    createEvidence:   evidenceMutation.mutateAsync,
+    generatingEvidence: evidenceMutation.isPending,
+    verifyEvidence:   verifyEvidenceMutation.mutateAsync,
+    verifyingEvidence: verifyEvidenceMutation.isPending,
+    validateEvents:   validateEventsMutation.mutateAsync,
+    validatingEvents: validateEventsMutation.isPending,
+    eventValidation:  validateEventsMutation.data,
+    explainAlert:     explainAlertMutation.mutateAsync,
+    explainingAlertId: explainAlertMutation.isPending ? explainAlertMutation.variables : null,
   }
 }

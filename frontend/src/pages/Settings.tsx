@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { getHealth, getVideoStatus, getOcrStatus, downloadDbBackup, restoreDb } from '../services/api'
+import { getHealth, getVideoStatus, getOcrStatus, downloadDbBackup, restoreDb, getAiUsage } from '../services/api'
 import { toast } from '../components/Toast'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
@@ -21,6 +21,8 @@ export default function Settings() {
   const [restoring, setRestoring] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isAdmin = user?.role === 'admin'
+
+  const aiUsageQ = useQuery({ queryKey: ['ai-usage'], queryFn: getAiUsage, enabled: !!user })
 
   const handleBackup = async () => {
     setBackingUp(true)
@@ -179,6 +181,34 @@ export default function Settings() {
           </div>
         )
       })}
+
+      {/* AI Cost Tracking Card */}
+      {user && (
+        <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>
+            AI Cost Tracking
+          </div>
+          {aiUsageQ.isPending ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+          ) : !aiUsageQ.data ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No usage data available.</div>
+          ) : (
+            <div style={{ display: 'flex', gap: 'var(--gutter)', flexWrap: 'wrap' }}>
+              {[
+                ['AI Calls',        aiUsageQ.data.total_calls],
+                ['Input Tokens',    aiUsageQ.data.total_input_tokens.toLocaleString()],
+                ['Output Tokens',   aiUsageQ.data.total_output_tokens.toLocaleString()],
+                ['Total Cost',      `$${aiUsageQ.data.total_cost_usd}`],
+              ].map(([label, val]) => (
+                <div key={label as string} style={{ flex: 1, minWidth: 120, padding: '10px 14px', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Database Backup & Snapshot Card */}
       <div className="card" style={{ marginBottom: 'var(--space-4)' }}>

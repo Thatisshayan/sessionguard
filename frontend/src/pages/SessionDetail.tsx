@@ -31,6 +31,9 @@ export default function SessionDetail() {
   const {
     session, insights, alerts, queue, events, evSummary, behavior, exports,
     loading, error, acknowledge, resolve, createExport, exporting, startLive, stopLive,
+    createEvidence, generatingEvidence, verifyEvidence, verifyingEvidence,
+    validateEvents, validatingEvents, eventValidation,
+    explainAlert, explainingAlertId,
   } = useSessionDetailData(sessionId)
 
   const [liveRun, setLiveRun] = useState<any>(null)
@@ -133,12 +136,12 @@ export default function SessionDetail() {
         {TAB_BTN('exports',   'Exports')}{TAB_BTN('ai', 'AI Analysis 🤖')}
       </div>
 
-      {activeTab === 'overview' && <OverviewTab session={session} events={events} insights={insights} alerts={alerts} onAck={acknowledge} />}
-      {activeTab === 'events'   && <EventsTab events={events} evSummary={evSummary} />}
+      {activeTab === 'overview' && <OverviewTab session={session} events={events} insights={insights} alerts={alerts} onAck={acknowledge} onExplain={explainAlert} explainingAlertId={explainingAlertId} />}
+      {activeTab === 'events'   && <EventsTab events={events} evSummary={evSummary} onValidate={validateEvents} validating={validatingEvents} validation={eventValidation} />}
       {activeTab === 'behavior' && <BehaviorTab behavior={behavior} />}
       {activeTab === 'review'   && <ReviewTab queue={queue} onResolve={resolve} />}
       {activeTab === 'ai'       && <AiAnalysisPanel sessionId={sessionId} />}
-      {activeTab === 'exports'  && <ExportsTab exports_={exports} exporting={exporting} onExport={createExport} />}
+      {activeTab === 'exports'  && <ExportsTab exports_={exports} exporting={exporting} onExport={createExport} onGenerateEvidence={createEvidence} generatingEvidence={generatingEvidence} onVerifyEvidence={verifyEvidence} verifyingEvidence={verifyingEvidence} />}
     </div>
   )
 }
