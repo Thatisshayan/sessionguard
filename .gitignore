@@ -54,3 +54,8 @@ _repo_clone/
 desktop_shell/bundle/
 desktop_shell/*.log
 .gstack/
+LOCAL_SECRET_KEY.md
+rehearsal_install/
+tmp_release_rehearsal/
+gitleaks-report.json
+tmp_release_*.log

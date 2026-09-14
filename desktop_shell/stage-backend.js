@@ -32,12 +32,13 @@ function removeResidue(dir) {
   }
 }
 
-function copyDir(src, dst) {
+function copyDir(src, dst, options = {}) {
+  const { mirror = false } = options;
   if (process.platform === "win32") {
     const args = [
       src,
       dst,
-      "/E",
+      mirror ? "/MIR" : "/E",
       "/MT:16",
       "/XD",
       ...Array.from(SKIP_DIRS),
@@ -119,12 +120,17 @@ function getMissingBundledPythonModules(pythonRoot) {
     return ["python.exe"];
   }
   const probe = [
-    "import importlib.util, sys",
-    "mods = ['uvicorn','fastapi','multipart','jwt','structlog','dotenv','cv2','numpy','pandas','openpyxl','reportlab','pytesseract','aiosqlite','httpx']",
-    "missing = [m for m in mods if importlib.util.find_spec(m) is None]",
+    "import importlib, sys",
+    "mods = ['uvicorn','fastapi','multipart','jwt','structlog','dotenv','cv2','numpy','pandas','openpyxl','reportlab','pytesseract','aiosqlite','httpx','pydantic_core._pydantic_core']",
+    "missing = []",
+    "for m in mods:",
+    "    try:",
+    "        importlib.import_module(m)",
+    "    except Exception:",
+    "        missing.append(m)",
     "print(','.join(missing))",
     "sys.exit(1 if missing else 0)",
-  ].join("; ");
+  ].join("\n");
 
   const res = spawnSync(pythonExe, ["-c", probe], {
     cwd: pythonRoot,
@@ -196,7 +202,7 @@ for (const runtime of ["python_win", "tesseract_win", "ffmpeg_win"]) {
       continue;
     }
     console.log(`[stage-backend] staging runtime: ${runtime}`);
-    copyDir(srcDir, dstDir);
+    copyDir(srcDir, dstDir, { mirror: true });
   }
 }
 

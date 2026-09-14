@@ -7,11 +7,23 @@ $PythonVer = "3.11.9"
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVer/python-$PythonVer-embed-amd64.zip"
 $TargetDir = Join-Path $PSScriptRoot "../../desktop_shell/bundle/python_win"
 $TempZip = Join-Path $env:TEMP "python-embed.zip"
+$BundleMajorMinor = (($PythonVer -split '\.')[0..1] -join '.')
 
 Write-Host "== Bundling Python for Windows ($PythonVer) =="
 
+$HostPyVersion = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')").Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to run host python for bundling."
+}
+if ($HostPyVersion -ne $BundleMajorMinor) {
+    throw "Host python $HostPyVersion does not match bundled runtime $BundleMajorMinor. Run this script with Python $BundleMajorMinor on PATH."
+}
+
 if (-not (Test-Path $TargetDir)) {
     New-Item -ItemType Directory -Path $TargetDir -Force
+}
+else {
+    Get-ChildItem -Path $TargetDir -Force | Remove-Item -Recurse -Force
 }
 
 # 1. Download
@@ -47,6 +59,10 @@ if (-not (Test-Path $SitePackages)) {
 
 # Use local python to install into the bundle
 # Note: Embeddable python doesn't have pip, we use system pip with --target
-pip install -r $ReqFile --target $SitePackages --no-compile --no-cache-dir
+python -m pip install -r $ReqFile --target $SitePackages --no-compile --no-cache-dir
+
+# 5. Smoke-test critical imports so compiled wheels fail here instead of in the installer
+$EmbeddedPython = Join-Path $TargetDir "python.exe"
+& $EmbeddedPython -c "import importlib; mods=['uvicorn','fastapi','multipart','jwt','structlog','dotenv','cv2','numpy','pandas','openpyxl','reportlab','pytesseract','aiosqlite','httpx','pydantic_core._pydantic_core']; [importlib.import_module(m) for m in mods]; print('BUNDLED_PYTHON_OK')"
 
 Write-Host "== Python bundling complete =="
