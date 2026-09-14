@@ -50,7 +50,10 @@ export default function Clusters() {
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>Similarity Threshold</div>
             <input type="number" min={0.5} max={1.0} step={0.01} value={threshold}
-              onChange={e => { setThreshold(Number(e.target.value)) }}
+              onChange={e => {
+                const v = Number(e.target.value)
+                if (Number.isFinite(v)) setThreshold(Math.min(1.0, Math.max(0.5, v)))
+              }}
               style={{
                 background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)',
                 padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: 13, width: 100,

@@ -43,7 +43,10 @@ function NewVersionForm({ show, onCreated }: { show: boolean; onCreated: () => v
         </div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>Temperature</div>
-          <input type="number" min={0} max={2} step={0.1} value={temp} onChange={e => { setTemp(Number(e.target.value)) }}
+          <input type="number" min={0} max={2} step={0.1} value={temp} onChange={e => {
+            const v = Number(e.target.value)
+            if (Number.isFinite(v)) setTemp(Math.min(2, Math.max(0, v)))
+          }}
             style={{ background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: 12, width: 80 }} />
         </div>
       </div>
@@ -120,7 +123,8 @@ export default function Prompts() {
 
   const versionsQ = useQuery({ queryKey: ['prompts'], queryFn: () => getPromptVersions() })
   const abQ = useQuery({ queryKey: ['prompts', 'ab'], queryFn: () => getAbResults() })
-  const refreshVersions = () => { void qc.invalidateQueries({ queryKey: ['prompts'] }); setShowNew(false) }
+  const refreshVersions = () => { void qc.invalidateQueries({ queryKey: ['prompts'] }) }
+  const handleCreated = () => { refreshVersions(); setShowNew(false) }
 
   return (
     <div style={{ padding: 'var(--page-margin)', maxWidth: 'var(--content-max-width)', margin: '0 auto' }}>
@@ -139,7 +143,7 @@ export default function Prompts() {
             {showNew ? 'Cancel' : '+ New Version'}
           </button>
         </div>
-        <NewVersionForm show={showNew} onCreated={refreshVersions} />
+        <NewVersionForm show={showNew} onCreated={handleCreated} />
         <VersionsList versionsQ={versionsQ} onActivated={refreshVersions} />
       </div>
 

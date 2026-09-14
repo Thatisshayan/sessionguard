@@ -99,7 +99,10 @@ function AnomaliesSection({ anomaliesQ, zThreshold, onThreshold }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Z-threshold</span>
           <input type="number" min={1} max={4} step={0.5} value={zThreshold}
-            onChange={e => { onThreshold(Number(e.target.value)) }}
+            onChange={e => {
+              const v = Number(e.target.value)
+              if (Number.isFinite(v)) onThreshold(Math.min(4, Math.max(1, v)))
+            }}
             style={{
               background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)',
               padding: '5px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12, width: 60,

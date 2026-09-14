@@ -26,7 +26,10 @@ export default function Settings() {
   // the persisted profile before the token itself is available, and the API
   // client only attaches Authorization once a token exists — calling before
   // that would 401 against the backend's require_current_user.
-  const aiUsageQ = useQuery({ queryKey: ['ai-usage'], queryFn: getAiUsage, enabled: !!accessToken })
+  // Query key includes the user id so switching accounts (logout doesn't
+  // clear the QueryClient cache) can't render the previous account's
+  // cached usage numbers - a different id is simply a different cache slot.
+  const aiUsageQ = useQuery({ queryKey: ['ai-usage', user?.id], queryFn: getAiUsage, enabled: !!accessToken && !!user })
 
   const handleBackup = async () => {
     setBackingUp(true)

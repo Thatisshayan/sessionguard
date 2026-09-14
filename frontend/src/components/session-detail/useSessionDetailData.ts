@@ -11,7 +11,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tansta
 import {
   getSession, getInsights, getAlerts, getReviewQueue,
   getSessionEvents, getEventsSummary, getSessionBehavior,
-  acknowledgeAlert, resolveReviewItem, createExport, getExports,
+  acknowledgeAlert, resolveReviewItem, createExport, getExports, getExportDownloadUrl,
   startLiveRun, getLiveRun, stopLiveRun,
   createEvidence, verifyEvidence, validateSessionEvents, explainAlert,
 } from '../../services/api'
@@ -47,7 +47,7 @@ function useSessionDetailMutations(sessionId: number, qc: QueryClient) {
     onSuccess: (r: { export_id?: number }) => {
       void qc.invalidateQueries({ queryKey: keys.exports(sessionId) })
       toast.success('Export generated')
-      if (r.export_id) window.open(`http://127.0.0.1:8000/exports/${r.export_id}/download`, '_blank')
+      if (r.export_id) window.open(getExportDownloadUrl(r.export_id), '_blank')
     },
     onError: () => { toast.error('Export failed') },
   })
@@ -98,7 +98,7 @@ export function useSessionDetailData(sessionId: number) {
   const enabled = Number.isFinite(sessionId)
 
   const session   = useQuery({ queryKey: keys.session(sessionId),   queryFn: () => getSession(sessionId),   enabled })
-  const insights  = useQuery({ queryKey: keys.insights(sessionId),  queryFn: () => getInsights(sessionId),  enabled })
+  const insights  = useQuery({ queryKey: keys.insights(sessionId),  queryFn: () => getInsights({ session_id: sessionId }),  enabled })
   const alerts    = useQuery({ queryKey: keys.alerts(sessionId),    queryFn: () => getAlerts({ session_id: sessionId }), enabled })
   const queue     = useQuery({ queryKey: keys.queue(sessionId),     queryFn: () => getReviewQueue({ session_id: sessionId, status: 'pending' }), enabled })
   const events    = useQuery({ queryKey: keys.events(sessionId),    queryFn: () => getSessionEvents(sessionId), enabled })
