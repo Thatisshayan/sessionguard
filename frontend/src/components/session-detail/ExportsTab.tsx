@@ -88,9 +88,9 @@ export function ExportsTab({ exports_, exporting, onExport, onGenerateEvidence, 
               <div>
                 <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   {ex.format === 'evidence' && <span className="badge badge-info" style={{ fontSize: 9 }}>evidence</span>}
-                  {ex.file_path?.split('/').pop()}
+                  {ex.file_path.split('/').pop()}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{ex.created_at?.slice(0, 16)}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{ex.created_at.slice(0, 16)}</div>
               </div>
               <button
                 onClick={() => window.open(`http://127.0.0.1:8000/exports/${ex.id}/download`, '_blank')}

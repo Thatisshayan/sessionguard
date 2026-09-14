@@ -35,8 +35,8 @@ function QualityReport({ q }: { q: DatasetQualityReport }) {
         {[
           ['Total Sessions', q.total_sessions],
           ['Total Events', q.total_events],
-          ['Avg Net Result', q.net_result_stats?.avg != null ? `$${q.net_result_stats.avg}` : '—'],
-          ['Avg RTP', q.net_result_stats?.avg_rtp != null ? `${q.net_result_stats.avg_rtp}%` : '—'],
+          ['Avg Net Result', q.net_result_stats.avg != null ? `$${q.net_result_stats.avg}` : '—'],
+          ['Avg RTP', q.net_result_stats.avg_rtp != null ? `${q.net_result_stats.avg_rtp}%` : '—'],
         ].map(([label, val]) => (
           <div key={label as string} className="card" style={{ flex: 1, minWidth: 140 }}>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
@@ -47,7 +47,7 @@ function QualityReport({ q }: { q: DatasetQualityReport }) {
 
       <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Field Completeness</div>
-        {Object.entries(q.completeness ?? {}).map(([table, cols]) => (
+        {Object.entries(q.completeness).map(([table, cols]) => (
           <div key={table} style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>{table}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
@@ -65,7 +65,7 @@ function QualityReport({ q }: { q: DatasetQualityReport }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gutter)', marginBottom: 'var(--space-6)' }}>
         <div className="card">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Game Distribution</div>
-          {(q.game_distribution ?? []).map(g => (
+          {q.game_distribution.map(g => (
             <div key={g.game_name} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, borderBottom: '1px solid var(--bg-border)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>{g.game_name}</span>
               <span style={{ fontFamily: 'var(--font-mono)' }}>{g.count}</span>
@@ -74,7 +74,7 @@ function QualityReport({ q }: { q: DatasetQualityReport }) {
         </div>
         <div className="card">
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Confidence Distribution</div>
-          {(q.confidence_distribution ?? []).map(c => (
+          {q.confidence_distribution.map(c => (
             <div key={c.bucket} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12, borderBottom: '1px solid var(--bg-border)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>{c.bucket}</span>
               <span style={{ fontFamily: 'var(--font-mono)' }}>{c.count}</span>
@@ -89,7 +89,7 @@ function QualityReport({ q }: { q: DatasetQualityReport }) {
 function AnomaliesSection({ anomaliesQ, zThreshold, onThreshold }: {
   anomaliesQ: UseQueryResult<Anomaly[]>
   zThreshold: number
-  onThreshold: (v: number) => void
+  onThreshold: (_v: number) => void
 }) {
   const anomalies = anomaliesQ.data ?? []
   return (
@@ -129,7 +129,7 @@ function AnomaliesSection({ anomaliesQ, zThreshold, onThreshold }: {
                   <td style={{ padding: '7px 10px', color: 'var(--text-secondary)' }}>{a.game_name}</td>
                   <td style={{ padding: '7px 10px', fontFamily: 'var(--font-mono)' }}>{a.rtp}%</td>
                   <td style={{ padding: '7px 10px', fontFamily: 'var(--font-mono)' }}>${a.net_result.toFixed(2)}</td>
-                  <td style={{ padding: '7px 10px', color: 'var(--text-muted)', fontSize: 11 }}>{a.reasons?.join('; ')}</td>
+                  <td style={{ padding: '7px 10px', color: 'var(--text-muted)', fontSize: 11 }}>{a.reasons.join('; ')}</td>
                   <td style={{ padding: '7px 10px' }}>
                     <span className={`badge badge-${a.severity === 'critical' ? 'critical' : 'warning'}`}>{a.severity}</span>
                     <Link to={`/sessions/${a.session_id}`}

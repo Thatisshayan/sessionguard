@@ -59,7 +59,7 @@ export default function SessionDetail() {
     </div>
   )
 
-  if (error || !session) return (
+  if (Boolean(error) || !session) return (
     <div style={{ padding: 'var(--page-margin)' }}>
       <div className="card" style={{ borderColor: 'var(--severity-critical)', maxWidth: 500 }}>
         <div style={{ color: 'var(--severity-critical)', fontWeight: 600, marginBottom: 8 }}>Failed to load session</div>
@@ -136,12 +136,12 @@ export default function SessionDetail() {
         {TAB_BTN('exports',   'Exports')}{TAB_BTN('ai', 'AI Analysis 🤖')}
       </div>
 
-      {activeTab === 'overview' && <OverviewTab session={session} events={events} insights={insights} alerts={alerts} onAck={acknowledge} onExplain={explainAlert} />}
-      {activeTab === 'events'   && <EventsTab events={events} evSummary={evSummary} onValidate={validateEvents} validating={validatingEvents} validation={eventValidation} />}
+      {activeTab === 'overview' && <OverviewTab session={session} events={events} insights={insights} alerts={alerts} onAck={id => { void acknowledge(id) }} onExplain={explainAlert} />}
+      {activeTab === 'events'   && <EventsTab events={events} evSummary={evSummary} onValidate={() => { void validateEvents() }} validating={validatingEvents} validation={eventValidation} />}
       {activeTab === 'behavior' && <BehaviorTab behavior={behavior} />}
       {activeTab === 'review'   && <ReviewTab queue={queue} onResolve={resolve} />}
       {activeTab === 'ai'       && <AiAnalysisPanel sessionId={sessionId} />}
-      {activeTab === 'exports'  && <ExportsTab exports_={exports} exporting={exporting} onExport={createExport} onGenerateEvidence={createEvidence} generatingEvidence={generatingEvidence} onVerifyEvidence={verifyEvidence} verifyingEvidence={verifyingEvidence} />}
+      {activeTab === 'exports'  && <ExportsTab exports_={exports} exporting={exporting} onExport={fmt => { void createExport(fmt) }} onGenerateEvidence={() => { void createEvidence() }} generatingEvidence={generatingEvidence} onVerifyEvidence={() => { void verifyEvidence() }} verifyingEvidence={verifyingEvidence} />}
     </div>
   )
 }

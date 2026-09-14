@@ -26,12 +26,12 @@ export function OverviewTab({ session, events, insights, alerts, onAck, onExplai
   events: Array<Record<string, unknown>>
   insights: Array<{ id: number; severity: string; text: string }>
   alerts: Array<{ id: number; severity: string; message: string; acknowledged: boolean }>
-  onAck: (alertId: number) => void
-  onExplain: (alertId: number) => Promise<AlertExplanation>
+  onAck: (_alertId: number) => void
+  onExplain: (_alertId: number) => Promise<AlertExplanation>
 }) {
   const chartData = events.length > 200 ? events.filter((_, i) => i % Math.ceil(events.length / 200) === 0) : events
   const unackedAlerts = alerts.filter(a => !a.acknowledged)
-  const [explanations, setExplanations] = useState<Record<number, AlertExplanation>>({})
+  const [explanations, setExplanations] = useState<Record<number, AlertExplanation | undefined>>({})
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
 
   const handleExplain = async (alertId: number) => {
@@ -112,7 +112,7 @@ export function OverviewTab({ session, events, insights, alerts, onAck, onExplai
                       <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', marginBottom: 4 }}>
                         {explanation.source === 'nvidia_ai' ? '🤖 AI explanation' : explanation.source === 'ollama' ? '🤖 Ollama explanation' : 'Rule-based explanation'}
                       </div>
-                      <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{explanation.explanation?.explanation}</div>
+                      <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{explanation.explanation.explanation}</div>
                     </div>
                   )}
                 </div>

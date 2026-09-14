@@ -47,7 +47,7 @@ function useSessionDetailMutations(sessionId: number, qc: QueryClient) {
     onSuccess: (r: { export_id?: number }) => {
       void qc.invalidateQueries({ queryKey: keys.exports(sessionId) })
       toast.success('Export generated')
-      if (r?.export_id) window.open(`http://127.0.0.1:8000/exports/${r.export_id}/download`, '_blank')
+      if (r.export_id) window.open(`http://127.0.0.1:8000/exports/${r.export_id}/download`, '_blank')
     },
     onError: () => { toast.error('Export failed') },
   })
