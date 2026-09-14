@@ -494,7 +494,6 @@ def generate_excel(session_id: int | None = None) -> dict:
             return {"success": False, "file_path": "", "filename": "", "error": "Session not found."}
 
         insights = asyncio.run(get_insights(session_id=session_id))
-        alerts   = asyncio.run(get_alerts(session_id=session_id))
         events   = conn.execute(
             "SELECT * FROM events WHERE session_id=? ORDER BY timestamp", (session_id,)
         ).fetchall()
