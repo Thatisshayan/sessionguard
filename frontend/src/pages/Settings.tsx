@@ -14,7 +14,7 @@ const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 interface DepRow { label: string; ok: boolean; detail: string; install?: string; group: string }
 
 export default function Settings() {
-  const { user } = useAuth()
+  const { user, accessToken } = useAuth()
   const [backingUp, setBackingUp] = useState(false)
   const [restoreFile, setRestoreFile] = useState<File | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -22,7 +22,11 @@ export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isAdmin = user?.role === 'admin'
 
-  const aiUsageQ = useQuery({ queryKey: ['ai-usage'], queryFn: getAiUsage, enabled: !!user })
+  // Gated on accessToken, not just `user`: AuthContext can set `user` from
+  // the persisted profile before the token itself is available, and the API
+  // client only attaches Authorization once a token exists — calling before
+  // that would 401 against the backend's require_current_user.
+  const aiUsageQ = useQuery({ queryKey: ['ai-usage'], queryFn: getAiUsage, enabled: !!accessToken })
 
   const handleBackup = async () => {
     setBackingUp(true)

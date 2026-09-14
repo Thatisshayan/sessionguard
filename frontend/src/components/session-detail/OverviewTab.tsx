@@ -3,7 +3,9 @@
  * -------------------------------------------------
  * Balance curve chart + insights/alerts summary grid.
  * Each alert can request an AI-generated (or rule-based fallback) root
- * cause explanation, shown inline once fetched.
+ * cause explanation, shown inline once fetched. Pending state is tracked
+ * per-alert-id locally (not via the shared mutation's single `variables`)
+ * so explaining one alert doesn't block or duplicate another in flight.
  */
 
 import { useState } from 'react'
@@ -13,24 +15,33 @@ import {
 } from 'recharts'
 import { EventTooltip, SevBadge } from './shared'
 
-export function OverviewTab({ session, events, insights, alerts, onAck, onExplain, explainingAlertId }: {
-  session: any
-  events: any[]
-  insights: any[]
-  alerts: any[]
-  onAck: (id: number) => void
-  onExplain: (id: number) => Promise<any>
-  explainingAlertId: number | null
+interface AlertExplanation {
+  alert_id: number
+  source: 'nvidia_ai' | 'ollama' | 'rule_based'
+  explanation: { explanation: string; likely_causes: string[]; confidence: string }
+}
+
+export function OverviewTab({ session, events, insights, alerts, onAck, onExplain }: {
+  session: { start_balance: number }
+  events: Array<Record<string, unknown>>
+  insights: Array<{ id: number; severity: string; text: string }>
+  alerts: Array<{ id: number; severity: string; message: string; acknowledged: boolean }>
+  onAck: (alertId: number) => void
+  onExplain: (alertId: number) => Promise<AlertExplanation>
 }) {
   const chartData = events.length > 200 ? events.filter((_, i) => i % Math.ceil(events.length / 200) === 0) : events
   const unackedAlerts = alerts.filter(a => !a.acknowledged)
-  const [explanations, setExplanations] = useState<Record<number, any>>({})
+  const [explanations, setExplanations] = useState<Record<number, AlertExplanation>>({})
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
 
   const handleExplain = async (alertId: number) => {
+    setPendingIds(prev => new Set(prev).add(alertId))
     try {
       const result = await onExplain(alertId)
       setExplanations(prev => ({ ...prev, [alertId]: result }))
-    } catch { /* toast handled in the mutation */ }
+    } catch { /* toast handled in the mutation */ } finally {
+      setPendingIds(prev => { const next = new Set(prev); next.delete(alertId); return next })
+    }
   }
 
   return (
@@ -80,29 +91,33 @@ export function OverviewTab({ session, events, insights, alerts, onAck, onExplai
           </div>
           {unackedAlerts.length === 0
             ? <div style={{ color: 'var(--accent-green)', fontSize: 13 }}>✓ No active alerts.</div>
-            : unackedAlerts.map(al => (
-              <div key={al.id} style={{ marginBottom: 'var(--space-3)', paddingBottom: 'var(--space-3)', borderBottom: '1px solid var(--bg-border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <SevBadge sev={al.severity} />
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => handleExplain(al.id)} disabled={explainingAlertId === al.id}
-                      style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: 11 }}>
-                      {explainingAlertId === al.id ? 'Explaining…' : (explanations[al.id] ? 'Re-explain' : '? Explain')}
-                    </button>
-                    <button onClick={() => onAck(al.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11 }}>Dismiss ×</button>
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{al.message}</div>
-                {explanations[al.id] && (
-                  <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)', fontSize: 12 }}>
-                    <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', marginBottom: 4 }}>
-                      {explanations[al.id].source === 'nvidia_ai' ? '🤖 AI explanation' : explanations[al.id].source === 'ollama' ? '🤖 Ollama explanation' : 'Rule-based explanation'}
+            : unackedAlerts.map(al => {
+              const isPending = pendingIds.has(al.id)
+              const explanation = explanations[al.id]
+              return (
+                <div key={al.id} style={{ marginBottom: 'var(--space-3)', paddingBottom: 'var(--space-3)', borderBottom: '1px solid var(--bg-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <SevBadge sev={al.severity} />
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button onClick={() => { void handleExplain(al.id) }} disabled={isPending}
+                        style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', cursor: 'pointer', fontSize: 11 }}>
+                        {isPending ? 'Explaining…' : (explanation ? 'Re-explain' : '? Explain')}
+                      </button>
+                      <button onClick={() => onAck(al.id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11 }}>Dismiss ×</button>
                     </div>
-                    <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{explanations[al.id].explanation?.explanation}</div>
                   </div>
-                )}
-              </div>
-            ))
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{al.message}</div>
+                  {explanation && (
+                    <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--bg-base)', borderRadius: 'var(--radius-sm)', fontSize: 12 }}>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', marginBottom: 4 }}>
+                        {explanation.source === 'nvidia_ai' ? '🤖 AI explanation' : explanation.source === 'ollama' ? '🤖 Ollama explanation' : 'Rule-based explanation'}
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{explanation.explanation?.explanation}</div>
+                    </div>
+                  )}
+                </div>
+              )
+            })
           }
         </div>
       </div>

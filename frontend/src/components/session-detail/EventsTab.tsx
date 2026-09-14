@@ -12,9 +12,19 @@ import {
 } from 'recharts'
 import { KPI } from './shared'
 
+interface EventRow {
+  id: number; spin_number: number; timestamp: string; event_type: string
+  bet_amount: number; win_amount: number; balance_after: number
+  confidence_score: number; source: string
+}
+interface EventsSummary {
+  total_events: number; winning_spins: number; losing_spins: number; win_rate_pct: number
+  avg_bet: number; biggest_win: number; avg_confidence: number; low_conf_count: number
+}
+
 export function EventsTab({ events, evSummary, onValidate, validating, validation }: {
-  events: any[]
-  evSummary: any
+  events: EventRow[]
+  evSummary: EventsSummary | undefined
   onValidate: () => void
   validating: boolean
   validation?: {

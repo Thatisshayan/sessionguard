@@ -8,7 +8,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { buildClusters, getClusters } from '../services/api'
 import { toast } from '../components/Toast'
 
@@ -16,9 +16,9 @@ interface ClusterMember {
   session_id: number; name: string; game_name: string
   rtp: number; net_result: number; date?: string; similarity_score?: number
 }
+interface BuildClustersResult { cluster_count: number; sessions_total: number }
 
 export default function Clusters() {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const [threshold, setThreshold] = useState(0.88)
 
@@ -28,8 +28,8 @@ export default function Clusters() {
 
   const buildMutation = useMutation({
     mutationFn: () => buildClusters(threshold),
-    onSuccess: (r: any) => {
-      qc.invalidateQueries({ queryKey: ['clusters'] })
+    onSuccess: (r: BuildClustersResult) => {
+      void qc.invalidateQueries({ queryKey: ['clusters'] })
       toast.success(`Built ${r.cluster_count} clusters from ${r.sessions_total} sessions`)
     },
     onError: () => { toast.error('Failed to build clusters') },
@@ -50,13 +50,13 @@ export default function Clusters() {
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase' }}>Similarity Threshold</div>
             <input type="number" min={0.5} max={1.0} step={0.01} value={threshold}
-              onChange={e => setThreshold(Number(e.target.value))}
+              onChange={e => { setThreshold(Number(e.target.value)) }}
               style={{
                 background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-primary)',
                 padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: 13, width: 100,
               }} />
           </div>
-          <button onClick={() => buildMutation.mutate()} disabled={buildMutation.isPending}
+          <button onClick={() => { buildMutation.mutate() }} disabled={buildMutation.isPending}
             style={{
               background: 'var(--accent-blue)', color: '#fff', border: 'none',
               padding: '9px 20px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
@@ -68,6 +68,8 @@ export default function Clusters() {
 
       {clustersQ.isPending ? (
         <div className="card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading clusters…</div>
+      ) : clustersQ.isError ? (
+        <div className="card" style={{ color: 'var(--severity-critical)', fontSize: 13 }}>Failed to load clusters.</div>
       ) : entries.length === 0 ? (
         <div className="card" style={{ color: 'var(--text-muted)', fontSize: 13 }}>
           No clusters built yet. Click "Build Clusters" above to group your sessions.
@@ -92,13 +94,14 @@ export default function Clusters() {
                   </thead>
                   <tbody>
                     {members.map(m => (
-                      <tr key={m.session_id} onClick={() => navigate(`/sessions/${m.session_id}`)}
-                        style={{ borderBottom: '1px solid var(--bg-border)', cursor: 'pointer' }}>
-                        <td style={{ padding: '7px 10px', color: 'var(--accent-blue)' }}>{m.name}</td>
+                      <tr key={m.session_id} style={{ borderBottom: '1px solid var(--bg-border)' }}>
+                        <td style={{ padding: '7px 10px' }}>
+                          <Link to={`/sessions/${m.session_id}`} style={{ color: 'var(--accent-blue)' }}>{m.name}</Link>
+                        </td>
                         <td style={{ padding: '7px 10px', color: 'var(--text-secondary)' }}>{m.game_name}</td>
                         <td style={{ padding: '7px 10px', fontFamily: 'var(--font-mono)' }}>{m.rtp}%</td>
                         <td style={{ padding: '7px 10px', fontFamily: 'var(--font-mono)', color: m.net_result >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                          ${m.net_result?.toFixed(2)}
+                          ${m.net_result.toFixed(2)}
                         </td>
                         <td style={{ padding: '7px 10px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                           {m.similarity_score != null ? m.similarity_score.toFixed(3) : '—'}

@@ -8,8 +8,10 @@
  * (format='evidence') so it shares the same history/download flow.
  */
 
+interface ExportRecord { id: number; format: string; file_path: string; created_at: string }
+
 export function ExportsTab({ exports_, exporting, onExport, onGenerateEvidence, generatingEvidence, onVerifyEvidence, verifyingEvidence }: {
-  exports_: any[]
+  exports_: ExportRecord[]
   exporting: string
   onExport: (fmt: string) => void
   onGenerateEvidence: () => void
@@ -17,7 +19,7 @@ export function ExportsTab({ exports_, exporting, onExport, onGenerateEvidence, 
   onVerifyEvidence: () => void
   verifyingEvidence: boolean
 }) {
-  const hasEvidence = exports_.some((ex: any) => ex.format === 'evidence')
+  const hasEvidence = exports_.some(ex => ex.format === 'evidence')
 
   return (
     <div>
@@ -81,7 +83,7 @@ export function ExportsTab({ exports_, exporting, onExport, onGenerateEvidence, 
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Export History</div>
         {exports_.length === 0
           ? <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>No exports for this session yet.</div>
-          : exports_.map((ex: any) => (
+          : exports_.map(ex => (
             <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--bg-border)' }}>
               <div>
                 <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
