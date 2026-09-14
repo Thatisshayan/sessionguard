@@ -86,10 +86,12 @@ function QualityReport({ q }: { q: DatasetQualityReport }) {
   )
 }
 
+type ThresholdHandler = (zThreshold: number) => void
+
 function AnomaliesSection({ anomaliesQ, zThreshold, onThreshold }: {
   anomaliesQ: UseQueryResult<Anomaly[]>
   zThreshold: number
-  onThreshold: (_: number) => void
+  onThreshold: ThresholdHandler
 }) {
   const anomalies = anomaliesQ.data ?? []
   return (

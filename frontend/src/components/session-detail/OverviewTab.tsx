@@ -21,14 +21,19 @@ interface AlertExplanation {
   explanation: { explanation: string; likely_causes: string[]; confidence: string }
 }
 
-export function OverviewTab({ session, events, insights, alerts, onAck, onExplain }: {
+type AckHandler = (alertId: number) => void
+type ExplainHandler = (alertId: number) => Promise<AlertExplanation>
+
+interface OverviewTabProps {
   session: { start_balance: number }
   events: Array<Record<string, unknown>>
   insights: Array<{ id: number; severity: string; text: string }>
   alerts: Array<{ id: number; severity: string; message: string; acknowledged: boolean }>
-  onAck: (_: number) => void
-  onExplain: (_: number) => Promise<AlertExplanation>
-}) {
+  onAck: AckHandler
+  onExplain: ExplainHandler
+}
+
+export function OverviewTab({ session, events, insights, alerts, onAck, onExplain }: OverviewTabProps) {
   const chartData = events.length > 200 ? events.filter((_, i) => i % Math.ceil(events.length / 200) === 0) : events
   const unackedAlerts = alerts.filter(a => !a.acknowledged)
   const [explanations, setExplanations] = useState<Record<number, AlertExplanation | undefined>>({})
