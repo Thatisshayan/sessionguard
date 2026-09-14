@@ -44,7 +44,27 @@ Rule 12 / Rule 11. This register survives the session. Future agents resume from
   functions (alerts_engine, insights_engine, base db module) remain sync —
   proper fix would convert all 6 engine files to natively async with aiosqlite
   or similar — resume hint: replace `sqlite3.connect()` with `aiosqlite.connect()`
-  across all engine files, then remove `asyncio.to_thread()` wrappers — open
+  across all engine files, then remove `asyncio.to_thread()` wrappers —
+  resolved 2026-09-14: converted `engines/alerts_engine.py` (all 5 functions)
+  and `engines/insights_engine.py` (both functions) to natively async using
+  `database.db.get_async_connection()` (the base db module already had this
+  since an earlier Sprint 2/B3 pass, just unused by these two engines).
+  Removed the now-unnecessary `asyncio.to_thread()` wrapping in
+  `backend/routes/alerts.py`, `insights.py`, `dashboard.py`, and
+  `sessions.py`. Wider blast radius than the original note assumed:
+  `backend/services/csv_parser.py`, `evidence_package.py`,
+  `export_service.py`, and `backend/workers/job_service.py` all call these
+  functions synchronously from worker-thread contexts (job_service's own
+  `ThreadPoolExecutor`, or routes that already run them via
+  `asyncio.to_thread`) with no live event loop present — wrapped each of
+  those call sites in `asyncio.run(...)` rather than restructuring the
+  thread-pool job system. Updated `tests/test_alerts_engine.py` and
+  `tests/test_insights_engine.py` to `unittest.IsolatedAsyncioTestCase`
+  against a real temp-file SQLite DB (a shared `:memory:` DB doesn't work
+  across aiosqlite's per-call connections) instead of mocking
+  `get_connection`; updated `tests/test_evidence_package.py`'s
+  `get_insights`/`get_alerts` monkeypatches to async fakes to match the new
+  signatures.
 - [2026-07-25] test_check_repo_drift flaky test: resolved 2026-08-12: fixed race conditions in test_check_repo_drift.py.
 - [2026-08-11] full-spectrum production-local-desktop readiness: resolved 2026-08-12: WS1-WS4 executed, verification gates green, runtime bundling scripts added, App.tsx polished.
 - [2026-08-16] local verify truth: `pwsh -File scripts/verify.ps1` is red again

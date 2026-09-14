@@ -10,6 +10,7 @@ Maturity: Working Prototype
 Future:   Evidence package builder (V7), branded letterhead (V9).
 """
 
+import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
@@ -204,8 +205,8 @@ def generate_pdf(session_id: int | None = None) -> dict:
         if not m:
             return {"success": False, "file_path": "", "filename": "", "error": "Session not found."}
 
-        insights = get_insights(session_id=session_id)
-        alerts   = get_alerts(session_id=session_id)
+        insights = asyncio.run(get_insights(session_id=session_id))
+        alerts   = asyncio.run(get_alerts(session_id=session_id))
         conn     = get_connection()
         events   = conn.execute(
             "SELECT * FROM events WHERE session_id=? ORDER BY timestamp", (session_id,)
@@ -324,8 +325,8 @@ def generate_pdf(session_id: int | None = None) -> dict:
         bg  = get_performance_by_game()
         not_ = get_net_result_over_time()
         rtp_ = get_rtp_distribution()
-        insights = get_insights(limit=15)
-        alerts   = get_alerts()
+        insights = asyncio.run(get_insights(limit=15))
+        alerts   = asyncio.run(get_alerts())
 
         net_col = "#22c55e" if gm["total_net"] >= 0 else "#ef4444"
 
@@ -492,8 +493,8 @@ def generate_excel(session_id: int | None = None) -> dict:
             conn.close()
             return {"success": False, "file_path": "", "filename": "", "error": "Session not found."}
 
-        insights = get_insights(session_id=session_id)
-        alerts   = get_alerts(session_id=session_id)
+        insights = asyncio.run(get_insights(session_id=session_id))
+        alerts   = asyncio.run(get_alerts(session_id=session_id))
         events   = conn.execute(
             "SELECT * FROM events WHERE session_id=? ORDER BY timestamp", (session_id,)
         ).fetchall()

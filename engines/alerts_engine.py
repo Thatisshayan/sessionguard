@@ -9,7 +9,7 @@ Future:   Load thresholds from profile alert_rules JSON (per-game config).
           Add real-time alert triggering in V8.
 """
 
-from database.db import get_connection
+from database.db import get_async_connection
 
 
 # ── Default thresholds (overridden per-profile in V7+) ───────────────────────
@@ -22,12 +22,12 @@ THRESHOLDS = {
 }
 
 
-def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False, alert_id: int | None = None) -> list:
+async def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False, alert_id: int | None = None) -> list:
     """
     Return alerts from DB. Optionally filter by session, acknowledged state, or alert id.
     Critical alerts first.
     """
-    conn = get_connection()
+    conn = await get_async_connection()
 
     severity_order = "CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END"
     filters  = []
@@ -44,14 +44,17 @@ def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False,
 
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
 
-    rows = conn.execute(
-        f"SELECT a.*, s.name AS session_name, s.game_name "
-        f"FROM alerts a JOIN sessions s ON s.id = a.session_id "
-        f"{where} ORDER BY {severity_order}, a.created_at DESC",
-        params
-    ).fetchall()
+    try:
+        cursor = await conn.execute(
+            f"SELECT a.*, s.name AS session_name, s.game_name "
+            f"FROM alerts a JOIN sessions s ON s.id = a.session_id "
+            f"{where} ORDER BY {severity_order}, a.created_at DESC",
+            params
+        )
+        rows = await cursor.fetchall()
+    finally:
+        await conn.close()
 
-    conn.close()
     return [
         {
             "id":           r["id"],
@@ -68,87 +71,92 @@ def get_alerts(session_id: int | None = None, unacknowledged_only: bool = False,
     ]
 
 
-def acknowledge_alert(alert_id: int) -> bool:
+async def acknowledge_alert(alert_id: int) -> bool:
     """Mark an alert as acknowledged. Returns True if found and updated."""
-    conn = get_connection()
-    cur = conn.execute(
-        "UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
-    conn.commit()
-    conn.close()
-    return cur.rowcount > 0
+    conn = await get_async_connection()
+    try:
+        cur = await conn.execute(
+            "UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+        await conn.commit()
+        return cur.rowcount > 0
+    finally:
+        await conn.close()
 
 
-def generate_and_persist_alerts(session_id: int) -> list:
+async def generate_and_persist_alerts(session_id: int) -> list:
     """
     Re-run alert rules against a session and persist results.
     Clears existing alerts for session first.
     """
-    conn = get_connection()
-    s = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
-    if not s:
-        conn.close()
-        return []
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
+        s = await cursor.fetchone()
+        if not s:
+            return []
 
-    conn.execute("DELETE FROM alerts WHERE session_id = ?", (session_id,))
+        new_alerts = []
 
-    new_alerts = []
+        if s["rtp"] < THRESHOLDS["rtp_critical"]:
+            new_alerts.append(dict(
+                session_id=session_id, rule="rtp_critical",
+                message=f"RTP {s['rtp']}% is below the critical threshold of "
+                        f"{THRESHOLDS['rtp_critical']}%.",
+                severity="critical", acknowledged=0))
 
-    if s["rtp"] < THRESHOLDS["rtp_critical"]:
-        new_alerts.append(dict(
-            session_id=session_id, rule="rtp_critical",
-            message=f"RTP {s['rtp']}% is below the critical threshold of "
-                    f"{THRESHOLDS['rtp_critical']}%.",
-            severity="critical", acknowledged=0))
+        elif s["rtp"] < THRESHOLDS["rtp_warning"]:
+            new_alerts.append(dict(
+                session_id=session_id, rule="rtp_warning",
+                message=f"RTP {s['rtp']}% is below the warning threshold of "
+                        f"{THRESHOLDS['rtp_warning']}%.",
+                severity="warning", acknowledged=0))
 
-    elif s["rtp"] < THRESHOLDS["rtp_warning"]:
-        new_alerts.append(dict(
-            session_id=session_id, rule="rtp_warning",
-            message=f"RTP {s['rtp']}% is below the warning threshold of "
-                    f"{THRESHOLDS['rtp_warning']}%.",
-            severity="warning", acknowledged=0))
+        if s["net_result"] < -THRESHOLDS["max_loss"]:
+            new_alerts.append(dict(
+                session_id=session_id, rule="large_loss",
+                message=f"Net loss of ${abs(s['net_result']):.2f} exceeds the "
+                        f"${THRESHOLDS['max_loss']:.0f} loss threshold.",
+                severity="warning", acknowledged=0))
 
-    if s["net_result"] < -THRESHOLDS["max_loss"]:
-        new_alerts.append(dict(
-            session_id=session_id, rule="large_loss",
-            message=f"Net loss of ${abs(s['net_result']):.2f} exceeds the "
-                    f"${THRESHOLDS['max_loss']:.0f} loss threshold.",
-            severity="warning", acknowledged=0))
+        if s["losing_streak"] > THRESHOLDS["streak_critical"]:
+            new_alerts.append(dict(
+                session_id=session_id, rule="streak_critical",
+                message=f"Losing streak of {s['losing_streak']} spins exceeds the critical "
+                        f"threshold of {THRESHOLDS['streak_critical']}.",
+                severity="critical", acknowledged=0))
 
-    if s["losing_streak"] > THRESHOLDS["streak_critical"]:
-        new_alerts.append(dict(
-            session_id=session_id, rule="streak_critical",
-            message=f"Losing streak of {s['losing_streak']} spins exceeds the critical "
-                    f"threshold of {THRESHOLDS['streak_critical']}.",
-            severity="critical", acknowledged=0))
+        elif s["losing_streak"] > THRESHOLDS["streak_warning"]:
+            new_alerts.append(dict(
+                session_id=session_id, rule="streak_warning",
+                message=f"Losing streak of {s['losing_streak']} spins flagged for review.",
+                severity="warning", acknowledged=0))
 
-    elif s["losing_streak"] > THRESHOLDS["streak_warning"]:
-        new_alerts.append(dict(
-            session_id=session_id, rule="streak_warning",
-            message=f"Losing streak of {s['losing_streak']} spins flagged for review.",
-            severity="warning", acknowledged=0))
+        for al in new_alerts:
+            await conn.execute(
+                "INSERT INTO alerts (session_id, rule, message, severity, acknowledged) "
+                "VALUES (:session_id, :rule, :message, :severity, :acknowledged)", al)
 
-    for al in new_alerts:
-        conn.execute(
-            "INSERT INTO alerts (session_id, rule, message, severity, acknowledged) "
-            "VALUES (:session_id, :rule, :message, :severity, :acknowledged)", al)
-
-    conn.commit()
-    conn.close()
-    return new_alerts
+        await conn.commit()
+        return new_alerts
+    finally:
+        await conn.close()
 
 
-def get_alert_summary() -> dict:
+async def get_alert_summary() -> dict:
     """Return counts by severity for dashboard badge display."""
-    conn = get_connection()
-    row = conn.execute("""
+    conn = await get_async_connection()
+    cursor = await conn.execute("""
         SELECT
             COUNT(*) AS total,
             COUNT(CASE WHEN severity='critical' AND acknowledged=0 THEN 1 END) AS critical,
             COUNT(CASE WHEN severity='warning'  AND acknowledged=0 THEN 1 END) AS warning,
             COUNT(CASE WHEN acknowledged=0 THEN 1 END) AS unacknowledged
         FROM alerts
-    """).fetchone()
-    conn.close()
+    """)
+    try:
+        row = await cursor.fetchone()
+    finally:
+        await conn.close()
     return {
         "total":          row["total"],
         "critical":       row["critical"],
@@ -157,17 +165,20 @@ def get_alert_summary() -> dict:
     }
 
 
-def check_rtp_decay_drift(session_id: int, window_spins: int = 30) -> dict:
+async def check_rtp_decay_drift(session_id: int, window_spins: int = 30) -> dict:
     """
     Detect real-time RTP decay/drift during a session.
     Triggers an alert if rolling RTP drops severely over consecutive spins.
     """
-    conn = get_connection()
-    events = conn.execute(
-        "SELECT bet_amount, win_amount FROM events WHERE session_id=? ORDER BY timestamp",
-        (session_id,)
-    ).fetchall()
-    conn.close()
+    conn = await get_async_connection()
+    try:
+        cursor = await conn.execute(
+            "SELECT bet_amount, win_amount FROM events WHERE session_id=? ORDER BY timestamp",
+            (session_id,)
+        )
+        events = await cursor.fetchall()
+    finally:
+        await conn.close()
 
     if len(events) < window_spins:
         return {"decay_detected": False, "rolling_rtp": None}

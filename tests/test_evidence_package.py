@@ -94,8 +94,14 @@ def test_build_evidence_package_writes_core_contents(monkeypatch, tmp_path):
             "losing_streak": 0,
         },
     )
-    monkeypatch.setattr(evidence_package, "get_insights", lambda **_kwargs: [{"text": "steady"}])
-    monkeypatch.setattr(evidence_package, "get_alerts", lambda **_kwargs: [])
+    async def _fake_get_insights(**_kwargs):
+        return [{"text": "steady"}]
+
+    async def _fake_get_alerts(**_kwargs):
+        return []
+
+    monkeypatch.setattr(evidence_package, "get_insights", _fake_get_insights)
+    monkeypatch.setattr(evidence_package, "get_alerts", _fake_get_alerts)
     monkeypatch.setattr(evidence_package, "get_review_queue", lambda **_kwargs: [])
     monkeypatch.setattr(evidence_package, "_get_ai_narrative", lambda _session_id: None)
     monkeypatch.setattr(

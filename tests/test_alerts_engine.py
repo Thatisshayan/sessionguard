@@ -1,20 +1,22 @@
-"""Tests for alerts_engine — threshold alerts (uses in-memory DB)."""
+"""Tests for alerts_engine — threshold alerts (async, uses a temp-file DB).
+
+alerts_engine is natively async (aiosqlite) as of TASK-031's async engine
+hardening. Each aiosqlite connection opens the DB file fresh, so a shared
+:memory: database (visible only within the connection that created it)
+doesn't work across the engine's multiple connections per test - a real
+temp file does, and it's a more honest end-to-end test of the actual
+async DB path than mocking would be.
+"""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import unittest
-from unittest.mock import patch
 import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
 
+import database.db as db_module
 from database.db import SCHEMA_SQL, SCHEMA_V3_SQL
-
-
-def _in_memory_db():
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA_SQL)
-    conn.executescript(SCHEMA_V3_SQL)
-    return conn
 
 
 def _seed_session(conn, **kwargs):
@@ -38,47 +40,49 @@ def _seed_session(conn, **kwargs):
     return cur.lastrowid
 
 
-class TestGetAlerts(unittest.TestCase):
+class TestGetAlerts(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.conn = _in_memory_db()
-        self.sid = _seed_session(self.conn, rtp=80.0, net_result=-250.0, losing_streak=20)
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._orig_db_path = db_module.DB_PATH
+        db_module.DB_PATH = Path(self._tmpdir.name) / "test.db"
 
-    @patch("engines.alerts_engine.get_connection")
-    def test_generate_and_persist_alerts(self, mock_conn):
-        mock_conn.return_value = self.conn
+        conn = sqlite3.connect(str(db_module.DB_PATH))
+        conn.row_factory = sqlite3.Row
+        conn.executescript(SCHEMA_SQL)
+        conn.executescript(SCHEMA_V3_SQL)
+        self.sid = _seed_session(conn, rtp=80.0, net_result=-250.0, losing_streak=20)
+        conn.close()
+
+    def tearDown(self):
+        db_module.DB_PATH = self._orig_db_path
+        self._tmpdir.cleanup()
+
+    async def test_generate_and_persist_alerts(self):
         from engines.alerts_engine import generate_and_persist_alerts
-        alerts = generate_and_persist_alerts(self.sid)
+        alerts = await generate_and_persist_alerts(self.sid)
         self.assertGreater(len(alerts), 0)
         severities = [a["severity"] for a in alerts]
         self.assertIn("critical", severities)
 
-    @patch("engines.alerts_engine.get_connection")
-    def test_acknowledge_nonexistent(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_acknowledge_nonexistent(self):
         from engines.alerts_engine import acknowledge_alert
-        result = acknowledge_alert(9999)
+        result = await acknowledge_alert(9999)
         self.assertFalse(result)
 
-    @patch("engines.alerts_engine.get_connection")
-    def test_get_alert_summary_empty(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_get_alert_summary_empty(self):
         from engines.alerts_engine import get_alert_summary
-        summary = get_alert_summary()
+        summary = await get_alert_summary()
         self.assertIn("total", summary)
         self.assertEqual(summary["total"], 0)
 
-    @patch("engines.alerts_engine.get_connection")
-    def test_session_not_found(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_session_not_found(self):
         from engines.alerts_engine import generate_and_persist_alerts
-        alerts = generate_and_persist_alerts(9999)
+        alerts = await generate_and_persist_alerts(9999)
         self.assertEqual(alerts, [])
 
-    @patch("engines.alerts_engine.get_connection")
-    def test_get_alerts_empty(self, mock_conn):
-        mock_conn.return_value = self.conn
+    async def test_get_alerts_empty(self):
         from engines.alerts_engine import get_alerts
-        alerts = get_alerts()
+        alerts = await get_alerts()
         self.assertIsInstance(alerts, list)
 
 

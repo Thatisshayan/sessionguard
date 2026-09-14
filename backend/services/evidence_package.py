@@ -15,6 +15,7 @@ Future:   Add cryptographic hash manifest for legal integrity (V9).
 """
 
 from __future__ import annotations
+import asyncio
 import csv
 import hashlib
 import json
@@ -113,8 +114,11 @@ def build_evidence_package(session_id: int) -> dict:
         return {"success": False, "file_path": "", "filename": "",
                 "contents": [], "error": f"Session {session_id} not found."}
 
-    insights = get_insights(session_id=session_id)
-    alerts_  = get_alerts(session_id=session_id)
+    # This function runs in a worker thread (called via asyncio.to_thread from
+    # the route), never inside a live event loop, so a nested asyncio.run()
+    # to call the now-async insights/alerts engine functions is safe.
+    insights = asyncio.run(get_insights(session_id=session_id))
+    alerts_  = asyncio.run(get_alerts(session_id=session_id))
     queue    = get_review_queue(session_id=session_id)
 
     conn     = get_connection()
