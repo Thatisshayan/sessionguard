@@ -26,8 +26,8 @@ export function OverviewTab({ session, events, insights, alerts, onAck, onExplai
   events: Array<Record<string, unknown>>
   insights: Array<{ id: number; severity: string; text: string }>
   alerts: Array<{ id: number; severity: string; message: string; acknowledged: boolean }>
-  onAck: (_alertId: number) => void
-  onExplain: (_alertId: number) => Promise<AlertExplanation>
+  onAck: (_: number) => void
+  onExplain: (_: number) => Promise<AlertExplanation>
 }) {
   const chartData = events.length > 200 ? events.filter((_, i) => i % Math.ceil(events.length / 200) === 0) : events
   const unackedAlerts = alerts.filter(a => !a.acknowledged)

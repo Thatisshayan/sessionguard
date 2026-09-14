@@ -70,7 +70,7 @@ function useSessionDetailMutations(sessionId: number, qc: QueryClient) {
   const verifyEvidenceMutation = useMutation({
     mutationFn: () => verifyEvidence(sessionId),
     onSuccess: (r: { manifest_verified?: Record<string, string> }) => {
-      const statuses = Object.values(r?.manifest_verified ?? {})
+      const statuses = Object.values(r.manifest_verified ?? {})
       const badCount = statuses.filter(s => s !== 'ok').length
       toast[badCount ? 'error' : 'success'](badCount ? `Manifest check found ${badCount} file(s) not ok` : 'Manifest verified — all files intact')
     },
