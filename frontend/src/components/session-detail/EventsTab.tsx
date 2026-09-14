@@ -2,6 +2,8 @@
  * src/components/session-detail/EventsTab.tsx
  * -------------------------------------------------
  * Event summary KPIs + win distribution chart + raw event table.
+ * Also runs z-score event validation on demand, flagging events whose
+ * values look inconsistent (e.g. an OCR misread) with a suggested fix.
  */
 
 import { useState } from 'react'
@@ -10,7 +12,26 @@ import {
 } from 'recharts'
 import { KPI } from './shared'
 
-export function EventsTab({ events, evSummary }: { events: any[]; evSummary: any }) {
+interface EventRow {
+  id: number; spin_number: number; timestamp: string; event_type: string
+  bet_amount: number; win_amount: number; balance_after: number
+  confidence_score: number; source: string
+}
+interface EventsSummary {
+  total_events: number; winning_spins: number; losing_spins: number; win_rate_pct: number
+  avg_bet: number; biggest_win: number; avg_confidence: number; low_conf_count: number
+}
+
+export function EventsTab({ events, evSummary, onValidate, validating, validation }: {
+  events: EventRow[]
+  evSummary: EventsSummary | undefined
+  onValidate: () => void
+  validating: boolean
+  validation?: {
+    total_events: number; valid_events: number; flagged_count: number; auto_corrected: number
+    flagged: Array<{ event_id: number; reason: string; severity: string; original_values: Record<string, unknown>; suggested_values: Record<string, unknown> }>
+  }
+}) {
   const [page, setPage] = useState(1)
   const pageSize = 100
   const visibleEvents = events.slice(0, page * pageSize)
@@ -34,6 +55,39 @@ export function EventsTab({ events, evSummary }: { events: any[]; evSummary: any
           <KPI label="Biggest Win"    value={`$${evSummary.biggest_win}`} accent="var(--accent-green)" />
           <KPI label="Avg Confidence" value={`${((evSummary.avg_confidence ?? 0) * 100).toFixed(0)}%`} accent={evSummary.avg_confidence < 0.8 ? 'var(--severity-warning)' : undefined} />
           <KPI label="Low Conf"       value={String(evSummary.low_conf_count)} accent={evSummary.low_conf_count > 5 ? 'var(--severity-warning)' : undefined} />
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Event Validation</div>
+            <button onClick={onValidate} disabled={validating} style={{
+              background: 'var(--bg-elevated)', border: '1px solid var(--bg-border)', color: 'var(--text-secondary)',
+              padding: '6px 14px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: 12,
+            }}>
+              {validating ? 'Validating…' : '⟳ Validate Events'}
+            </button>
+          </div>
+          {validation && (
+            <>
+              <div style={{ display: 'flex', gap: 'var(--gutter)', marginBottom: validation.flagged.length ? 14 : 0, flexWrap: 'wrap' }}>
+                <KPI label="Total"          value={String(validation.total_events)} />
+                <KPI label="Valid"          value={String(validation.valid_events)} accent="var(--accent-green)" />
+                <KPI label="Flagged"        value={String(validation.flagged_count)} accent={validation.flagged_count > 0 ? 'var(--severity-warning)' : undefined} />
+                <KPI label="Auto-corrected" value={String(validation.auto_corrected)} />
+              </div>
+              {validation.flagged.map(f => (
+                <div key={f.event_id} style={{ padding: '8px 0', borderTop: '1px solid var(--bg-border)', fontSize: 12 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                    <span className={`badge badge-${f.severity === 'critical' ? 'critical' : 'warning'}`} style={{ fontSize: 9 }}>{f.severity}</span>
+                    <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>event #{f.event_id}</span>
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)' }}>{f.reason}</div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 

@@ -254,7 +254,8 @@ export const getClusters       = () => client.get('/intelligence/clusters').then
 export const getSessionCluster = (id: number) => client.get(`/intelligence/clusters/session/${id}`).then(r => r.data)
 export const getPeerBenchmark  = (id: number) => client.get(`/intelligence/benchmark/${id}`).then(r => r.data)
 export const getDatasetSummary = () => client.get('/intelligence/dataset-summary').then(r => r.data)
-export const getAnomalies      = () => client.get('/intelligence/anomalies').then(r => r.data)
+export const getAnomalies      = (z_threshold = 2.0) => client.get('/intelligence/anomalies', { params: { z_threshold } }).then(r => r.data)
+export const getDatasetQuality = () => client.get('/intelligence/dataset-quality').then(r => r.data)
 
 // ── V13 AI ────────────────────────────────────────────────────────────────────
 export const getAiStatus           = () => client.get('/ai/status').then(r => r.data)
@@ -265,6 +266,7 @@ export const getAiComparison       = (session_ids: number[]) => client.post('/in
 export const getAiReviewSuggestion = (id: number) => client.get(`/intelligence/ai/review/${id}`).then(r => r.data)
 export const switchAiModel         = (model: string) => client.post('/ai/model', { model }).then(r => r.data)
 export const getAiModels           = () => client.get('/ai/models').then(r => r.data)
+export const getAiUsage            = () => client.get('/ai/usage').then(r => r.data)
 
 // ── V14 Streaming AI ──────────────────────────────────────────────────────────
 export interface StreamEvent {
@@ -322,3 +324,31 @@ export const getDbBackupUrl    = () => `${BASE}${API_VERSION}/data-export/backup
 export const getRecorderStatus = () => client.get('/recorder/status').then(r => r.data)
 export const startRecording    = (session_id?: number, fps = 30) => client.post('/recorder/start', { session_id, fps }).then(r => r.data)
 export const stopRecording     = () => client.post('/recorder/stop').then(r => r.data)
+
+// ── Prompt Versioning + A/B ───────────────────────────────────────────────────
+export interface PromptVersion {
+  id: number; name: string; version: number; system_prompt: string
+  model: string; temperature: number; max_tokens: number
+  is_active: number; created_at: string
+}
+export interface AbResult {
+  id: number; session_id: number; prompt_a_id: number; prompt_b_id: number
+  winner: string | null; metrics: string | null; created_at: string
+}
+export const getPromptVersions   = (name = 'session_analysis') => client.get('/prompts', { params: { name } }).then(r => r.data)
+export const getActivePrompt     = (name = 'session_analysis') => client.get('/prompts/active', { params: { name } }).then(r => r.data)
+export const createPromptVersion = (data: { name?: string; system_prompt: string; model?: string; temperature?: number; max_tokens?: number; activate?: boolean }) =>
+  client.post('/prompts', data).then(r => r.data)
+export const activatePromptVersion = (id: number) => client.post(`/prompts/${id}/activate`).then(r => r.data)
+export const createAbResult      = (data: { session_id: number; prompt_a_id: number; prompt_b_id: number; winner?: string; metrics?: Record<string, unknown> }) =>
+  client.post('/prompts/ab', data).then(r => r.data)
+export const getAbResults        = (session_id?: number, limit = 50) => client.get('/prompts/ab', { params: { session_id, limit } }).then(r => r.data)
+
+// ── Event Validation ──────────────────────────────────────────────────────────
+export const validateSessionEvents = (session_id: number) => client.get(`/events/validate/${session_id}`).then(r => r.data)
+
+// ── Alert Explanations ────────────────────────────────────────────────────────
+export const explainAlert = (alert_id: number) => client.get(`/alerts/${alert_id}/explain`).then(r => r.data)
+
+// ── Evidence Package ──────────────────────────────────────────────────────────
+export const verifyEvidence = (session_id: number) => client.get(`/sessions/${session_id}/evidence/verify`).then(r => r.data)

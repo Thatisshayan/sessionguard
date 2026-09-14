@@ -7,12 +7,13 @@
  * of manually patching local state.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import {
   getSession, getInsights, getAlerts, getReviewQueue,
   getSessionEvents, getEventsSummary, getSessionBehavior,
-  acknowledgeAlert, resolveReviewItem, createExport, getExports,
+  acknowledgeAlert, resolveReviewItem, createExport, getExports, getExportDownloadUrl,
   startLiveRun, getLiveRun, stopLiveRun,
+  createEvidence, verifyEvidence, validateSessionEvents, explainAlert,
 } from '../../services/api'
 import { toast } from '../Toast'
 
@@ -27,37 +28,26 @@ const keys = {
   exports:  (id: number) => ['session', id, 'exports'] as const,
 }
 
-export function useSessionDetailData(sessionId: number) {
-  const qc = useQueryClient()
-  const enabled = Number.isFinite(sessionId)
-
-  const session   = useQuery({ queryKey: keys.session(sessionId),   queryFn: () => getSession(sessionId),   enabled })
-  const insights  = useQuery({ queryKey: keys.insights(sessionId),  queryFn: () => getInsights(sessionId),  enabled })
-  const alerts    = useQuery({ queryKey: keys.alerts(sessionId),    queryFn: () => getAlerts({ session_id: sessionId }), enabled })
-  const queue     = useQuery({ queryKey: keys.queue(sessionId),     queryFn: () => getReviewQueue({ session_id: sessionId, status: 'pending' }), enabled })
-  const events    = useQuery({ queryKey: keys.events(sessionId),    queryFn: () => getSessionEvents(sessionId), enabled })
-  const evSummary = useQuery({ queryKey: keys.evSummary(sessionId), queryFn: () => getEventsSummary(sessionId), enabled })
-  const behavior  = useQuery({ queryKey: keys.behavior(sessionId),  queryFn: () => getSessionBehavior(sessionId), enabled, retry: false })
-  const exports_  = useQuery({ queryKey: keys.exports(sessionId),   queryFn: () => getExports(sessionId),   enabled })
-
+/** All mutations for SessionDetail, split out to keep useSessionDetailData short. */
+function useSessionDetailMutations(sessionId: number, qc: QueryClient) {
   const ackMutation = useMutation({
     mutationFn: (alertId: number) => acknowledgeAlert(alertId),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: keys.alerts(sessionId) }); toast.success('Alert acknowledged') },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: keys.alerts(sessionId) }); toast.success('Alert acknowledged') },
     onError: () => { toast.error('Failed to acknowledge alert') },
   })
 
   const resolveMutation = useMutation({
     mutationFn: ({ id, action }: { id: number; action: string }) => resolveReviewItem(id, action),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: keys.queue(sessionId) }); toast.success('Review item resolved') },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: keys.queue(sessionId) }); toast.success('Review item resolved') },
     onError: () => { toast.error('Failed to resolve review item') },
   })
 
   const exportMutation = useMutation({
     mutationFn: (fmt: string) => createExport(fmt, sessionId),
-    onSuccess: (r: any) => {
-      qc.invalidateQueries({ queryKey: keys.exports(sessionId) })
+    onSuccess: (r: { export_id?: number }) => {
+      void qc.invalidateQueries({ queryKey: keys.exports(sessionId) })
       toast.success('Export generated')
-      if (r?.export_id) window.open(`http://127.0.0.1:8000/exports/${r.export_id}/download`, '_blank')
+      if (r.export_id) window.open(getExportDownloadUrl(r.export_id), '_blank')
     },
     onError: () => { toast.error('Export failed') },
   })
@@ -69,14 +59,62 @@ export function useSessionDetailData(sessionId: number) {
     },
   })
 
-  const stopLiveMutation = useMutation({
-    mutationFn: (runId: number) => stopLiveRun(runId),
+  const stopLiveMutation = useMutation({ mutationFn: (runId: number) => stopLiveRun(runId) })
+
+  const evidenceMutation = useMutation({
+    mutationFn: () => createEvidence(sessionId),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: keys.exports(sessionId) }); toast.success('Evidence package generated') },
+    onError: () => { toast.error('Evidence package generation failed') },
   })
+
+  const verifyEvidenceMutation = useMutation({
+    mutationFn: () => verifyEvidence(sessionId),
+    onSuccess: (r: { manifest_verified?: Record<string, string> }) => {
+      const statuses = Object.values(r.manifest_verified ?? {})
+      const badCount = statuses.filter(s => s !== 'ok').length
+      toast[badCount ? 'error' : 'success'](badCount ? `Manifest check found ${badCount} file(s) not ok` : 'Manifest verified — all files intact')
+    },
+    onError: () => { toast.error('Manifest verification failed') },
+  })
+
+  const validateEventsMutation = useMutation({
+    mutationFn: () => validateSessionEvents(sessionId),
+    onError: () => { toast.error('Event validation failed') },
+  })
+
+  const explainAlertMutation = useMutation({
+    mutationFn: (alertId: number) => explainAlert(alertId),
+    onError: () => { toast.error('Failed to generate alert explanation') },
+  })
+
+  return {
+    ackMutation, resolveMutation, exportMutation, startLiveMutation, stopLiveMutation,
+    evidenceMutation, verifyEvidenceMutation, validateEventsMutation, explainAlertMutation,
+  }
+}
+
+export function useSessionDetailData(sessionId: number) {
+  const qc = useQueryClient()
+  const enabled = Number.isFinite(sessionId)
+
+  const session   = useQuery({ queryKey: keys.session(sessionId),   queryFn: () => getSession(sessionId),   enabled })
+  const insights  = useQuery({ queryKey: keys.insights(sessionId),  queryFn: () => getInsights({ session_id: sessionId }),  enabled })
+  const alerts    = useQuery({ queryKey: keys.alerts(sessionId),    queryFn: () => getAlerts({ session_id: sessionId }), enabled })
+  const queue     = useQuery({ queryKey: keys.queue(sessionId),     queryFn: () => getReviewQueue({ session_id: sessionId, status: 'pending' }), enabled })
+  const events    = useQuery({ queryKey: keys.events(sessionId),    queryFn: () => getSessionEvents(sessionId), enabled })
+  const evSummary = useQuery({ queryKey: keys.evSummary(sessionId), queryFn: () => getEventsSummary(sessionId), enabled })
+  const behavior  = useQuery({ queryKey: keys.behavior(sessionId),  queryFn: () => getSessionBehavior(sessionId), enabled, retry: false })
+  const exports_  = useQuery({ queryKey: keys.exports(sessionId),   queryFn: () => getExports(sessionId),   enabled })
+
+  const {
+    ackMutation, resolveMutation, exportMutation, startLiveMutation, stopLiveMutation,
+    evidenceMutation, verifyEvidenceMutation, validateEventsMutation, explainAlertMutation,
+  } = useSessionDetailMutations(sessionId, qc)
 
   const loading = enabled && [session, insights, alerts, queue, events, evSummary, exports_].some(q => q.isPending)
   const error = [session, insights, alerts, queue, events, evSummary, exports_]
     .map(q => q.error)
-    .find(Boolean) as any
+    .find(Boolean) as Error | undefined
 
   return {
     session: session.data, insights: insights.data ?? [], alerts: alerts.data ?? [],
@@ -89,5 +127,13 @@ export function useSessionDetailData(sessionId: number) {
     exporting:     exportMutation.isPending ? (exportMutation.variables ?? '') : '',
     startLive:     startLiveMutation.mutateAsync,
     stopLive:      stopLiveMutation.mutateAsync,
+    createEvidence:   evidenceMutation.mutateAsync,
+    generatingEvidence: evidenceMutation.isPending,
+    verifyEvidence:   verifyEvidenceMutation.mutateAsync,
+    verifyingEvidence: verifyEvidenceMutation.isPending,
+    validateEvents:   validateEventsMutation.mutateAsync,
+    validatingEvents: validateEventsMutation.isPending,
+    eventValidation:  validateEventsMutation.data,
+    explainAlert:     explainAlertMutation.mutateAsync,
   }
 }

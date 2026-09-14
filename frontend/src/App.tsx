@@ -32,6 +32,9 @@ const Login           = lazy(() => import('./pages/Login'))
 const Settings        = lazy(() => import('./pages/Settings'))
 const VideoLab        = lazy(() => import('./pages/VideoLab'))
 const ImportWizard    = lazy(() => import('./pages/ImportWizard'))
+const Clusters        = lazy(() => import('./pages/Clusters'))
+const DatasetQuality  = lazy(() => import('./pages/DatasetQuality'))
+const Prompts         = lazy(() => import('./pages/Prompts'))
 
 function PageFallback() {
   return (
@@ -139,7 +142,12 @@ const NAV_TOOLS = [
   { to: '/benchmark', label: 'Parser Benchmark',  icon: '⊗', shortcut: '',  end: false },
   { to: '/jobs',      label: 'Job Queue',         icon: '⚙', shortcut: 'J', end: false },
 ]
-const NAV_ADMIN  = [{ to: '/admin',    label: 'Admin Panel',  icon: '🔒', shortcut: 'A', end: false }]
+const NAV_ADMIN  = [
+  { to: '/admin',           label: 'Admin Panel',    icon: '🔒', shortcut: 'A', end: false },
+  { to: '/clusters',        label: 'Clusters',       icon: '◍', shortcut: '',  end: false },
+  { to: '/dataset-quality', label: 'Dataset Quality', icon: '☰', shortcut: '',  end: false },
+  { to: '/prompts',         label: 'Prompts',        icon: '✎', shortcut: '',  end: false },
+]
 const NAV_BOTTOM = [{ to: '/settings', label: 'Settings',     icon: '⚙', shortcut: '',  end: false }]
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -303,6 +311,9 @@ function AppShell() {
               <Route path="/benchmark"         element={<ParserBenchmark />} />
               <Route path="/jobs"              element={<JobsMonitor />} />
               <Route path="/admin"             element={<RequireAdmin><Admin /></RequireAdmin>} />
+              <Route path="/clusters"          element={<RequireAdmin><Clusters /></RequireAdmin>} />
+              <Route path="/dataset-quality"   element={<RequireAdmin><DatasetQuality /></RequireAdmin>} />
+              <Route path="/prompts"           element={<RequireAdmin><Prompts /></RequireAdmin>} />
               <Route path="/settings"          element={<Settings />} />
               <Route path="*"                  element={<Navigate to="/" replace />} />
             </Routes>
